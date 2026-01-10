@@ -10,6 +10,13 @@ import {
   CarouselItem,
 } from '@/components/ui/carousel';
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Headphones,
@@ -17,7 +24,6 @@ import {
   RefreshCw,
   X,
   History,
-  ClipboardX,
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -36,6 +42,49 @@ const quickActions = [
   { icon: Headphones, label: 'Support' },
   { icon: ArrowDownToLine, label: 'Receive' },
 ];
+
+const faqs = [
+    {
+        question: "1. How to sell LG?",
+        answer: "You can sell LG directly from the app. Go to the 'Sell' section and follow the instructions."
+    },
+    {
+        question: "2. How to withdraw to bank account?",
+        answer: "To withdraw funds, link your bank account in the 'My' section and then use the 'Withdraw' option."
+    },
+    {
+        question: "3. How to withdraw LG to game account?",
+        answer: "This feature is coming soon. Stay tuned for updates."
+    },
+    {
+        question: "4. Sell order has been completed, but have not received funds to UPI account",
+        answer: "Please allow up to 24 hours for the funds to reflect in your UPI account. If it takes longer, contact support."
+    },
+    {
+        question: "5. How to Real-name verification?",
+        answer: "You can complete your real-name verification in the 'My' section under 'Profile'."
+    },
+    {
+        question: "6. When will the withdrawal be successful?",
+        answer: "Withdrawals are usually processed within a few hours, but can sometimes take up to 48 hours."
+    },
+    {
+        question: "7. How to deactivate LG Pay wallet?",
+        answer: "To deactivate your wallet, please contact our customer support team through the 'Support' option."
+    },
+    {
+        question: "8. How to change phone number?",
+        answer: "For security reasons, you need to contact customer support to change your registered phone number."
+    },
+    {
+        question: "9. I forgot my payment password",
+        answer: "You can reset your payment password from the login screen using the 'Forgot Password' option."
+    },
+    {
+        question: "10. How to add UPI ID?",
+        answer: "You can add or manage your UPI IDs in the 'My' section under 'Payment Methods'."
+    }
+]
 
 export default function HomePage() {
    const plugin = React.useRef(
@@ -79,7 +128,7 @@ export default function HomePage() {
         {/* Image Carousel */}
         <Carousel 
             className="w-full"
-            opts={{ loop: true }}
+            opts={{ loop: true, align: "start" }}
             plugins={[plugin.current]}
             onMouseEnter={plugin.current.stop}
             onMouseLeave={plugin.current.play}
@@ -153,14 +202,33 @@ export default function HomePage() {
           </Card>
         </div>
 
-        {/* Orders in Progress */}
-        <div className="flex items-center justify-center gap-2 text-sm text-white/70">
-          <History className="h-5 w-5" />
-          <span>You have 0 orders in progress</span>
-        </div>
-        
-        <div className="flex justify-center pt-8">
-            <ClipboardX className="h-24 w-24 text-white/20" />
+        {/* FAQ Section */}
+        <div className="text-black">
+          <Tabs defaultValue="beginner" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-transparent p-0">
+              <TabsTrigger value="beginner" className="rounded-full data-[state=active]:bg-white/20 data-[state=active]:text-white data-[state=inactive]:text-white/70">Beginner's questions</TabsTrigger>
+              <TabsTrigger value="trading" className="rounded-full data-[state=active]:bg-white/20 data-[state=active]:text-white data-[state=inactive]:text-white/70">Trading problems</TabsTrigger>
+            </TabsList>
+            <TabsContent value="beginner">
+              <Accordion type="single" collapsible className="w-full space-y-2">
+                {faqs.map((faq, index) => (
+                  <AccordionItem key={index} value={`item-${index}`} className="border-none">
+                     <GlassCard className="rounded-xl">
+                        <AccordionTrigger className="p-4 text-left font-semibold text-white/90 hover:no-underline">
+                          {faq.question}
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4 text-white/70">
+                          {faq.answer}
+                        </AccordionContent>
+                      </GlassCard>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </TabsContent>
+            <TabsContent value="trading">
+              <p className="text-center text-white/70 p-8">No trading problems to display.</p>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>
