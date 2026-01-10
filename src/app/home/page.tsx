@@ -22,6 +22,7 @@ import {
   User,
   RefreshCw,
   X,
+  History,
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -199,6 +200,14 @@ export default function HomePage() {
             </CardContent>
           </Card>
         </div>
+        
+        {/* In Progress Orders */}
+        <GlassCard>
+            <CardContent className="p-4 flex flex-col items-center justify-center text-white/70 min-h-[120px]">
+                <History className="h-10 w-10 mb-2 opacity-60" />
+                <p className="text-sm">You have 0 orders in progress</p>
+            </CardContent>
+        </GlassCard>
 
         {/* FAQ Section */}
         <div className="space-y-4">
