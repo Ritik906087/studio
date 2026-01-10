@@ -21,7 +21,7 @@ export default function LoginPage() {
         <LoginForm />
       </CardContent>
       <CardFooter className="flex-col items-center gap-4">
-        <Button asChild className="help" variant="secondary">
+        <Button asChild className="w-full help" variant="secondary">
           <Link href="/help">Help Center</Link>
         </Button>
         <div className="text-sm text-center">
