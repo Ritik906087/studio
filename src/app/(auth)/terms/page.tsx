@@ -11,9 +11,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useLanguage } from '@/context/language-context';
+import { useState, useEffect } from 'react';
 
 export default function TermsPage() {
   const { translations } = useLanguage();
+  const [date, setDate] = useState('');
+
+  useEffect(() => {
+    setDate(new Date().toLocaleDateString());
+  }, []);
 
   return (
     <Card className="w-full max-w-md animate-fade-in-up rounded-2xl border-none bg-white/90 shadow-2xl shadow-primary/20">
@@ -26,7 +32,7 @@ export default function TermsPage() {
       <CardContent className="space-y-4">
         <ScrollArea className="h-64 w-full rounded-md border bg-white p-4 text-sm">
           <p className="mb-4">
-            <strong>Last Updated: {new Date().toLocaleDateString()}</strong>
+            <strong>Last Updated: {date}</strong>
           </p>
           <p className="mb-2">
             Welcome to LG Pay! These terms and conditions outline the rules and
