@@ -8,31 +8,37 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
+import { useLanguage } from "@/context/language-context";
 
 export function LanguageSwitcher() {
-  const [language, setLanguage] = useState("English");
+  const { language, setLanguage, translations } = useLanguage();
+
+  const languageLabels: { [key: string]: string } = {
+    en: "English",
+    hi: "हिंदी",
+    ur: "اردو",
+  };
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="gap-2 text-sm text-foreground/80 hover:text-foreground"
+          className="gap-2 border-border/50 bg-white/10 text-sm text-foreground/80 backdrop-blur-sm hover:bg-white/20 hover:text-foreground"
         >
           <Globe className="h-4 w-4" />
-          <span>{language}</span>
+          <span>{languageLabels[language]}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40 bg-white/90 backdrop-blur-sm">
-        <DropdownMenuItem onSelect={() => setLanguage("English")}>
+        <DropdownMenuItem onSelect={() => setLanguage("en")}>
           <span>English</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setLanguage("हिंदी")}>
+        <DropdownMenuItem onSelect={() => setLanguage("hi")}>
           <span>हिंदी</span>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setLanguage("اردو")}>
+        <DropdownMenuItem onSelect={() => setLanguage("ur")}>
           <span>اردو</span>
         </DropdownMenuItem>
       </DropdownMenuContent>

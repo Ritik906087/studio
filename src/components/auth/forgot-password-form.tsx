@@ -17,25 +17,7 @@ import { KeyRound, Phone, ShieldCheck, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-
-const phoneSchema = z.object({
-  phone: z
-    .string()
-    .min(10, { message: "Phone number must be at least 10 digits." }),
-});
-
-const resetSchema = z
-  .object({
-    otp: z.string().length(6, { message: "OTP must be 6 digits." }),
-    password: z
-      .string()
-      .min(6, { message: "Password must be at least 6 characters." }),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ["confirmPassword"],
-  });
+import { useLanguage } from "@/context/language-context";
 
 type Step = "phone" | "reset";
 
@@ -44,6 +26,26 @@ export function ForgotPasswordForm() {
   const [phone, setPhone] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { translations } = useLanguage();
+  
+  const phoneSchema = z.object({
+    phone: z
+      .string()
+      .min(10, { message: translations.phoneRequired }),
+  });
+
+  const resetSchema = z
+    .object({
+      otp: z.string().length(6, { message: translations.otpRequired }),
+      password: z
+        .string()
+        .min(6, { message: translations.passwordMin }),
+      confirmPassword: z.string(),
+    })
+    .refine((data) => data.password === data.confirmPassword, {
+      message: translations.passwordsDontMatch,
+      path: ["confirmPassword"],
+    });
 
   const phoneForm = useForm<z.infer<typeof phoneSchema>>({
     resolver: zodResolver(phoneSchema),
@@ -67,8 +69,8 @@ export function ForgotPasswordForm() {
       setStep("reset");
       setIsLoading(false);
       toast({
-        title: "OTP Sent",
-        description: `An OTP for password reset has been sent to ${values.phone}.`,
+        title: translations.otpSent,
+        description: translations.otpSentReset.replace('{phone}', values.phone),
       });
     }, 1500);
   }
@@ -79,8 +81,8 @@ export function ForgotPasswordForm() {
     setTimeout(() => {
       setIsLoading(false);
       toast({
-        title: "Password Reset Successful",
-        description: "You can now log in with your new password.",
+        title: translations.passwordResetSuccess,
+        description: translations.passwordResetMessage,
       });
     }, 2000);
   }
@@ -103,14 +105,14 @@ export function ForgotPasswordForm() {
               name="phone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone Number</FormLabel>
+                  <FormLabel>{translations.phoneNumber}</FormLabel>
                    <div className="relative flex items-center">
                      <Phone className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <FormControl>
                       <Input
                         type="tel"
-                        placeholder="Enter your phone number"
-                        className="pl-10"
+                        placeholder={translations.enterPhoneNumber}
+                        className="pl-10 text-sm"
                         {...field}
                       />
                     </FormControl>
@@ -121,7 +123,7 @@ export function ForgotPasswordForm() {
             />
             <Button type="submit" className="w-full btn-gradient rounded-full font-semibold" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isLoading ? "Sending..." : "Send Reset Code"}
+              {isLoading ? translations.sending : translations.sendResetCode}
             </Button>
           </form>
         </Form>
@@ -139,20 +141,20 @@ export function ForgotPasswordForm() {
             className="space-y-4"
           >
             <p className="text-center text-sm text-muted-foreground">
-              Enter OTP and your new password for {phone}.
+              {translations.enterOtpAndNewPassword.replace('{phone}', phone)}
             </p>
             <FormField
               control={resetForm.control}
               name="otp"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Verification Code</FormLabel>
+                  <FormLabel>{translations.verificationCode}</FormLabel>
                   <div className="relative">
                     <ShieldCheck className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <FormControl>
                       <Input
-                        placeholder="OTP code"
-                        className="pl-10"
+                        placeholder={translations.enterVerificationCode}
+                        className="pl-10 text-sm"
                         {...field}
                       />
                     </FormControl>
@@ -166,14 +168,14 @@ export function ForgotPasswordForm() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>New Password</FormLabel>
+                  <FormLabel>{translations.newPassword}</FormLabel>
                   <div className="relative">
                     <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <FormControl>
                       <Input
                         type="password"
-                        placeholder="Create a new password"
-                        className="pl-10"
+                        placeholder={translations.createNewPassword}
+                        className="pl-10 text-sm"
                         {...field}
                       />
                     </FormControl>
@@ -187,14 +189,14 @@ export function ForgotPasswordForm() {
               name="confirmPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Confirm New Password</FormLabel>
+                  <FormLabel>{translations.confirmPassword}</FormLabel>
                   <div className="relative">
                     <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <FormControl>
                       <Input
                         type="password"
-                        placeholder="Confirm your new password"
-                        className="pl-10"
+                        placeholder={translations.confirmNewPassword}
+                        className="pl-10 text-sm"
                         {...field}
                       />
                     </FormControl>
@@ -205,7 +207,7 @@ export function ForgotPasswordForm() {
             />
             <Button type="submit" className="w-full btn-gradient rounded-full font-semibold" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isLoading ? "Resetting..." : "Reset Password"}
+              {isLoading ? translations.resetting : translations.resetPassword}
             </Button>
           </form>
         </Form>

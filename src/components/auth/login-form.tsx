@@ -17,23 +17,25 @@ import { Loader2, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import Link from 'next/link';
 import Image from "next/image";
-
-const formSchema = z.object({
-  phone: z
-    .string()
-    .length(10, { message: "Phone number must be 10 digits." })
-    .regex(/^[6-9]\d{9}$/, {
-      message: "Please enter a valid Indian mobile number.",
-    }),
-  password: z
-    .string()
-    .min(1, { message: "Please enter your password." })
-    .min(6, { message: "Password must be at least 6 characters." }),
-});
+import { useLanguage } from "@/context/language-context";
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const { translations, language } = useLanguage();
+
+  const formSchema = z.object({
+    phone: z
+      .string()
+      .length(10, { message: translations.phoneRequired })
+      .regex(/^[6-9]\d{9}$/, {
+        message: translations.phoneInvalid,
+      }),
+    password: z
+      .string()
+      .min(1, { message: translations.passwordRequired })
+      .min(6, { message: translations.passwordMin }),
+  });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -60,7 +62,7 @@ export function LoginForm() {
           name="phone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Phone Number</FormLabel>
+              <FormLabel>{translations.phoneNumber}</FormLabel>
               <div className="relative flex items-center">
                  <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-muted-foreground">
                   <Image
@@ -74,7 +76,7 @@ export function LoginForm() {
                 <FormControl>
                   <Input
                     type="tel"
-                    placeholder="Please enter your phone number"
+                    placeholder={translations.enterPhoneNumber}
                     className="pl-[88px] text-sm"
                     maxLength={10}
                     {...field}
@@ -91,17 +93,17 @@ export function LoginForm() {
           render={({ field }) => (
             <FormItem>
               <div className="flex items-center justify-between">
-                <FormLabel>Password</FormLabel>
+                <FormLabel>{translations.password}</FormLabel>
                 <Link href="/forgot-password" className="text-sm font-semibold text-accent hover:underline">
-                  Forgot Password?
+                  {translations.forgotPassword}
                 </Link>
               </div>
               <div className="relative">
                 <FormControl>
                   <Input
                     type={showPassword ? "text" : "password"}
-                    placeholder="Please enter your login password"
-                    className="pl-4 text-sm"
+                    placeholder={translations.enterPassword}
+                    className="pl-4 pr-10 text-sm"
                     {...field}
                   />
                 </FormControl>
@@ -126,7 +128,7 @@ export function LoginForm() {
           disabled={isLoading}
         >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isLoading ? "Logging In..." : "Log In"}
+          {isLoading ? translations.loggingIn : translations.login}
         </Button>
       </form>
     </Form>

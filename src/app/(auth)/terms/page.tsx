@@ -1,3 +1,5 @@
+"use client";
+
 import Link from 'next/link';
 import {
   Card,
@@ -8,14 +10,17 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useLanguage } from '@/context/language-context';
 
 export default function TermsPage() {
+  const { translations } = useLanguage();
+
   return (
     <Card className="w-full max-w-md animate-fade-in-up rounded-2xl border-none bg-white/90 shadow-2xl shadow-primary/20">
       <CardHeader>
-        <CardTitle className="text-2xl">User Agreement</CardTitle>
+        <CardTitle className="text-2xl">{translations.termsTitle}</CardTitle>
         <CardDescription>
-          Terms and Conditions for using LG Pay.
+          {translations.termsDesc}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -60,7 +65,7 @@ export default function TermsPage() {
           </p>
         </ScrollArea>
         <Button asChild className="w-full font-semibold">
-          <Link href="/register">Accept and Continue</Link>
+          <Link href="/register">{translations.acceptAndContinue}</Link>
         </Button>
       </CardContent>
     </Card>

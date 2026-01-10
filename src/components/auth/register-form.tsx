@@ -14,40 +14,44 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, KeyRound, ShieldCheck, Mail, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image';
-
-const registerSchema = z
-  .object({
-    phone: z
-      .string()
-      .length(10, { message: "Phone number must be 10 digits." })
-      .regex(/^[6-9]\d{9}$/, {
-        message: "Please enter a valid Indian mobile number.",
-      }),
-    otp: z.string().length(6, { message: "OTP must be 6 digits." }),
-    password: z
-      .string()
-      .min(6, { message: "Password must be at least 6 characters." }),
-    confirmPassword: z.string(),
-    invitationCode: z.string().optional(),
-    agreement: z.boolean().refine((val) => val === true, {
-      message: "You must accept the user agreement.",
-    }),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ["confirmPassword"],
-  });
+import { useLanguage } from "@/context/language-context";
+import { cn } from "@/lib/utils";
 
 export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [isOtpLoading, setIsOtpLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
+  const { translations, language } = useLanguage();
+
+  const registerSchema = z
+    .object({
+      phone: z
+        .string()
+        .length(10, { message: translations.phoneRequired })
+        .regex(/^[6-9]\d{9}$/, {
+          message: translations.phoneInvalid,
+        }),
+      otp: z.string().length(6, { message: translations.otpRequired }),
+      password: z
+        .string()
+        .min(6, { message: translations.passwordMin }),
+      confirmPassword: z.string(),
+      invitationCode: z.string().optional(),
+      agreement: z.boolean().refine((val) => val === true, {
+        message: translations.agreementRequired,
+      }),
+    })
+    .refine((data) => data.password === data.confirmPassword, {
+      message: translations.passwordsDontMatch,
+      path: ["confirmPassword"],
+    });
 
   const form = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
@@ -68,23 +72,32 @@ export function RegisterForm() {
     setTimeout(() => {
       setIsLoading(false);
       toast({
-        title: "Registration Successful",
-        description: "You can now log in with your new account.",
+        title: translations.registrationSuccessTitle,
+        description: translations.registrationSuccessMessage,
       });
     }, 2000);
   }
   
   function handleSendOtp() {
-    // Mock API call to send OTP
     const phone = form.getValues("phone");
-    if (phone.length >= 10) {
-      toast({
-        title: "OTP Sent",
-        description: `An OTP has been sent to +91${phone}.`,
-      });
-    } else {
-      form.setError("phone", { type: "manual", message: "Phone number must be 10 digits." });
+    if (phone.length < 10) {
+      form.setError("phone", { type: "manual", message: translations.phoneRequired });
+      return;
     }
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+        form.setError("phone", { type: "manual", message: translations.phoneInvalid });
+        return;
+    }
+
+    setIsOtpLoading(true);
+    // Mock API call to send OTP
+    setTimeout(() => {
+        setIsOtpLoading(false);
+        toast({
+            title: translations.otpSent,
+            description: translations.otpSentTo.replace('{phone}', phone),
+        });
+    }, 1500);
   }
 
   return (
@@ -98,7 +111,7 @@ export function RegisterForm() {
           name="phone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Phone Number</FormLabel>
+              <FormLabel>{translations.phoneNumber}</FormLabel>
               <div className="relative flex items-center">
                 <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-muted-foreground">
                   <Image
@@ -112,7 +125,7 @@ export function RegisterForm() {
                 <FormControl>
                   <Input
                     type="tel"
-                    placeholder="Please enter your phone number"
+                    placeholder={translations.enterPhoneNumber}
                     className="pl-[88px] text-sm"
                     maxLength={10}
                     {...field}
@@ -129,13 +142,19 @@ export function RegisterForm() {
           name="otp"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Verification Code</FormLabel>
+              <FormLabel>{translations.verificationCode}</FormLabel>
               <div className="relative flex items-center">
                 <FormControl>
-                  <Input placeholder="Enter Verification Code" {...field} className="text-sm" />
+                  <Input placeholder={translations.enterVerificationCode} {...field} className="pr-24 text-sm" />
                 </FormControl>
-                <Button type="button" variant="secondary" className="absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1 text-xs text-accent hover:bg-accent/30" onClick={handleSendOtp}>
-                  Send
+                <Button 
+                  type="button" 
+                  variant="secondary" 
+                  className={cn("absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30", isOtpLoading && "px-2")}
+                  onClick={handleSendOtp}
+                  disabled={isOtpLoading}
+                >
+                  {isOtpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : translations.send}
                 </Button>
               </div>
               <FormMessage />
@@ -148,14 +167,14 @@ export function RegisterForm() {
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Password</FormLabel>
+              <FormLabel>{translations.password}</FormLabel>
               <div className="relative">
                 <FormControl>
                   <Input
                     type={showPassword ? "text" : "password"}
-                    placeholder="Please enter your login password"
+                    placeholder={translations.enterPassword}
                     {...field}
-                    className="text-sm"
+                    className="pr-10 text-sm"
                   />
                 </FormControl>
                 <Button
@@ -177,14 +196,14 @@ export function RegisterForm() {
           name="confirmPassword"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
+              <FormLabel>{translations.confirmPassword}</FormLabel>
               <div className="relative">
                 <FormControl>
                   <Input
                     type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Please enter the confirmation password"
+                    placeholder={translations.enterConfirmPassword}
                     {...field}
-                    className="text-sm"
+                    className="pr-10 text-sm"
                   />
                 </FormControl>
                  <Button
@@ -206,10 +225,10 @@ export function RegisterForm() {
           name="invitationCode"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Invitation Code (Optional)</FormLabel>
+              <FormLabel>{translations.invitationCodeOptional}</FormLabel>
                <div className="relative">
                 <FormControl>
-                  <Input placeholder="Please enter the invitation code" {...field} className="text-sm"/>
+                  <Input placeholder={translations.enterInvitationCode} {...field} className="text-sm"/>
                 </FormControl>
               </div>
               <FormMessage />
@@ -229,13 +248,13 @@ export function RegisterForm() {
               </FormControl>
               <div className="space-y-1 leading-none text-sm">
                 <FormLabel className="font-normal text-muted-foreground">
-                  I have read and agree to the{" "}
+                  {translations.iAgreeTo}{" "}
                   <Link
                     href="/terms"
                     className="font-semibold text-accent underline-offset-4 hover:underline"
                     target="_blank"
                   >
-                    User Agreement
+                    {translations.userAgreement}
                   </Link>
                 </FormLabel>
                 <FormMessage />
@@ -249,7 +268,7 @@ export function RegisterForm() {
           disabled={isLoading}
         >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isLoading ? "Registering..." : "Register"}
+          {isLoading ? translations.registering : translations.register}
         </Button>
       </form>
     </Form>
