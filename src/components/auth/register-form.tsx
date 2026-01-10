@@ -14,16 +14,18 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, KeyRound, Phone, ShieldCheck, Mail } from "lucide-react";
+import { Loader2, KeyRound, ShieldCheck, Mail, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
+import Image from 'next/image';
 
 const registerSchema = z
   .object({
     phone: z
       .string()
-      .min(10, { message: "Phone number must be at least 10 digits." }),
+      .min(10, { message: "Phone number must be 10 digits." })
+      .max(10, { message: "Phone number must be 10 digits." }),
     otp: z.string().length(6, { message: "OTP must be 6 digits." }),
     password: z
       .string()
@@ -41,6 +43,8 @@ const registerSchema = z
 
 export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof registerSchema>>({
@@ -74,10 +78,10 @@ export function RegisterForm() {
     if (phone.length >= 10) {
       toast({
         title: "OTP Sent",
-        description: `An OTP has been sent to ${phone}.`,
+        description: `An OTP has been sent to +91${phone}.`,
       });
     } else {
-      form.setError("phone", { type: "manual", message: "Phone number must be at least 10 digits." });
+      form.setError("phone", { type: "manual", message: "Phone number must be 10 digits." });
     }
   }
 
@@ -94,12 +98,20 @@ export function RegisterForm() {
             <FormItem>
               <FormLabel>Phone Number</FormLabel>
               <div className="relative flex items-center">
-                <Phone className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-muted-foreground">
+                  <Image
+                    src="https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg"
+                    width={20}
+                    height={14}
+                    alt="India Flag"
+                  />
+                  <span>+91</span>
+                </div>
                 <FormControl>
                   <Input
                     type="tel"
-                    placeholder="Enter phone number"
-                    className="pl-10"
+                    placeholder="Please enter your phone number"
+                    className="pl-[88px]"
                     {...field}
                   />
                 </FormControl>
@@ -115,12 +127,11 @@ export function RegisterForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Verification Code</FormLabel>
-              <div className="relative flex items-center gap-2">
-                 <ShieldCheck className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="relative flex items-center">
                 <FormControl>
-                  <Input placeholder="OTP code" {...field} className="pl-10" />
+                  <Input placeholder="Enter Verification Code" {...field} />
                 </FormControl>
-                <Button type="button" variant="secondary" className="shrink-0 rounded-full text-xs h-auto px-4 py-2" onClick={handleSendOtp}>
+                <Button type="button" variant="secondary" className="absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1 text-xs text-accent hover:bg-accent/30" onClick={handleSendOtp}>
                   Send
                 </Button>
               </div>
@@ -136,15 +147,22 @@ export function RegisterForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <div className="relative">
-                <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <FormControl>
                   <Input
-                    type="password"
-                    placeholder="Create password"
-                    className="pl-10"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Please enter your login password"
                     {...field}
                   />
                 </FormControl>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1.5 top-1/2 h-auto -translate-y-1/2 p-1 text-muted-foreground hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff /> : <Eye />}
+                </Button>
               </div>
               <FormMessage />
             </FormItem>
@@ -157,15 +175,22 @@ export function RegisterForm() {
             <FormItem>
               <FormLabel>Confirm Password</FormLabel>
               <div className="relative">
-                <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <FormControl>
                   <Input
-                    type="password"
-                    placeholder="Confirm password"
-                    className="pl-10"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Please enter the confirmation password"
                     {...field}
                   />
                 </FormControl>
+                 <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1.5 top-1/2 h-auto -translate-y-1/2 p-1 text-muted-foreground hover:bg-transparent"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  {showConfirmPassword ? <EyeOff /> : <Eye />}
+                </Button>
               </div>
               <FormMessage />
             </FormItem>
@@ -178,9 +203,8 @@ export function RegisterForm() {
             <FormItem>
               <FormLabel>Invitation Code (Optional)</FormLabel>
                <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <FormControl>
-                  <Input placeholder="Enter invitation code" {...field} className="pl-10"/>
+                  <Input placeholder="Please enter the invitation code" {...field}/>
                 </FormControl>
               </div>
               <FormMessage />
@@ -199,7 +223,7 @@ export function RegisterForm() {
                 />
               </FormControl>
               <div className="space-y-1 leading-none text-sm">
-                <FormLabel className="font-normal">
+                <FormLabel className="font-normal text-muted-foreground">
                   I have read and agree to the{" "}
                   <Link
                     href="/terms"
