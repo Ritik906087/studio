@@ -104,7 +104,7 @@ export default function MyPage() {
 
 
   return (
-    <div className="min-h-screen text-foreground">
+    <div className="min-h-screen text-foreground pb-24">
       {/* Header */}
       <header className="flex items-center justify-between bg-white p-4">
         <div className="w-8"></div>
@@ -131,23 +131,25 @@ export default function MyPage() {
 
       <main className="space-y-4 p-4">
         {/* User Info */}
-        <GlassCard>
-          <CardContent className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-400">
-                <span className="text-2xl font-bold text-yellow-900">{userProfile?.displayName?.charAt(0) || 'A'}</span>
-              </div>
-              <div>
-                <h2 className="text-lg font-bold">{userProfile?.displayName || '...'}</h2>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>UID:{user?.uid.slice(0, 7)}</span>
-                  <Copy className="h-3 w-3" />
+        <Link href="/my/settings">
+          <GlassCard>
+            <CardContent className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-400">
+                  <span className="text-2xl font-bold text-yellow-900">{userProfile?.displayName?.charAt(0) || 'A'}</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold">{userProfile?.displayName || '...'}</h2>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>UID:{user?.uid.slice(0, 7)}</span>
+                    <Copy className="h-3 w-3" />
+                  </div>
                 </div>
               </div>
-            </div>
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          </CardContent>
-        </GlassCard>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </CardContent>
+          </GlassCard>
+        </Link>
         
         {/* Asset Card */}
         <Card className="border-none bg-slate-800 text-white shadow-lg">
