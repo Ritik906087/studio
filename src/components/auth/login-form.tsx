@@ -54,6 +54,7 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
+    let loginSuccess = false;
     try {
       // Firebase phone auth is complex. We'll use email/password with a fake email.
       const email = `${values.phone}@lgpay.app`;
@@ -66,7 +67,7 @@ export function LoginForm() {
         title: "Login Successful",
         description: "Welcome back!",
       });
-      router.push("/home");
+      loginSuccess = true;
     } catch (error: any) {
       console.error("Login failed:", error);
       let description = "Invalid credentials. Please try again.";
@@ -81,6 +82,9 @@ export function LoginForm() {
       form.resetField("password");
     } finally {
       setIsLoading(false);
+      if (loginSuccess) {
+        router.push("/home");
+      }
     }
   }
 
@@ -164,5 +168,3 @@ export function LoginForm() {
     </Form>
   );
 }
-
-    
