@@ -69,16 +69,15 @@ export function LoginForm() {
     } catch (error: any) {
       console.error("Login failed:", error);
       let description = "Invalid credentials. Please try again.";
-      if (error.code === 'auth/invalid-credential') {
-        description = "Incorrect phone number or password. Please check and try again.";
-      } else if (error.code === 'auth/user-not-found') {
-        description = "This account does not exist. Please register first.";
+       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+        description = "Incorrect phone number or password. Please check and try again, or register if you don't have an account.";
       }
       toast({
         variant: "destructive",
         title: "Login Failed",
         description: description,
       });
+      form.resetField("password");
     } finally {
       setIsLoading(false);
     }

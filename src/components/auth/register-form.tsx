@@ -103,10 +103,14 @@ export function RegisterForm() {
 
     } catch (error: any) {
       console.error("Registration failed:", error);
+      let description = "An unexpected error occurred. Please try again.";
+      if (error.code === 'auth/email-already-in-use') {
+          description = "An account with this phone number already exists.";
+      }
       toast({
         variant: "destructive",
         title: "Registration Failed",
-        description: error.message || "An unexpected error occurred.",
+        description: description,
       });
     } finally {
       setIsLoading(false);
@@ -116,13 +120,11 @@ export function RegisterForm() {
   function handleSendOtp() {
     // This is a mock function. Real OTP would require a backend and Firebase Functions.
     const phone = form.getValues("phone");
-    if (phone.length < 10) {
-      form.setError("phone", { type: "manual", message: translations.phoneRequired });
+    const phoneResult = z.string().length(10).regex(/^[6-9]\d{9}$/).safeParse(phone);
+
+    if (!phoneResult.success) {
+      form.setError("phone", { type: "manual", message: translations.phoneInvalid });
       return;
-    }
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-        form.setError("phone", { type: "manual", message: translations.phoneInvalid });
-        return;
     }
 
     setIsOtpLoading(true);
