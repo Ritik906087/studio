@@ -78,8 +78,8 @@ export function RegisterForm() {
         .min(6, { message: translations.passwordMin }),
       confirmPassword: z.string(),
       invitationCode: z.string().optional(),
-      agreement: z.boolean().refine((val) => val === true, {
-        message: translations.agreementRequired,
+      agreement: z.literal(true, {
+        errorMap: () => ({ message: translations.agreementRequired }),
       }),
     })
     .refine((data) => data.password === data.confirmPassword, {
