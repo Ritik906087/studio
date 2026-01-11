@@ -88,7 +88,7 @@ export default function MyPage() {
     return doc(firestore, 'users', user.uid);
   }, [user, firestore]);
 
-  const { data: userProfile } = useDoc(userProfileRef);
+  const { data: userProfile } = useDoc<{ displayName: string; photoURL?: string; balance: number; numericId: string }>(userProfileRef);
 
   const handleLogout = async () => {
     const auth = getAuth();
@@ -146,7 +146,7 @@ export default function MyPage() {
                 <div>
                   <h2 className="text-lg font-bold">{userProfile?.displayName || '...'}</h2>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>UID:{user?.uid.slice(0, 7)}</span>
+                    <span>UID:{userProfile?.numericId || '...'}</span>
                     <Copy className="h-3 w-3" />
                   </div>
                 </div>
@@ -171,13 +171,6 @@ export default function MyPage() {
                 <div className="flex justify-between text-sm text-white/70">
                     <span>≈ 0.00</span>
                     <span>0.00</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-white/70">
-                    <span>Wallet Address:</span>
-                    <div className="flex items-center gap-2">
-                        <p className="truncate font-mono">{user?.uid}</p>
-                        <Copy className="h-3 w-3" />
-                    </div>
                 </div>
             </CardContent>
         </Card>

@@ -124,8 +124,10 @@ export function RegisterForm() {
       if (user && firestore) {
         // 3. Create a user profile document in Firestore
         const userRef = doc(firestore, "users", user.uid);
+        const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
         await setDoc(userRef, {
           uid: user.uid,
+          numericId: numericId,
           phoneNumber: values.phone,
           balance: 0.00, // Initial balance
           createdAt: serverTimestamp(),

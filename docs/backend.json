@@ -7,7 +7,11 @@
       "properties": {
         "uid": {
           "type": "string",
-          "description": "The user's unique ID."
+          "description": "The user's unique ID from Firebase Authentication."
+        },
+        "numericId": {
+          "type": "string",
+          "description": "A randomly generated 8-digit numeric ID for the user."
         },
         "email": {
           "type": "string",
@@ -37,7 +41,7 @@
           "description": "The timestamp when the user profile was created."
         }
       },
-      "required": ["uid", "balance", "createdAt"]
+      "required": ["uid", "numericId", "balance", "createdAt"]
     }
   },
   "auth": {

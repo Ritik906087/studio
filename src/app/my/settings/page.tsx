@@ -29,7 +29,7 @@ export default function SettingsPage() {
     return doc(firestore, 'users', user.uid);
   }, [user, firestore]);
 
-  const { data: userProfile, loading: profileLoading } = useDoc<{ displayName: string; photoURL?: string }>(userProfileRef);
+  const { data: userProfile, loading: profileLoading } = useDoc<{ displayName: string; photoURL?: string; numericId: string }>(userProfileRef);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -141,8 +141,8 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between p-4">
             <span className="font-medium">UID</span>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-sm text-muted-foreground">{user?.uid}</span>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => user && copyToClipboard(user.uid)}>
+              <span className="font-mono text-sm text-muted-foreground">{userProfile?.numericId || '...'}</span>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => userProfile && copyToClipboard(userProfile.numericId)}>
                 <Copy className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
