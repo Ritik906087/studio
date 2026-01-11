@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Card,
   CardContent,
@@ -16,7 +16,6 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Copy, RefreshCw, X, MessageSquare, ChevronLeft, ClipboardList } from 'lucide-react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
@@ -67,15 +66,15 @@ const OrderCard = ({ order }: { order: Order }) => {
       case 'Completed':
         return 'text-green-500';
       default:
-        return 'text-white/80';
+        return 'text-muted-foreground';
     }
   };
 
   return (
-    <Card className="mb-4 border-none bg-white/10 text-white shadow-lg backdrop-blur-md">
+    <Card className="mb-4 bg-white text-foreground shadow-sm">
       <CardContent className="p-4">
-        <div className="flex items-center justify-between pb-3 border-b border-white/20">
-          <span className="rounded bg-yellow-400/80 px-3 py-1 text-sm font-bold text-yellow-900">
+        <div className="flex items-center justify-between pb-3 border-b">
+          <span className="rounded bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-900">
             {order.type}
           </span>
           <span className={cn('text-sm font-semibold', getStatusClass(order.status))}>
@@ -84,17 +83,17 @@ const OrderCard = ({ order }: { order: Order }) => {
         </div>
         <div className="pt-4 space-y-3 text-sm">
            <div className="flex justify-between items-baseline">
-            <span className="text-white/70">Amount</span>
+            <span className="text-muted-foreground">Amount</span>
             <div className="text-right">
                 <span className="text-xl font-bold">₹{order.amount}</span>
             </div>
           </div>
           {order.details.map((detail, index) => (
             <div key={index} className="flex justify-between items-center">
-              <span className="text-white/70">{detail.label}</span>
+              <span className="text-muted-foreground">{detail.label}</span>
               <div className="flex items-center gap-2">
                 <span className="font-mono">{detail.value}</span>
-                <Copy className="h-4 w-4 text-white/50 cursor-pointer" />
+                <Copy className="h-4 w-4 text-gray-400 cursor-pointer" />
               </div>
             </div>
           ))}
@@ -102,7 +101,7 @@ const OrderCard = ({ order }: { order: Order }) => {
       </CardContent>
       {order.showSupport && (
          <CardFooter className="p-4 pt-0 mt-2">
-          <Button variant="ghost" className="w-full justify-center gap-2 rounded-md bg-white/10 text-sm text-white/80 hover:bg-white/20 hover:text-white">
+          <Button variant="ghost" className="w-full justify-center gap-2 rounded-md bg-secondary text-sm text-secondary-foreground">
             <MessageSquare className="h-4 w-4" />
             Customer Service
           </Button>
@@ -118,7 +117,7 @@ export default function OrderPage() {
   const OrderList = ({ orders }: { orders: Order[] }) => {
     if (orders.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center pt-20 text-center text-white/70">
+        <div className="flex flex-col items-center justify-center pt-20 text-center text-muted-foreground">
           <ClipboardList className="h-16 w-16 opacity-50" />
           <p className="mt-4 text-lg">No orders yet</p>
         </div>
@@ -130,44 +129,44 @@ export default function OrderPage() {
         {orders.map((order) => (
           <OrderCard key={order.id} order={order} />
         ))}
-        <p className="text-center text-sm text-white/60">No more</p>
+        <p className="text-center text-sm text-muted-foreground/60">No more</p>
       </div>
     );
   };
   
   return (
-    <div className="text-white">
+    <div className="text-foreground">
        {/* Header */}
-      <header className="flex items-center justify-between p-4 bg-transparent">
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
+      <header className="flex items-center justify-between p-4 bg-white">
+        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
             <Link href="/home">
-                <ChevronLeft className="h-6 w-6 text-white/80" />
+                <ChevronLeft className="h-6 w-6 text-muted-foreground" />
             </Link>
         </Button>
-        <h1 className="text-xl font-bold text-white">History</h1>
+        <h1 className="text-xl font-bold">History</h1>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
-            <RefreshCw className="h-5 w-5 text-white/80" />
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <RefreshCw className="h-5 w-5 text-muted-foreground" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
-            <X className="h-5 w-5 text-white/80" />
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <X className="h-5 w-5 text-muted-foreground" />
           </Button>
         </div>
       </header>
 
       <main className="p-4">
         <Tabs defaultValue="purchases">
-          <TabsList className="grid w-full grid-cols-2 bg-white/10 backdrop-blur-sm h-12 rounded-xl p-1">
-            <TabsTrigger value="purchases" className="text-base data-[state=active]:bg-white/20 data-[state=active]:text-white data-[state=active]:shadow-none rounded-lg">My Purchases</TabsTrigger>
-            <TabsTrigger value="sales" className="text-base data-[state=active]:bg-white/20 data-[state=active]:text-white data-[state=active]:shadow-none rounded-lg">My Sales</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 bg-secondary h-12 rounded-xl p-1">
+            <TabsTrigger value="purchases" className="text-base data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg">My Purchases</TabsTrigger>
+            <TabsTrigger value="sales" className="text-base data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg">My Sales</TabsTrigger>
           </TabsList>
           
           <div className="my-4 grid grid-cols-2 gap-4">
             <Select defaultValue="all">
-              <SelectTrigger className="w-full bg-white/10 border-none rounded-lg h-11">
+              <SelectTrigger className="w-full bg-white border-border rounded-lg h-11">
                 <SelectValue placeholder="All" />
               </SelectTrigger>
-              <SelectContent className="bg-background/80 backdrop-blur-sm border-none text-white">
+              <SelectContent>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
@@ -176,10 +175,10 @@ export default function OrderPage() {
             </Select>
 
             <Select>
-              <SelectTrigger className="w-full bg-white/10 border-none rounded-lg h-11">
+              <SelectTrigger className="w-full bg-white border-border rounded-lg h-11">
                 <SelectValue placeholder="Choose Time" />
               </SelectTrigger>
-              <SelectContent className="bg-background/80 backdrop-blur-sm border-none text-white">
+              <SelectContent>
                 <SelectItem value="today">Today</SelectItem>
                 <SelectItem value="this_week">This Week</SelectItem>
                 <SelectItem value="this_month">This Month</SelectItem>

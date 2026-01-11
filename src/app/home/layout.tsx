@@ -20,9 +20,9 @@ export default function HomeLayout({
   ];
 
   return (
-    <div className="relative min-h-screen w-full font-body text-foreground">
-      <main className="pb-16">{children}</main>
-      <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/20 bg-white/10 shadow-[0_-2px_10px_rgba(0,0,0,0.1)] backdrop-blur-lg">
+    <div className="home-layout relative min-h-screen w-full font-body text-foreground">
+      <main className="pb-14">{children}</main>
+      <footer className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         <nav className="flex h-14 items-center justify-around">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
@@ -34,7 +34,7 @@ export default function HomeLayout({
                   'flex flex-col items-center gap-1 p-2 text-xs transition-colors',
                   isActive
                     ? 'font-bold text-primary'
-                    : 'text-white/80 hover:text-white'
+                    : 'text-gray-500 hover:text-primary'
                 )}
               >
                 <item.icon className="h-5 w-5" />

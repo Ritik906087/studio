@@ -30,7 +30,7 @@ import Autoplay from "embla-carousel-autoplay";
 import React from 'react';
 
 const GlassCard = ({ children, className }: { children: React.ReactNode, className?: string }) => (
-  <Card className={cn("border-none bg-white/10 shadow-2xl shadow-primary/10 backdrop-blur-lg", className)}>
+  <Card className={cn("border bg-white rounded-2xl shadow-sm", className)}>
     {children}
   </Card>
 );
@@ -98,9 +98,9 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="flex flex-col pb-24 text-white">
+    <div className="flex flex-col pb-24 text-foreground">
       {/* Header */}
-      <header className="flex items-center justify-between p-4">
+      <header className="flex items-center justify-between p-4 bg-white">
         <div className="flex items-center gap-2">
             <Image
                 src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/InShot_20260110_205628399.png?alt=media&token=5d466aa9-095b-495f-92e8-95f3b59b4367"
@@ -111,11 +111,11 @@ export default function HomePage() {
             <h1 className="text-xl font-bold text-gradient">LG Pay</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
-            <RefreshCw className="h-5 w-5 text-white/80" />
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <RefreshCw className="h-5 w-5 text-muted-foreground" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
-            <X className="h-5 w-5 text-white/80" />
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <X className="h-5 w-5 text-muted-foreground" />
           </Button>
         </div>
       </header>
@@ -125,10 +125,10 @@ export default function HomePage() {
         {/* My Total Assets */}
         <GlassCard>
           <CardContent className="p-4">
-            <p className="text-sm font-normal text-white/70">
+            <p className="text-sm font-normal text-muted-foreground">
               My total assets
             </p>
-            <p className="text-3xl font-bold text-white">2.00 LG</p>
+            <p className="text-3xl font-bold">2.00 LG</p>
           </CardContent>
         </GlassCard>
 
@@ -143,7 +143,7 @@ export default function HomePage() {
           <CarouselContent>
             {carouselImages.map((src, index) => (
               <CarouselItem key={index}>
-                <Card className="overflow-hidden rounded-2xl border-none bg-white/10 shadow-2xl shadow-primary/10 backdrop-blur-lg">
+                <Card className="overflow-hidden rounded-2xl border-none">
                   <Image
                       src={src}
                       alt={`Carousel image ${index + 1}`}
@@ -166,11 +166,11 @@ export default function HomePage() {
             >
               <Button
                 variant="ghost"
-                className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20"
+                className="h-14 w-14 rounded-full bg-secondary"
               >
-                <action.icon className="h-6 w-6 text-white/80" />
+                <action.icon className="h-6 w-6 text-muted-foreground" />
               </Button>
-              <span className="text-xs text-white/80">
+              <span className="text-xs text-muted-foreground">
                 {action.label}
               </span>
             </div>
@@ -179,7 +179,7 @@ export default function HomePage() {
 
         {/* Buy/Sell Actions */}
         <div className="grid grid-cols-2 gap-4">
-          <Card className="border-none bg-gradient-to-br from-yellow-300/80 to-yellow-500/80 shadow-lg">
+          <Card className="border-none bg-yellow-100 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -188,20 +188,20 @@ export default function HomePage() {
                     Flexible purchasing
                   </p>
                 </div>
-                <div className="rounded-md bg-white/30 p-2">
+                <div className="rounded-md bg-black/5 p-2">
                   <ArrowDownToLine className="h-5 w-5 text-yellow-900" />
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="border-none bg-gradient-to-br from-green-300/80 to-green-500/80 shadow-lg">
+          <Card className="border-none bg-green-100 shadow-lg">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-green-900">Sell LG</h3>
                   <p className="text-xs text-green-800">Efficient and fast</p>
                 </div>
-                <div className="rounded-md bg-white/30 p-2">
+                <div className="rounded-md bg-black/5 p-2">
                   <ArrowUpFromLine className="h-5 w-5 text-green-900" />
                 </div>
               </div>
@@ -211,7 +211,7 @@ export default function HomePage() {
         
         {/* In Progress Orders */}
         <GlassCard>
-            <CardContent className="p-4 flex flex-col items-center justify-center text-white/70 min-h-[120px]">
+            <CardContent className="p-4 flex flex-col items-center justify-center text-muted-foreground min-h-[120px]">
                 <History className="h-10 w-10 mb-2 opacity-60" />
                 <p className="text-sm">You have 0 orders in progress</p>
             </CardContent>
@@ -219,15 +219,15 @@ export default function HomePage() {
 
         {/* FAQ Section */}
         <div className="space-y-4">
-           <h2 className="text-center text-lg font-semibold text-white">Beginner's questions</h2>
+           <h2 className="text-center text-lg font-semibold">Beginner's questions</h2>
             <Accordion type="single" collapsible className="w-full space-y-2">
               {faqs.map((faq, index) => (
                 <AccordionItem key={index} value={`item-${index}`} className="border-none">
                     <GlassCard className="rounded-xl">
-                      <AccordionTrigger className="p-4 text-left font-semibold text-white/90 hover:no-underline">
+                      <AccordionTrigger className="p-4 text-left font-semibold text-foreground hover:no-underline">
                         {faq.question}
                       </AccordionTrigger>
-                      <AccordionContent className="px-4 pb-4 text-white/70">
+                      <AccordionContent className="px-4 pb-4 text-muted-foreground">
                         {faq.answer}
                       </AccordionContent>
                     </GlassCard>

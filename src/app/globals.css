@@ -81,7 +81,14 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  
+  .auth-layout {
     background: linear-gradient(160deg, #ff8ccf 0%, #8a4fff 50%, #ff9f43 100%);
+  }
+  
+  .home-layout {
+    background-color: #F7F8FA;
   }
 
   @keyframes fade-in-up {
@@ -98,6 +105,18 @@
   @keyframes fade-in {
       from { opacity: 0; }
       to { opacity: 1; }
+  }
+
+  @keyframes slide-in-bottom {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  .animate-slide-in-bottom {
+    animation: slide-in-bottom 0.3s ease-out forwards;
   }
 
   .animate-fade-in-up {
