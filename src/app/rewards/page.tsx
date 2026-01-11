@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -19,6 +20,7 @@ import {
   BadgeHelp,
   Clipboard,
   Trophy,
+  Star,
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import Link from 'next/link';
@@ -76,6 +78,32 @@ const LevelIcon = ({
     </span>
   </div>
 );
+
+const vipTasks = [
+    { description: "Invite 0/1 users and complete trades with a total amount of 500", reward: "+58 ARB" },
+    { description: "Invite 0/3 users and complete trades with a total amount of 500", reward: "+128 ARB" },
+    { description: "Invite 0/5 users and complete trades with a total amount of 500", reward: "+138 ARB" },
+    { description: "Invite 0/10 users and complete trades with a total amount of 500", reward: "+348 ARB" },
+    { description: "Invite 0/20 users and complete trades with a total amount of 500", reward: "+728 ARB" },
+    { description: "Invite 0/50 users and complete trades with a total amount of 500", reward: "+2238 ARB" },
+    { description: "Invite 0/100 users and complete trades with a total amount of 500", reward: "+3948 ARB" },
+]
+
+const dailyTasks = [
+    { description: "Buy 0/1 times today", reward: "+1 ARB" },
+    { description: "Buy 0/3 times today", reward: "+3 ARB" },
+    { description: "Buy 0/5 times today", reward: "+5 ARB" },
+    { description: "Buy 0/7 times today", reward: "+7 ARB" },
+    { description: "Buy 0/10 times today", reward: "+10 ARB" },
+]
+
+const rewardMembers = [
+    { member: "878****586", type: "Successful Buy", amount: "1 ARB" },
+    { member: "863****286", type: "Real name verific...", amount: "5 ARB" },
+    { member: "620****304", type: "Successful Sell", amount: "3 ARB" },
+    { member: "629****932", type: "Buy Transaction...", amount: "1 ARB" },
+    { member: "993****265", type: "Invite new users...", amount: "1 ARB" },
+]
 
 export default function RewardsPage() {
   return (
@@ -179,17 +207,64 @@ export default function RewardsPage() {
           <LevelIcon level="LV4" isLocked />
         </div>
         
-        <Tabs defaultValue="invite" className="w-full">
+        <Tabs defaultValue="task" className="w-full">
           <TabsList className="grid w-full grid-cols-2 bg-white/10 backdrop-blur-sm h-12 rounded-xl p-1">
             <TabsTrigger value="task" className="text-base data-[state=active]:bg-white/20 data-[state=active]:text-white data-[state=active]:shadow-none rounded-lg">Task</TabsTrigger>
             <TabsTrigger value="invite" className="text-base data-[state=active]:bg-white/20 data-[state=active]:text-white data-[state=active]:shadow-none rounded-lg">Invite</TabsTrigger>
           </TabsList>
-          <TabsContent value="task">
+          <TabsContent value="task" className="space-y-4">
+            <GlassCard>
+                <CardHeader>
+                    <div className="flex justify-between items-center">
+                        <CardTitle className="text-lg font-bold">VIP Tasks</CardTitle>
+                        <Button variant="link" className="text-yellow-400 p-0 h-auto">VIP Zone ▸</Button>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    {vipTasks.map((task, index) => (
+                        <div key={index} className="flex items-center justify-between text-sm">
+                            <p className="text-white/80 flex-1 pr-2">{task.description}</p>
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold text-yellow-400">{task.reward}</span>
+                                <Button size="sm" className="h-7 rounded-full bg-yellow-400/80 text-yellow-900 font-bold hover:bg-yellow-400">Invite Now</Button>
+                            </div>
+                        </div>
+                    ))}
+                </CardContent>
+            </GlassCard>
+            <GlassCard>
+                <CardHeader>
+                    <CardTitle className="text-lg font-bold">Daily Tasks</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                     {dailyTasks.map((task, index) => (
+                        <div key={index} className="flex items-center justify-between text-sm">
+                            <p className="text-white/80">{task.description}</p>
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold text-yellow-400">{task.reward}</span>
+                                <Button size="sm" className="h-7 rounded-full bg-yellow-400/80 text-yellow-900 font-bold hover:bg-yellow-400">Buy now</Button>
+                            </div>
+                        </div>
+                    ))}
+                </CardContent>
+            </GlassCard>
              <GlassCard>
-                <CardContent className="flex flex-col items-center justify-center p-8 text-center text-white/70">
-                    <Award className="h-12 w-12 opacity-50 mb-4" />
-                    <p className="text-lg font-medium">No tasks available</p>
-                    <p className="text-sm">Check back later for new tasks.</p>
+                <CardHeader>
+                    <CardTitle className="text-lg font-bold">Reward getting member</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="flex justify-between text-sm font-semibold text-white/70 px-2">
+                        <span>Member</span>
+                        <span>Reward type</span>
+                        <span>Reward amount</span>
+                    </div>
+                    {rewardMembers.map((member, index) => (
+                        <div key={index} className="flex justify-between items-center text-sm bg-white/5 p-2 rounded-md">
+                            <span className="font-mono text-white/90">{member.member}</span>
+                            <span className="text-white/80">{member.type}</span>
+                            <span className="font-semibold text-yellow-400">{member.amount}</span>
+                        </div>
+                    ))}
                 </CardContent>
             </GlassCard>
           </TabsContent>
@@ -225,3 +300,5 @@ export default function RewardsPage() {
     </div>
   );
 }
+
+    
