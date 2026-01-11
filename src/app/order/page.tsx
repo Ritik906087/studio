@@ -15,8 +15,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Copy, RefreshCw, X, MessageSquare, History } from 'lucide-react';
+import { Copy, RefreshCw, X, MessageSquare, History, ChevronLeft } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 type Order = {
@@ -138,15 +139,12 @@ export default function OrderPage() {
     <div className="text-white">
        {/* Header */}
       <header className="flex items-center justify-between p-4 bg-transparent">
-        <div className="flex items-center gap-2">
-          <Image
-            src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/InShot_20260110_205628399.png?alt=media&token=5d466aa9-095b-495f-92e8-95f3b59b4367"
-            width={32}
-            height={32}
-            alt="LG Pay Logo"
-          />
-          <h1 className="text-xl font-bold text-gradient">LG Pay</h1>
-        </div>
+        <Button asChild variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
+            <Link href="/home">
+                <ChevronLeft className="h-6 w-6 text-white/80" />
+            </Link>
+        </Button>
+        <h1 className="text-xl font-bold text-white">Order history</h1>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
             <RefreshCw className="h-5 w-5 text-white/80" />
