@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image';
 import { useLanguage } from "@/context/language-context";
 import { cn } from "@/lib/utils";
-import { createUserWithEmailAndPassword, getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+import { createUserWithEmailAndPassword, getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult, fetchSignInMethodsForEmail } from "firebase/auth";
 import { useFirestore } from "@/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -168,6 +168,20 @@ export function RegisterForm() {
 
     setIsOtpLoading(true);
     try {
+        const email = `${phone}@lgpay.app`;
+        const signInMethods = await fetchSignInMethodsForEmail(auth, email);
+
+        if (signInMethods.length > 0) {
+            toast({
+                variant: "destructive",
+                title: "User already exists",
+                description: "You are already registered, please login.",
+            });
+            router.push('/login');
+            setIsOtpLoading(false);
+            return;
+        }
+
         const verifier = setupRecaptcha();
         const fullPhoneNumber = `+91${phone}`;
         const result = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
