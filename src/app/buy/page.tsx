@@ -7,9 +7,8 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChevronLeft, RefreshCw, X, AlertCircle } from 'lucide-react';
+import { ChevronLeft, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
 type PurchaseOption = {
@@ -94,14 +93,7 @@ export default function BuyPage() {
             <h1 className="text-xl font-bold">Buy</h1>
             <p className="text-xs text-muted-foreground">1INR=1LGB 1U=97.00 INR</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <RefreshCw className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <X className="h-5 w-5 text-muted-foreground" />
-          </Button>
-        </div>
+        <div className="w-8"></div>
       </header>
 
       <main className="p-4">

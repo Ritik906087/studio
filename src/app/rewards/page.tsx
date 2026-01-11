@@ -11,8 +11,6 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChevronLeft,
-  RefreshCw,
-  X,
   Award,
   Users,
   Gift,
@@ -119,22 +117,7 @@ export default function RewardsPage() {
           </Link>
         </Button>
         <h1 className="text-xl font-bold">Rewards</h1>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-          >
-            <RefreshCw className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-          >
-            <X className="h-5 w-5 text-muted-foreground" />
-          </Button>
-        </div>
+        <div className="w-8"></div>
       </header>
 
       <main className="space-y-4 p-4">

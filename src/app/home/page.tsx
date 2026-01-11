@@ -18,8 +18,6 @@ import {
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  RefreshCw,
-  X,
   History,
 } from 'lucide-react';
 import Image from 'next/image';
@@ -115,14 +113,7 @@ export default function HomePage() {
             />
             <h1 className="text-xl font-bold text-gradient">LG Pay</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <RefreshCw className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <X className="h-5 w-5 text-muted-foreground" />
-          </Button>
-        </div>
+        <div className="w-8"></div>
       </header>
 
       {/* Main Content */}
@@ -131,9 +122,9 @@ export default function HomePage() {
         <GlassCard>
           <CardContent className="p-4">
             <p className="text-sm font-normal text-muted-foreground">
-              My total assets
+              Total LG Balance
             </p>
-            <p className="text-3xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'} LG</p>
+            <p className="text-3xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'} LGB</p>
           </CardContent>
         </GlassCard>
 

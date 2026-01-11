@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Copy, RefreshCw, X, MessageSquare, ChevronLeft, ClipboardList } from 'lucide-react';
+import { Copy, MessageSquare, ChevronLeft, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
@@ -144,14 +144,7 @@ export default function OrderPage() {
             </Link>
         </Button>
         <h1 className="text-xl font-bold">History</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <RefreshCw className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <X className="h-5 w-5 text-muted-foreground" />
-          </Button>
-        </div>
+        <div className="w-8"></div>
       </header>
 
       <main className="p-4">

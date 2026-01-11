@@ -6,8 +6,6 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  RefreshCw,
-  X,
   ChevronRight,
   Copy,
   ShieldCheck,
@@ -111,24 +109,7 @@ export default function MyPage() {
       <header className="flex items-center justify-between bg-white p-4">
         <div className="w-8"></div>
         <Logo className="text-xl" />
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-          >
-            <RefreshCw className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-          >
-            <Link href="/home">
-              <X className="h-5 w-5 text-muted-foreground" />
-            </Link>
-          </Button>
-        </div>
+        <div className="w-8"></div>
       </header>
 
       <main className="space-y-4 p-4">
@@ -162,14 +143,14 @@ export default function MyPage() {
                 <div className="flex items-center justify-end text-xs">
                     <span className="rounded-full bg-yellow-500/30 px-2 py-0.5 text-yellow-300">LV0</span>
                 </div>
-                <p className="text-sm text-white/70">Total Asset Valuation</p>
+                <p className="text-sm text-white/70">Total LG Balance</p>
                 <p className="text-2xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'} LGB</p>
                 <div className="flex justify-between text-sm text-white/70">
                     <span className="flex items-baseline gap-1">
                       <span className="text-xs">hold</span>
                       <span>≈ 0.00</span>
                     </span>
-                    <span>0.00</span>
+                    <span className="text-xs">1LG≈ 1INR</span>
                 </div>
             </CardContent>
         </Card>

@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, RefreshCw, X, ChevronRight, Copy, Loader2, Camera } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Loader2, Camera } from 'lucide-react';
 import Link from 'next/link';
 import { useUser, useFirestore, useDoc, useStorage } from '@/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -90,16 +90,7 @@ export default function SettingsPage() {
           </Link>
         </Button>
         <h1 className="text-xl font-bold">Settings</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <RefreshCw className="h-5 w-5 text-muted-foreground" />
-          </Button>
-          <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-            <Link href="/my">
-              <X className="h-5 w-5 text-muted-foreground" />
-            </Link>
-          </Button>
-        </div>
+        <div className="w-8"></div>
       </header>
 
       <main className="flex-grow space-y-6 p-4">
