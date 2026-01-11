@@ -15,13 +15,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image';
 import { useLanguage } from "@/context/language-context";
 import { cn } from "@/lib/utils";
-import { createUserWithEmailAndPassword, getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { createUserWithEmailAndPassword, getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
 import { useFirestore } from "@/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -32,11 +32,37 @@ export function RegisterForm() {
   const [isOtpLoading, setIsOtpLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [countdown, setCountdown] = useState(0);
   const { toast } = useToast();
   const { translations } = useLanguage();
   const firestore = useFirestore();
   const router = useRouter();
   const auth = getAuth();
+  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+  
+  const setupRecaptcha = () => {
+    if (!recaptchaVerifier.current) {
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            'size': 'invisible',
+            'callback': (response: any) => {
+                // reCAPTCHA solved, allow signInWithPhoneNumber.
+            },
+            'expired-callback': () => {
+                // Response expired. Ask user to solve reCAPTCHA again.
+            }
+        });
+    }
+    return recaptchaVerifier.current;
+  }
 
   const registerSchema = z
     .object({
@@ -46,7 +72,7 @@ export function RegisterForm() {
         .regex(/^[6-9]\d{9}$/, {
           message: translations.phoneInvalid,
         }),
-      otp: z.string().optional(), // OTP is handled separately now
+      otp: z.string().length(6, { message: translations.otpRequired }),
       password: z
         .string()
         .min(6, { message: translations.passwordMin }),
@@ -75,16 +101,27 @@ export function RegisterForm() {
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     setIsLoading(true);
+    if (!confirmationResult) {
+        toast({
+            variant: "destructive",
+            title: "OTP not verified",
+            description: "Please send and verify your OTP first.",
+        });
+        setIsLoading(false);
+        return;
+    }
+
     try {
-      // Firebase phone auth is complex to set up securely without backend.
-      // We will use email/password auth, creating a "fake" email from the phone number.
-      // This is a common pattern for phone-first login flows.
+      // 1. Verify OTP
+      await confirmationResult.confirm(values.otp);
+
+      // 2. Create user with email/password (since phone auth session is now verified)
       const email = `${values.phone}@lgpay.app`;
       const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
       const user = userCredential.user;
 
       if (user && firestore) {
-        // Create a user profile document in Firestore
+        // 3. Create a user profile document in Firestore
         const userRef = doc(firestore, "users", user.uid);
         await setDoc(userRef, {
           uid: user.uid,
@@ -106,6 +143,8 @@ export function RegisterForm() {
       let description = "An unexpected error occurred. Please try again.";
       if (error.code === 'auth/email-already-in-use') {
           description = "An account with this phone number already exists.";
+      } else if (error.code === 'auth/invalid-verification-code') {
+          description = "The OTP you entered is incorrect. Please try again.";
       }
       toast({
         variant: "destructive",
@@ -117,8 +156,7 @@ export function RegisterForm() {
     }
   }
   
-  function handleSendOtp() {
-    // This is a mock function. Real OTP would require a backend and Firebase Functions.
+  async function handleSendOtp() {
     const phone = form.getValues("phone");
     const phoneResult = z.string().length(10).regex(/^[6-9]\d{9}$/).safeParse(phone);
 
@@ -128,14 +166,26 @@ export function RegisterForm() {
     }
 
     setIsOtpLoading(true);
-    setTimeout(() => {
-        setIsOtpLoading(false);
+    try {
+        const verifier = setupRecaptcha();
+        const fullPhoneNumber = `+91${phone}`;
+        const result = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
+        setConfirmationResult(result);
+        setCountdown(59);
         toast({
             title: translations.otpSent,
-            description: `A mock OTP has been sent to +91${phone}. Enter any 6 digits.`,
+            description: `${translations.otpSentTo.replace('{phone}', fullPhoneNumber)}`,
         });
-        // In a real app, you'd initialize Recaptcha and call signInWithPhoneNumber here
-    }, 1500);
+    } catch (error) {
+        console.error("OTP send error:", error);
+        toast({
+            variant: "destructive",
+            title: "Failed to send OTP",
+            description: "Please try again. Make sure you have a stable network connection.",
+        });
+    } finally {
+        setIsOtpLoading(false);
+    }
   }
 
   return (
@@ -184,16 +234,16 @@ export function RegisterForm() {
               <FormLabel>{translations.verificationCode}</FormLabel>
               <div className="relative flex items-center">
                 <FormControl>
-                  <Input placeholder={translations.enterVerificationCode} {...field} className="pr-24 text-sm" />
+                  <Input placeholder={translations.enterVerificationCode} {...field} className="pr-28 text-sm" />
                 </FormControl>
                 <Button 
                   type="button" 
                   variant="secondary" 
-                  className={cn("absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30", isOtpLoading && "px-2")}
+                  className={cn("absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30", (isOtpLoading || countdown > 0) && "px-2")}
                   onClick={handleSendOtp}
-                  disabled={isOtpLoading}
+                  disabled={isOtpLoading || countdown > 0}
                 >
-                  {isOtpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : translations.send}
+                  {isOtpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (countdown > 0 ? `${countdown}s` : (confirmationResult ? "Resend" : translations.send))}
                 </Button>
               </div>
               <FormMessage />
