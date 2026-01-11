@@ -159,11 +159,7 @@ export default function MyPage() {
         {/* Asset Card */}
         <Card className="border-none bg-slate-800 text-white shadow-lg">
             <CardContent className="p-4 space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                        <span>Not Verified</span>
-                        <span className="text-yellow-400">Verify Now</span>
-                    </div>
+                <div className="flex items-center justify-end text-xs">
                     <span className="rounded-full bg-yellow-500/30 px-2 py-0.5 text-yellow-300">LV0</span>
                 </div>
                 <p className="text-sm text-white/70">Total Asset Valuation</p>
