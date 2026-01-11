@@ -165,7 +165,10 @@ export default function MyPage() {
                 <p className="text-sm text-white/70">Total Asset Valuation</p>
                 <p className="text-2xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'} LGB</p>
                 <div className="flex justify-between text-sm text-white/70">
-                    <span>≈ 0.00</span>
+                    <span className="flex items-baseline gap-1">
+                      <span className="text-xs">hold</span>
+                      <span>≈ 0.00</span>
+                    </span>
                     <span>0.00</span>
                 </div>
             </CardContent>
