@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -136,7 +137,7 @@ export function RegisterForm() {
         title: translations.registrationSuccessTitle,
         description: translations.registrationSuccessMessage,
       });
-      router.push("/home");
+      router.push("/login");
 
     } catch (error: any) {
       console.error("Registration failed:", error);
@@ -215,7 +216,7 @@ export function RegisterForm() {
                   <Input
                     type="tel"
                     placeholder={translations.enterPhoneNumber}
-                    className="pl-[88px] text-sm"
+                    className="pl-[88px] text-base md:text-sm"
                     maxLength={10}
                     {...field}
                   />
@@ -234,7 +235,7 @@ export function RegisterForm() {
               <FormLabel>{translations.verificationCode}</FormLabel>
               <div className="relative flex items-center">
                 <FormControl>
-                  <Input placeholder={translations.enterVerificationCode} {...field} className="pr-28 text-sm" />
+                  <Input placeholder={translations.enterVerificationCode} {...field} className="pr-28 text-base md:text-sm" />
                 </FormControl>
                 <Button 
                   type="button" 
@@ -263,7 +264,7 @@ export function RegisterForm() {
                     type={showPassword ? "text" : "password"}
                     placeholder={translations.enterPassword}
                     {...field}
-                    className="pr-10 text-sm"
+                    className="pr-10 text-base md:text-sm"
                   />
                 </FormControl>
                 <Button
@@ -292,7 +293,7 @@ export function RegisterForm() {
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder={translations.enterConfirmPassword}
                     {...field}
-                    className="pr-10 text-sm"
+                    className="pr-10 text-base md:text-sm"
                   />
                 </FormControl>
                  <Button
@@ -317,7 +318,7 @@ export function RegisterForm() {
               <FormLabel>{translations.invitationCodeOptional}</FormLabel>
                <div className="relative">
                 <FormControl>
-                  <Input placeholder={translations.enterInvitationCode} {...field} className="text-sm"/>
+                  <Input placeholder={translations.enterInvitationCode} {...field} className="text-base md:text-sm"/>
                 </FormControl>
               </div>
               <FormMessage />
@@ -354,7 +355,7 @@ export function RegisterForm() {
         <Button
           type="submit"
           className="w-full font-semibold btn-gradient rounded-full"
-          disabled={isLoading}
+          disabled={isLoading || !form.formState.isValid}
         >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isLoading ? translations.registering : translations.register}
@@ -363,3 +364,5 @@ export function RegisterForm() {
     </Form>
   );
 }
+
+    

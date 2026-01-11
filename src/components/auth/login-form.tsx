@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -69,7 +70,7 @@ export function LoginForm() {
     } catch (error: any) {
       console.error("Login failed:", error);
       let description = "Invalid credentials. Please try again.";
-       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         description = "Incorrect phone number or password. Please check and try again, or register if you don't have an account.";
       }
       toast({
@@ -106,7 +107,7 @@ export function LoginForm() {
                   <Input
                     type="tel"
                     placeholder={translations.enterPhoneNumber}
-                    className="pl-[88px] text-sm"
+                    className="pl-[88px] text-base md:text-sm"
                     maxLength={10}
                     {...field}
                   />
@@ -132,7 +133,7 @@ export function LoginForm() {
                   <Input
                     type={showPassword ? "text" : "password"}
                     placeholder={translations.enterPassword}
-                    className="pl-4 pr-10 text-sm"
+                    className="pl-4 pr-10 text-base md:text-sm"
                     {...field}
                   />
                 </FormControl>
@@ -163,3 +164,5 @@ export function LoginForm() {
     </Form>
   );
 }
+
+    
