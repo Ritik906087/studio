@@ -6,6 +6,12 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   ChevronRight,
   Copy,
   Star,
@@ -15,7 +21,8 @@ import {
   LogOut,
   HelpCircle,
   Users,
-  Globe
+  Globe,
+  ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -24,7 +31,7 @@ import { getAuth, signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { doc } from 'firebase/firestore';
-import React from 'react';
+import React, { useState } from 'react';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -65,6 +72,7 @@ export default function MyPage() {
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
+  const [currency, setCurrency] = useState<'LGB' | 'INR'>('LGB');
 
   const userProfileRef = React.useMemo(() => {
     if (!user || !firestore) return null;
@@ -127,8 +135,24 @@ export default function MyPage() {
                 <div className="flex items-center justify-end text-xs">
                     <span className="rounded-full bg-yellow-500/30 px-2 py-0.5 text-yellow-300">LV0</span>
                 </div>
-                <p className="text-sm text-white/70">Total LG Balance</p>
-                 {profileLoading ? <Skeleton className="h-8 w-32 bg-slate-700" /> : <p className="text-2xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'} <span className="text-lg font-medium">LGB</span></p>}
+                <p className="text-sm text-white/70">Total Balance</p>
+                 {profileLoading ? <Skeleton className="h-8 w-32 bg-slate-700" /> : 
+                 <div className="flex items-baseline gap-2">
+                    <p className="text-2xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'}</p>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="flex items-center gap-1 p-1 h-auto text-lg font-medium text-white hover:bg-white/10 hover:text-white">
+                          <span>{currency}</span>
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-24 bg-slate-700 text-white border-slate-600">
+                        <DropdownMenuItem onSelect={() => setCurrency('LGB')}>LGB</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setCurrency('INR')}>INR</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                 </div>
+                 }
                 <div className="flex justify-between text-sm text-white/70">
                     <span className="flex items-baseline gap-1">
                       <span className="text-xs">hold</span>
