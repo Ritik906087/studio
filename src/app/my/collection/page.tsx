@@ -53,7 +53,7 @@ const initialPaymentMethods: PaymentMethod[] = [
 
 export default function CollectionPage() {
   const [paymentMethods, setPaymentMethods] = useState<LinkedPaymentMethod[]>(
-    initialPaymentMethods.map(pm => ({...pm, linked: false}))
+    initialPaymentMethods.map(pm => ({...pm, linked: false, upiId: ''}))
   );
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(
@@ -83,13 +83,19 @@ export default function CollectionPage() {
   const confirmationResult = useRef<ConfirmationResult | null>(null);
 
   useEffect(() => {
-    if (userProfile?.paymentMethods) {
+    if (userProfile && userProfile.paymentMethods) {
         setPaymentMethods(prevMethods => 
-            prevMethods.map(pm => {
+            initialPaymentMethods.map(pm => {
                 const linked = userProfile.paymentMethods?.find(upm => upm.name === pm.name);
-                return linked ? { ...pm, linked: true, upiId: linked.upiId } : pm;
+                return { 
+                    ...pm, 
+                    linked: !!linked, 
+                    upiId: linked ? linked.upiId : '' 
+                };
             })
         );
+    } else {
+        setPaymentMethods(initialPaymentMethods.map(pm => ({ ...pm, linked: false, upiId: '' })));
     }
   }, [userProfile]);
 
@@ -189,7 +195,7 @@ export default function CollectionPage() {
       
       if (selectedMethod && userProfileRef) {
           const currentMethods = userProfile?.paymentMethods || [];
-          const updatedMethods = [...currentMethods, { name: selectedMethod.name, upiId: upiId }];
+          const updatedMethods = [...currentMethods.filter(pm => pm.name !== selectedMethod.name), { name: selectedMethod.name, upiId: upiId }];
           
           await setDoc(userProfileRef, {
               paymentMethods: updatedMethods

@@ -8,7 +8,7 @@ export function middleware(request: NextRequest) {
   const authRoutes = ['/login', '/register', '/forgot-password', '/terms', '/help'];
   const isAuthRoute = authRoutes.some(route => pathname.startsWith(route));
 
-  const protectedRoutes = ['/home', '/my', '/order', '/rewards'];
+  const protectedRoutes = ['/home', '/my', '/order', '/rewards', '/buy'];
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
 
   if (token && isAuthRoute) {
