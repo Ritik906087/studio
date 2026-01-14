@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -11,12 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+
 
 type PaymentMethod = {
   name: string;
@@ -24,7 +25,12 @@ type PaymentMethod = {
   bgColor: string;
 };
 
-const initialPaymentMethods: (PaymentMethod & { linked: boolean })[] = [
+type LinkedPaymentMethod = PaymentMethod & {
+  linked: boolean;
+  upiId?: string;
+};
+
+const initialPaymentMethods: LinkedPaymentMethod[] = [
   {
     name: "PhonePe",
     logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae",
@@ -54,34 +60,89 @@ export default function CollectionPage() {
   const [isOtpSending, setIsOtpSending] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
+  const [upiId, setUpiId] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [countdown, setCountdown] = useState(0);
 
   const { toast } = useToast();
+  const auth = getAuth();
+  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
+  const confirmationResult = useRef<ConfirmationResult | null>(null);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+  
+  const setupRecaptcha = () => {
+    if (!recaptchaVerifier.current) {
+        recaptchaVerifier.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            'size': 'invisible',
+            'callback': (response: any) => {},
+            'expired-callback': () => {}
+        });
+    }
+    return recaptchaVerifier.current;
+  }
 
   const handleLinkClick = (method: PaymentMethod) => {
     setSelectedMethod(method);
     setIsDialogOpen(true);
+    setOtpSent(false);
+    setPhone("");
+    setOtp("");
+    setUpiId("");
+    setCountdown(0);
   };
 
-  const handleSendOtp = () => {
+  const handleSendOtp = async () => {
+    if (!phone || phone.length < 10) {
+      toast({ variant: "destructive", title: "Invalid Phone Number" });
+      return;
+    }
     setIsOtpSending(true);
-    setTimeout(() => {
-      setIsOtpSending(false);
-      setOtpSent(true);
-      toast({ title: "OTP Sent!", description: "OTP sent to your number." });
-    }, 1500);
+    try {
+        const verifier = setupRecaptcha();
+        const fullPhoneNumber = `+91${phone}`;
+        const result = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
+        confirmationResult.current = result;
+        setOtpSent(true);
+        setCountdown(59);
+        toast({
+            title: "OTP Sent!",
+            description: `OTP sent to ${fullPhoneNumber}.`,
+        });
+    } catch (error) {
+        console.error("OTP send error:", error);
+        toast({
+            variant: "destructive",
+            title: "Failed to send OTP",
+            description: "Please try again later.",
+        });
+    } finally {
+        setIsOtpSending(false);
+    }
   };
 
-  const handleLinkSubmit = () => {
+  const handleLinkSubmit = async () => {
+    if (!otp || !upiId) {
+        toast({ variant: "destructive", title: "Missing Information", description: "Please enter OTP and UPI ID." });
+        return;
+    }
     setIsLinking(true);
-    // Mock linking process
-    setTimeout(() => {
-      setIsLinking(false);
-      setIsDialogOpen(false);
-      setOtpSent(false);
+    try {
+      if (!confirmationResult.current) {
+        throw new Error("OTP not sent yet.");
+      }
+      await confirmationResult.current.confirm(otp);
       
       if (selectedMethod) {
           setPaymentMethods(prevMethods => prevMethods.map(m => 
-              m.name === selectedMethod.name ? { ...m, linked: true } : m
+              m.name === selectedMethod.name ? { ...m, linked: true, upiId: upiId } : m
           ));
       }
 
@@ -89,11 +150,23 @@ export default function CollectionPage() {
         title: "Success!",
         description: `${selectedMethod?.name} has been linked successfully.`,
       });
-    }, 2000);
+      setIsDialogOpen(false);
+
+    } catch (error) {
+       console.error("Linking error:", error);
+       toast({
+        variant: "destructive",
+        title: "Failed to link UPI",
+        description: "The verification code is incorrect or another error occurred. Please try again.",
+      });
+    } finally {
+      setIsLinking(false);
+    }
   };
 
   return (
     <div className="flex min-h-screen flex-col bg-secondary">
+      <div id="recaptcha-container"></div>
       <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
           <Link href="/my">
@@ -106,7 +179,7 @@ export default function CollectionPage() {
 
       <main className="flex-grow space-y-4 p-4">
         <h2 className="text-sm font-semibold text-muted-foreground">
-          Select the receiving bank
+          Select the receiving UPI
         </h2>
         <div className="space-y-3">
           {paymentMethods.map((method) => (
@@ -124,7 +197,12 @@ export default function CollectionPage() {
                     className="object-contain"
                   />
                 </div>
-                <span className="text-lg font-semibold">{method.name}</span>
+                <div>
+                  <span className="text-lg font-semibold">{method.name}</span>
+                  {method.linked && method.upiId && (
+                     <p className="text-xs font-mono text-white/80">{method.upiId}</p>
+                  )}
+                </div>
               </div>
               {method.linked ? (
                  <div className="flex items-center justify-center rounded-md bg-green-500/80 px-3 py-1 text-xs font-bold text-white">
@@ -159,6 +237,9 @@ export default function CollectionPage() {
                   type="tel"
                   placeholder="Phone Number"
                   className="h-12 text-base"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  maxLength={10}
                 />
               </div>
               <div className="grid gap-2">
@@ -167,21 +248,19 @@ export default function CollectionPage() {
                   <Input
                     id="otp"
                     placeholder="Verification Code"
-                    className="h-12 pr-24 text-base"
+                    className="h-12 pr-28 text-base"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
                     disabled={!otpSent}
                   />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="absolute right-2 h-9 text-accent"
+                   <Button 
+                    type="button" 
+                    variant="secondary" 
+                    className={cn("absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30", (isOtpSending || countdown > 0) && "px-2")}
                     onClick={handleSendOtp}
-                    disabled={isOtpSending}
+                    disabled={isOtpSending || countdown > 0}
                   >
-                    {isOtpSending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Send"
-                    )}
+                    {isOtpSending ? <Loader2 className="h-4 w-4 animate-spin" /> : (countdown > 0 ? `${countdown}s` : (otpSent ? "Resend" : "Send"))}
                   </Button>
                 </div>
               </div>
@@ -191,6 +270,8 @@ export default function CollectionPage() {
                   id="upiId"
                   placeholder="yourname@upi"
                   className="h-12 text-base"
+                  value={upiId}
+                  onChange={(e) => setUpiId(e.target.value)}
                 />
               </div>
             </div>
@@ -199,7 +280,7 @@ export default function CollectionPage() {
                 type="submit"
                 onClick={handleLinkSubmit}
                 className="w-full h-12 rounded-full btn-gradient font-bold text-base"
-                disabled={isLinking || !otpSent}
+                disabled={isLinking || !otpSent || !otp || !upiId}
               >
                 {isLinking && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Link
