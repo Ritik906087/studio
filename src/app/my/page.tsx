@@ -8,22 +8,14 @@ import { Button } from '@/components/ui/button';
 import {
   ChevronRight,
   Copy,
-  ShieldCheck,
   Star,
   Lock,
-  MessageSquareWarning,
   ScrollText,
-  BookUser,
-  Book,
-  FileText,
   Settings,
-  Megaphone,
-  LifeBuoy,
-  Globe,
-  PartyPopper,
   LogOut,
   HelpCircle,
-  Users
+  Users,
+  Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -35,6 +27,7 @@ import { doc } from 'firebase/firestore';
 import React from 'react';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 
 const GlassCard = ({
@@ -55,23 +48,15 @@ const GlassCard = ({
 );
 
 const actionItems = [
-    { icon: ShieldCheck, label: "Real-name" },
     { icon: Star, label: "Collection", href: "/my/collection" },
     { icon: Lock, label: "Payment Password" },
-    { icon: MessageSquareWarning, label: "My Appeal" },
     { icon: ScrollText, label: "Transaction", href: "/order" },
-    { icon: BookUser, label: "User Guidelines" },
-    { icon: Book, label: "Buying Tutorial" },
-    { icon: FileText, label: "Selling Tutorial" },
-    { icon: Settings, label: "Settings" },
+    { icon: Settings, label: "Settings", href: "/my/settings" },
 ]
 
 const listItems = [
-    { icon: Megaphone, label: "Announcement" },
-    { icon: ShieldCheck, label: "Security Center" },
     { icon: HelpCircle, label: "Help Center" },
     { icon: Globe, label: "Language" },
-    { icon: PartyPopper, label: "Activity" },
 ]
 
 
@@ -86,12 +71,14 @@ export default function MyPage() {
     return doc(firestore, 'users', user.uid);
   }, [user, firestore]);
 
-  const { data: userProfile } = useDoc<{ displayName: string; photoURL?: string; balance: number; numericId: string }>(userProfileRef);
+  const { data: userProfile, loading: profileLoading } = useDoc<{ displayName: string; photoURL?: string; balance: number; numericId: string }>(userProfileRef);
 
   const handleLogout = async () => {
     const auth = getAuth();
     try {
       await signOut(auth);
+      // Clear the auth token cookie
+      document.cookie = 'firebase-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
       toast({ title: 'Logged out successfully' });
       router.push('/login');
     } catch (error) {
@@ -117,16 +104,15 @@ export default function MyPage() {
             <CardContent className="flex items-center justify-between p-4">
               <div className="flex items-center gap-4">
                  <Avatar className="h-12 w-12 border-2 border-yellow-400">
-                  <AvatarImage src={userProfile?.photoURL} alt={userProfile?.displayName} />
+                  <AvatarImage src={userProfile?.photoURL} />
                   <AvatarFallback className="bg-yellow-400 text-yellow-900 font-bold">
-                    {userProfile?.displayName?.charAt(0) || 'A'}
+                     {profileLoading ? <Skeleton className="h-12 w-12 rounded-full" /> : (userProfile?.displayName?.charAt(0) || 'A')}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h2 className="text-lg font-bold">{userProfile?.displayName || '...'}</h2>
+                  <h2 className="text-lg font-bold">{profileLoading ? <Skeleton className="h-5 w-24" /> : (userProfile?.displayName || '...')}</h2>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>UID:{userProfile?.numericId || '...'}</span>
-                    <Copy className="h-3 w-3" />
+                    {profileLoading ? <Skeleton className="h-4 w-20 mt-1" /> : <><span>UID:{userProfile?.numericId || '...'}</span><Copy className="h-3 w-3" /></>}
                   </div>
                 </div>
               </div>
@@ -142,7 +128,7 @@ export default function MyPage() {
                     <span className="rounded-full bg-yellow-500/30 px-2 py-0.5 text-yellow-300">LV0</span>
                 </div>
                 <p className="text-sm text-white/70">Total LG Balance</p>
-                <p className="text-2xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'} LGB</p>
+                 {profileLoading ? <Skeleton className="h-8 w-32 bg-slate-700" /> : <p className="text-2xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'} LGB</p>}
                 <div className="flex justify-between text-sm text-white/70">
                     <span className="flex items-baseline gap-1">
                       <span className="text-xs">hold</span>
@@ -171,7 +157,7 @@ export default function MyPage() {
 
         {/* Actions Grid */}
         <GlassCard>
-            <CardContent className="grid grid-cols-3 gap-y-6 gap-x-2 p-4 text-center">
+            <CardContent className="grid grid-cols-4 gap-y-6 gap-x-2 p-4 text-center">
                 {actionItems.map(item => {
                     const content = (
                       <div className="flex flex-col items-center gap-2">
@@ -184,7 +170,7 @@ export default function MyPage() {
                       return <Link href={item.href} key={item.label}>{content}</Link>
                     }
 
-                    return <div key={item.label}>{content}</div>;
+                    return <div key={item.label} className="flex flex-col items-center gap-2 cursor-pointer">{content}</div>;
                 })}
             </CardContent>
         </GlassCard>
@@ -193,7 +179,7 @@ export default function MyPage() {
         <GlassCard>
             <CardContent className="p-2">
                 {listItems.map(item => (
-                     <div key={item.label} className="flex items-center justify-between p-3 rounded-lg hover:bg-secondary">
+                     <div key={item.label} className="flex items-center justify-between p-3 rounded-lg hover:bg-secondary cursor-pointer">
                         <div className="flex items-center gap-3">
                             <item.icon className="h-5 w-5 text-muted-foreground" />
                             <span className="font-medium">{item.label}</span>
