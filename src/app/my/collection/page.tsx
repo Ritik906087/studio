@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
 import { useUser, useFirestore, useDoc } from '@/firebase';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 
 type PaymentMethod = {
@@ -150,15 +150,34 @@ export default function CollectionPage() {
         setIsOtpSending(false);
     }
   };
+  
+  const validateUpi = (upi: string, methodName: string): boolean => {
+    const upiRegexMap: { [key: string]: RegExp } = {
+        "PhonePe": /^[a-zA-Z0-9.\-_]{2,256}@(ybl|ibl|axl)$/,
+        "Paytm": /^[a-zA-Z0-9.\-_]{2,256}@(paytm|ptaxis|ptyes|ptsbi|pthdfc)$/,
+        "MobiKwik": /^[a-zA-Z0-9.\-_]{2,256}@(ikwik|mbk)$/,
+    };
+
+    const regex = upiRegexMap[methodName];
+    if (regex) {
+        return regex.test(upi);
+    }
+    // Fallback for any other payment method
+    return /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upi);
+  }
+
 
   const handleLinkSubmit = async () => {
     if (!otp || !upiId) {
         toast({ variant: "destructive", title: "Missing Information", description: "Please enter OTP and UPI ID." });
         return;
     }
-     const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
-    if (!upiRegex.test(upiId)) {
-        toast({ variant: "destructive", title: "Invalid UPI ID", description: "Please enter a valid UPI ID (e.g., yourname@okbank)." });
+    if (selectedMethod && !validateUpi(upiId, selectedMethod.name)) {
+        toast({ 
+            variant: "destructive", 
+            title: "Invalid UPI ID", 
+            description: `Please enter the correct UPI of ${selectedMethod.name}` 
+        });
         return;
     }
     setIsLinking(true);
@@ -169,12 +188,12 @@ export default function CollectionPage() {
       await confirmationResult.current.confirm(otp);
       
       if (selectedMethod && userProfileRef) {
-          await updateDoc(userProfileRef, {
-              paymentMethods: arrayUnion({
-                  name: selectedMethod.name,
-                  upiId: upiId
-              })
-          });
+          const currentMethods = userProfile?.paymentMethods || [];
+          const updatedMethods = [...currentMethods, { name: selectedMethod.name, upiId: upiId }];
+          
+          await setDoc(userProfileRef, {
+              paymentMethods: updatedMethods
+          }, { merge: true });
       }
 
       toast({
