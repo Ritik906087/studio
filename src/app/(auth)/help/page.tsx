@@ -76,7 +76,7 @@ export default function HelpPage() {
   };
   
   const handleSendMessage = async () => {
-    if (!currentMessage.trim()) return;
+    if (!currentMessage.trim() || !user) return;
 
     const newUserMessage: Message = { text: currentMessage, isUser: true };
     setMessages(prev => [...prev, newUserMessage]);
@@ -84,7 +84,7 @@ export default function HelpPage() {
     setIsSending(true);
 
     try {
-      const response = await helpChat({ prompt: currentMessage });
+      const response = await helpChat({ prompt: currentMessage, uid: user.uid });
       const aiResponse: Message = { text: response, isUser: false };
       setMessages(prev => [...prev, aiResponse]);
     } catch (error) {
