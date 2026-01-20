@@ -8,12 +8,17 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { initializeApp } from 'firebase/app';
+import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
 
-// Initialize Firebase for server-side usage
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase for server-side usage, safely
+let app: FirebaseApp;
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApps()[0];
+}
 const db = getFirestore(app);
 
 
