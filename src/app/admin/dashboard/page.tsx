@@ -11,15 +11,19 @@ import {
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { useCollection } from '@/firebase';
+import { useCollection, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { collection, addDoc, doc, deleteDoc } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+
 
 type UserProfile = {
     id: string;
@@ -30,6 +34,17 @@ type UserProfile = {
     phoneNumber?: string;
     photoURL?: string;
 };
+
+type PaymentMethod = {
+    id: string;
+    type: 'bank' | 'upi';
+    bankName?: string;
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    upiHolderName?: string;
+    upiId?: string;
+}
 
 function UsersGrid({ users, loading, error }: { users: UserProfile[], loading: boolean, error: any }) {
     if (loading) {
@@ -113,7 +128,27 @@ function UsersGrid({ users, loading, error }: { users: UserProfile[], loading: b
     );
 }
 
-function BankDetailsForm() {
+function BankDetailsForm({ onAdd }: { onAdd: (details: Omit<PaymentMethod, 'id' | 'type'>) => Promise<void> }) {
+    const [bankName, setBankName] = useState('');
+    const [accountHolderName, setAccountHolderName] = useState('');
+    const [accountNumber, setAccountNumber] = useState('');
+    const [ifscCode, setIfscCode] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleSubmit = async () => {
+        if (!bankName || !accountHolderName || !accountNumber || !ifscCode) {
+            alert('Please fill all fields');
+            return;
+        }
+        setIsLoading(true);
+        await onAdd({ bankName, accountHolderName, accountNumber, ifscCode });
+        setIsLoading(false);
+        setBankName('');
+        setAccountHolderName('');
+        setAccountNumber('');
+        setIfscCode('');
+    }
+
     return (
         <Card>
             <CardHeader>
@@ -123,29 +158,47 @@ function BankDetailsForm() {
             <CardContent className="space-y-4">
                 <div className="space-y-2">
                     <Label htmlFor="bank-name">Bank Name</Label>
-                    <Input id="bank-name" placeholder="e.g., State Bank of India" />
+                    <Input id="bank-name" placeholder="e.g., State Bank of India" value={bankName} onChange={e => setBankName(e.target.value)} disabled={isLoading}/>
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="account-holder-name">Account Holder Name</Label>
-                    <Input id="account-holder-name" placeholder="e.g., John Doe" />
+                    <Input id="account-holder-name" placeholder="e.g., John Doe" value={accountHolderName} onChange={e => setAccountHolderName(e.target.value)} disabled={isLoading}/>
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="account-number">Account Number</Label>
-                    <Input id="account-number" placeholder="e.g., 1234567890" />
+                    <Input id="account-number" placeholder="e.g., 1234567890" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} disabled={isLoading}/>
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="ifsc-code">IFSC Code</Label>
-                    <Input id="ifsc-code" placeholder="e.g., SBIN0001234" />
+                    <Input id="ifsc-code" placeholder="e.g., SBIN0001234" value={ifscCode} onChange={e => setIfscCode(e.target.value)} disabled={isLoading}/>
                 </div>
             </CardContent>
             <CardFooter>
-                <Button className="w-full">Add Bank Account</Button>
+                <Button className="w-full" onClick={handleSubmit} disabled={isLoading}>
+                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                    Add Bank Account
+                </Button>
             </CardFooter>
         </Card>
     );
 }
 
-function UpiDetailsForm() {
+function UpiDetailsForm({ onAdd }: { onAdd: (details: Omit<PaymentMethod, 'id' | 'type'>) => Promise<void> }) {
+    const [upiHolderName, setUpiHolderName] = useState('');
+    const [upiId, setUpiId] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const handleSubmit = async () => {
+        if(!upiHolderName || !upiId) {
+            alert('Please fill all fields');
+            return;
+        }
+        setIsLoading(true);
+        await onAdd({ upiHolderName, upiId });
+        setIsLoading(false);
+        setUpiHolderName('');
+        setUpiId('');
+    }
     return (
         <Card>
             <CardHeader>
@@ -155,25 +208,87 @@ function UpiDetailsForm() {
             <CardContent className="space-y-4">
                 <div className="space-y-2">
                     <Label htmlFor="upi-holder-name">Name</Label>
-                    <Input id="upi-holder-name" placeholder="e.g., John Doe" />
+                    <Input id="upi-holder-name" placeholder="e.g., John Doe" value={upiHolderName} onChange={e => setUpiHolderName(e.target.value)} disabled={isLoading}/>
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="upi-id">UPI ID</Label>
-                    <Input id="upi-id" placeholder="e.g., johndoe@upi" />
+                    <Input id="upi-id" placeholder="e.g., johndoe@upi" value={upiId} onChange={e => setUpiId(e.target.value)} disabled={isLoading}/>
                 </div>
             </CardContent>
             <CardFooter>
-                <Button className="w-full">Add UPI ID</Button>
+                <Button className="w-full" onClick={handleSubmit} disabled={isLoading}>
+                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                    Add UPI ID
+                </Button>
             </CardFooter>
         </Card>
     );
+}
+
+function PaymentMethodsList({ methods, loading, onDelete }: { methods: PaymentMethod[], loading: boolean, onDelete: (id: string) => void }) {
+    if (loading) {
+        return <Skeleton className="h-32 w-full mt-8"/>
+    }
+
+    if (!methods || methods.length === 0) {
+        return null;
+    }
+
+    const bankAccounts = methods.filter(m => m.type === 'bank');
+    const upiAccounts = methods.filter(m => m.type === 'upi');
+
+    return (
+        <div className="mt-8 space-y-6">
+            {bankAccounts.length > 0 && (
+                <Card>
+                    <CardHeader><CardTitle>Saved Bank Accounts</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                        {bankAccounts.map(method => (
+                            <Card key={method.id} className="p-4 bg-muted/50 flex justify-between items-start">
+                                <div className="text-sm space-y-1">
+                                    <p><span className="font-semibold">Bank:</span> {method.bankName}</p>
+                                    <p><span className="font-semibold">Holder:</span> {method.accountHolderName}</p>
+                                    <p><span className="font-semibold">Account No:</span> {method.accountNumber}</p>
+                                    <p><span className="font-semibold">IFSC:</span> {method.ifscCode}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={() => onDelete(method.id)} className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-4 w-4"/>
+                                </Button>
+                            </Card>
+                        ))}
+                    </CardContent>
+                </Card>
+            )}
+            {upiAccounts.length > 0 && (
+                <Card>
+                    <CardHeader><CardTitle>Saved UPI IDs</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                        {upiAccounts.map(method => (
+                             <Card key={method.id} className="p-4 bg-muted/50 flex justify-between items-start">
+                                <div className="text-sm space-y-1">
+                                    <p><span className="font-semibold">Name:</span> {method.upiHolderName}</p>
+                                    <p><span className="font-semibold">UPI ID:</span> {method.upiId}</p>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={() => onDelete(method.id)} className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-4 w-4"/>
+                                </Button>
+                            </Card>
+                        ))}
+                    </CardContent>
+                </Card>
+            )}
+        </div>
+    )
 }
 
 
 export default function AdminDashboardPage() {
     const router = useRouter();
     const { data: allUsers, loading, error } = useCollection<UserProfile>('users');
+    const { data: paymentMethods, loading: paymentMethodsLoading } = useCollection<PaymentMethod>('paymentMethods');
     const [searchTerm, setSearchTerm] = useState('');
+    const firestore = useFirestore();
+    const { toast } = useToast();
 
     const handleLogout = () => {
         document.cookie = 'admin-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
@@ -191,6 +306,29 @@ export default function AdminDashboardPage() {
     
     const totalUsers = allUsers?.length || 0;
     const totalBalance = allUsers?.reduce((acc, user) => acc + (user.balance || 0), 0) || 0;
+
+    const handleAddMethod = async (type: 'bank' | 'upi', details: any) => {
+        if (!firestore) return;
+        try {
+            await addDoc(collection(firestore, 'paymentMethods'), { type, ...details });
+            toast({ title: `${type.toUpperCase()} method added successfully.`});
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: `Error adding ${type} method.`});
+        }
+    };
+
+    const handleDeleteMethod = async (id: string) => {
+        if (!firestore) return;
+        if (!confirm('Are you sure you want to delete this payment method?')) return;
+        try {
+            await deleteDoc(doc(firestore, 'paymentMethods', id));
+            toast({ title: 'Payment method deleted.' });
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Error deleting payment method.'});
+        }
+    };
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -258,24 +396,27 @@ export default function AdminDashboardPage() {
             </div>
           </TabsContent>
           <TabsContent value="buy-lgb" className="mt-4">
-             <Tabs defaultValue="bank" className="w-full max-w-2xl mx-auto">
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="bank">
-                        <Landmark className="mr-2" />
-                        Bank
-                    </TabsTrigger>
-                    <TabsTrigger value="upi">
-                        <Banknote className="mr-2" />
-                        UPI
-                    </TabsTrigger>
-                </TabsList>
-                <TabsContent value="bank" className="mt-4">
-                    <BankDetailsForm />
-                </TabsContent>
-                <TabsContent value="upi" className="mt-4">
-                    <UpiDetailsForm />
-                </TabsContent>
-             </Tabs>
+             <div className="w-full max-w-2xl mx-auto">
+                <Tabs defaultValue="bank">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="bank">
+                            <Landmark className="mr-2" />
+                            Bank
+                        </TabsTrigger>
+                        <TabsTrigger value="upi">
+                            <Banknote className="mr-2" />
+                            UPI
+                        </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="bank" className="mt-4">
+                        <BankDetailsForm onAdd={(details) => handleAddMethod('bank', details)} />
+                    </TabsContent>
+                    <TabsContent value="upi" className="mt-4">
+                        <UpiDetailsForm onAdd={(details) => handleAddMethod('upi', details)} />
+                    </TabsContent>
+                </Tabs>
+                <PaymentMethodsList methods={paymentMethods || []} loading={paymentMethodsLoading} onDelete={handleDeleteMethod}/>
+             </div>
           </TabsContent>
         </Tabs>
       </main>

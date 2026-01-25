@@ -60,6 +60,42 @@
         }
       },
       "required": ["uid", "numericId", "balance", "createdAt"]
+    },
+    "AdminPaymentMethod": {
+      "title": "Admin Payment Method",
+      "description": "Stores payment method details configured by the admin.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["bank", "upi"]
+        },
+        "bankName": {
+          "type": "string",
+          "description": "The name of the bank."
+        },
+        "accountHolderName": {
+          "type": "string",
+          "description": "The name of the account holder for bank transfer."
+        },
+        "accountNumber": {
+          "type": "string",
+          "description": "The bank account number."
+        },
+        "ifscCode": {
+          "type": "string",
+          "description": "The IFSC code of the bank."
+        },
+        "upiHolderName": {
+          "type": "string",
+          "description": "The name of the UPI account holder."
+        },
+        "upiId": {
+          "type": "string",
+          "description": "The UPI ID."
+        }
+      },
+      "required": ["type"]
     }
   },
   "auth": {
@@ -71,6 +107,12 @@
         "$ref": "#/entities/UserProfile"
       },
       "description": "Stores public profile information for each user."
+    },
+    "/paymentMethods/{methodId}": {
+      "schema": {
+        "$ref": "#/entities/AdminPaymentMethod"
+      },
+      "description": "Stores admin-configured payment methods (Bank or UPI) for users to make payments to."
     }
   }
 }
