@@ -1,27 +1,22 @@
 'use client';
 
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useCollection } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import Link from 'next/link';
 
 type UserProfile = {
     id: string;
@@ -30,25 +25,36 @@ type UserProfile = {
     balance: number;
     email?: string;
     phoneNumber?: string;
+    photoURL?: string;
 };
 
-function UsersTable() {
-    // Note: This requires Firestore security rules to allow admin access.
+function UsersGrid() {
     const { data: users, loading, error } = useCollection<UserProfile>(
         'users'
     );
 
     if (loading) {
         return (
-             <div className="rounded-lg border bg-card p-4">
-                <div className="space-y-3">
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
-                </div>
-             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {[...Array(8)].map((_, i) => (
+                    <Card key={i}>
+                        <CardHeader className="flex-row items-center gap-4">
+                            <Skeleton className="h-12 w-12 rounded-full" />
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-32" />
+                                <Skeleton className="h-3 w-24" />
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                            <Skeleton className="h-4 w-full" />
+                            <Skeleton className="h-4 w-2/3" />
+                        </CardContent>
+                        <CardFooter>
+                            <Skeleton className="h-10 w-full" />
+                        </CardFooter>
+                    </Card>
+                ))}
+            </div>
         )
     }
 
@@ -66,34 +72,35 @@ function UsersTable() {
     }
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>All Users</CardTitle>
-                <CardDescription>A list of all registered users in the application.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                 <Table>
-                    <TableHeader>
-                        <TableRow>
-                        <TableHead>Display Name</TableHead>
-                        <TableHead>Numeric ID</TableHead>
-                        <TableHead>Phone Number</TableHead>
-                        <TableHead className="text-right">Balance (LGB)</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {users.map((user) => (
-                        <TableRow key={user.id}>
-                            <TableCell className="font-medium">{user.displayName}</TableCell>
-                            <TableCell>{user.numericId}</TableCell>
-                            <TableCell>{user.phoneNumber || 'N/A'}</TableCell>
-                            <TableCell className="text-right">{(user.balance || 0).toFixed(2)}</TableCell>
-                        </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {users.map((user) => (
+            <Card key={user.id} className="flex flex-col">
+                <CardHeader className="flex-row items-center gap-4">
+                    <Avatar className="h-12 w-12">
+                        <AvatarImage src={user.photoURL} alt={user.displayName} />
+                        <AvatarFallback>{user.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                        <CardTitle className="text-base">{user.displayName}</CardTitle>
+                        <CardDescription>UID: {user.numericId}</CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent className="flex-grow space-y-1">
+                    <p className="text-xs text-muted-foreground">Balance</p>
+                    <p className="text-xl font-bold">{(user.balance || 0).toFixed(2)} <span className="text-sm font-normal text-muted-foreground">LGB</span></p>
+                    <p className="text-xs text-muted-foreground pt-2">{user.phoneNumber || 'No phone number'}</p>
+                </CardContent>
+                <CardFooter>
+                     <Button asChild className="w-full" variant="outline">
+                        <Link href={`/admin/users/${user.id}`}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View User
+                        </Link>
+                    </Button>
+                </CardFooter>
+            </Card>
+            ))}
+        </div>
     );
 }
 
@@ -158,7 +165,7 @@ export default function AdminDashboardPage() {
             </div>
           </TabsContent>
           <TabsContent value="users" className="mt-4">
-            <UsersTable />
+            <UsersGrid />
           </TabsContent>
         </Tabs>
       </main>
