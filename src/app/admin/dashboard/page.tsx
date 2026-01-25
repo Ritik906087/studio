@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -12,11 +13,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useCollection } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
+import { Input } from '@/components/ui/input';
 
 type UserProfile = {
     id: string;
@@ -28,11 +30,7 @@ type UserProfile = {
     photoURL?: string;
 };
 
-function UsersGrid() {
-    const { data: users, loading, error } = useCollection<UserProfile>(
-        'users'
-    );
-
+function UsersGrid({ users, loading, error }: { users: UserProfile[], loading: boolean, error: any }) {
     if (loading) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -67,6 +65,16 @@ function UsersGrid() {
                         Could not retrieve user data. Your current Firestore security rules may be blocking this query. For this feature to work, an admin must have read access to the 'users' collection.
                     </CardDescription>
                 </CardHeader>
+            </Card>
+        )
+    }
+    
+    if (users.length === 0) {
+        return (
+            <Card>
+                <CardContent className="p-8 text-center text-muted-foreground">
+                    No users found.
+                </CardContent>
             </Card>
         )
     }
@@ -107,15 +115,25 @@ function UsersGrid() {
 
 export default function AdminDashboardPage() {
     const router = useRouter();
-    const { data: users, loading } = useCollection('users');
+    const { data: allUsers, loading, error } = useCollection<UserProfile>('users');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const handleLogout = () => {
         document.cookie = 'admin-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         router.push('/admin/login');
     };
     
-    const totalUsers = users?.length || 0;
-    const totalBalance = users?.reduce((acc, user) => acc + (user.balance || 0), 0) || 0;
+    const filteredUsers = useMemo(() => {
+        if (!allUsers) return [];
+        const lowercasedTerm = searchTerm.toLowerCase();
+        return allUsers.filter(user =>
+            user.numericId?.toLowerCase().includes(lowercasedTerm) ||
+            user.phoneNumber?.toLowerCase().includes(lowercasedTerm)
+        );
+    }, [allUsers, searchTerm]);
+    
+    const totalUsers = allUsers?.length || 0;
+    const totalBalance = allUsers?.reduce((acc, user) => acc + (user.balance || 0), 0) || 0;
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -165,7 +183,18 @@ export default function AdminDashboardPage() {
             </div>
           </TabsContent>
           <TabsContent value="users" className="mt-4">
-            <UsersGrid />
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                    placeholder="Search by UID or Phone Number..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 max-w-sm"
+                />
+              </div>
+              <UsersGrid users={filteredUsers} loading={loading} error={error} />
+            </div>
           </TabsContent>
         </Tabs>
       </main>
