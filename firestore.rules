@@ -14,7 +14,8 @@ service cloud.firestore {
 
     // Rules for the 'users' collection
     match /users/{userId} {
-      allow read, create, update: if isSignedIn() && isOwner(userId);
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isOwner(userId);
       allow delete: if false; // Do not allow clients to delete user documents
     }
   }
