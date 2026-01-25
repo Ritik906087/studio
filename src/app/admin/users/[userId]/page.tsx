@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useDoc } from '@/firebase';
 import { useParams } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet, ChevronLeft, User, Copy, DollarSign, ArrowUp, ArrowDown } from 'lucide-react';
+import { Wallet, ChevronLeft, Copy } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -37,6 +37,22 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
+
+const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
+  PhonePe: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae",
+    bgColor: "bg-violet-600",
+  },
+  Paytm: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8",
+    bgColor: "bg-sky-500",
+  },
+  MobiKwik: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f",
+    bgColor: "bg-blue-600",
+  },
+};
 
 type UserProfile = {
     id: string;
@@ -46,6 +62,7 @@ type UserProfile = {
     email?: string;
     phoneNumber?: string;
     photoURL?: string;
+    paymentMethods?: { name: string; upiId: string }[];
 };
 
 type Transaction = {
@@ -249,6 +266,54 @@ export default function UserDetailsPage() {
                             )}
                         </TableBody>
                     </Table>
+                </CardContent>
+            </Card>
+
+             {/* Linked UPIs Card */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Linked UPI Accounts</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {user.paymentMethods && user.paymentMethods.length > 0 ? (
+                        <div className="space-y-3">
+                            {user.paymentMethods.map((method) => {
+                                const details = paymentMethodDetails[method.name];
+                                return (
+                                    <div
+                                        key={method.name}
+                                        className={`flex h-20 w-full items-center justify-between gap-4 rounded-xl px-4 py-2 text-white shadow-md ${details?.bgColor || 'bg-gray-500'}`}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            {details && (
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
+                                                    <Image
+                                                        src={details.logo}
+                                                        alt={`${method.name} logo`}
+                                                        width={32}
+                                                        height={32}
+                                                        className="object-contain"
+                                                    />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <span className="text-lg font-semibold">{method.name}</span>
+                                                <p className="text-sm font-mono text-white/80">{method.upiId}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-center rounded-md bg-green-500/80 px-3 py-1.5 text-xs font-bold uppercase text-white">
+                                            ACTIVATED
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-24 text-center text-muted-foreground">
+                            <Wallet className="h-8 w-8 opacity-50 mb-2" />
+                            <p>No UPI accounts linked.</p>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
