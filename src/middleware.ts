@@ -3,24 +3,27 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const userToken = request.cookies.get('firebase-auth-token');
-  const adminToken = request.cookies.get('admin-auth');
+  const hasAdminToken = request.cookies.has('admin-auth');
   const { pathname } = request.nextUrl;
 
   // ===== Admin Auth Routes =====
-  const isAdminLoginRoute = pathname.startsWith('/admin/login');
-  const isAdminProtectedRoute = pathname.startsWith('/admin/dashboard');
-
-  if (adminToken && isAdminLoginRoute) {
-      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
-  }
-
-  if (!adminToken && isAdminProtectedRoute) {
-      return NextResponse.redirect(new URL('/admin/login', request.url));
-  }
-  
   if (pathname.startsWith('/admin')) {
-      return NextResponse.next();
+    const isAdminLoginRoute = pathname.startsWith('/admin/login');
+
+    // If logged in, trying to access login page -> redirect to dashboard
+    if (hasAdminToken && isAdminLoginRoute) {
+      return NextResponse.redirect(new URL('/admin/dashboard', request.url));
+    }
+
+    // If not logged in, trying to access any admin page (except login) -> redirect to login
+    if (!hasAdminToken && !isAdminLoginRoute) {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
+    
+    // Otherwise, allow access (logged in on dashboard, or not logged in on login page)
+    return NextResponse.next();
   }
+
 
   // ===== User Auth Routes =====
   const authRoutes = ['/login', '/register', '/forgot-password', '/terms', '/help'];
