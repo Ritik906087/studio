@@ -107,6 +107,10 @@ function PaymentDetailsContent() {
             }
             setScreenshot(file);
             setScreenshotPreview(URL.createObjectURL(file));
+            toast({
+                title: 'File selected successfully!',
+                description: 'The payment proof is attached and ready to submit.',
+            });
         }
     };
     
