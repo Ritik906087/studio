@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -13,24 +13,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Copy, ChevronLeft, ClipboardList } from 'lucide-react';
+import { Copy, ChevronLeft, ClipboardList, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useUser, useFirestore, useCollection } from '@/firebase';
+import { collection, query, where, Timestamp } from 'firebase/firestore';
 
-type Transaction = {
+
+type Order = {
   id: string;
-  type: 'Buy Rebate' | 'Sell';
-  amount: string;
-  time: string;
-  orderNumber: string;
+  amount: number;
+  status: string;
+  utr: string;
+  createdAt: Timestamp;
 };
 
-// In a real app, this would be fetched from a server
-const transactions: Transaction[] = [];
-
-const TransactionCard = ({ transaction }: { transaction: Transaction }) => {
-  const isBuy = transaction.type.includes('Buy');
+const TransactionCard = ({ transaction }: { transaction: Order }) => {
   const { toast } = useToast();
 
   const copyToClipboard = (text: string) => {
@@ -42,26 +41,31 @@ const TransactionCard = ({ transaction }: { transaction: Transaction }) => {
   return (
     <Card className="mb-4 bg-white text-foreground shadow-sm">
       <CardContent className="p-4 space-y-3">
-        <span className={cn(
-          "rounded px-2 py-0.5 text-xs font-bold",
-          isBuy ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-        )}>
-          {transaction.type}
-        </span>
+         <div className="flex justify-between items-center">
+            <span
+              className={cn(
+                "rounded px-2 py-0.5 text-xs font-bold",
+                transaction.status === 'completed' ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+              )}
+            >
+              Buy
+            </span>
+             <span className="font-semibold text-sm capitalize">{transaction.status}</span>
+        </div>
         <div className="space-y-2 text-sm">
            <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Amount</span>
-            <span className="font-semibold text-destructive">₹{transaction.amount}</span>
+            <span className="font-semibold text-primary">₹{transaction.amount.toFixed(2)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Time</span>
-            <span className="font-mono text-muted-foreground">{transaction.time}</span>
+            <span className="font-mono text-muted-foreground text-xs">{transaction.createdAt.toDate().toLocaleString()}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Order Number</span>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-muted-foreground">{transaction.orderNumber}</span>
-              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderNumber)} />
+              <span className="font-mono text-muted-foreground">{transaction.id}</span>
+              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.id)} />
             </div>
           </div>
         </div>
@@ -70,8 +74,16 @@ const TransactionCard = ({ transaction }: { transaction: Transaction }) => {
   );
 };
 
-const TransactionList = ({ transactions }: { transactions: Transaction[] }) => {
-  if (transactions.length === 0) {
+const TransactionList = ({ orders, loading }: { orders: Order[], loading: boolean }) => {
+  if (loading) {
+      return (
+        <div className="flex justify-center pt-20">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      );
+  }
+
+  if (orders.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center pt-20 text-center text-muted-foreground">
         <ClipboardList className="h-16 w-16 opacity-50" />
@@ -82,8 +94,8 @@ const TransactionList = ({ transactions }: { transactions: Transaction[] }) => {
 
   return (
     <div className="space-y-4">
-      {transactions.map((transaction) => (
-        <TransactionCard key={transaction.id} transaction={transaction} />
+      {orders.map((order) => (
+        <TransactionCard key={order.id} transaction={order} />
       ))}
       <p className="text-center text-sm text-muted-foreground/60">No more</p>
     </div>
@@ -91,6 +103,18 @@ const TransactionList = ({ transactions }: { transactions: Transaction[] }) => {
 };
 
 export default function TransactionPage() {
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const completedOrdersQuery = useMemo(() => {
+    if (!user || !firestore) return null;
+    return query(
+      collection(firestore, 'users', user.uid, 'orders'),
+      where('status', '==', 'completed')
+    );
+  }, [user, firestore]);
+
+  const { data: completedOrders, loading } = useCollection<Order>(completedOrdersQuery);
   
   return (
     <div className="text-foreground min-h-screen">
@@ -115,7 +139,6 @@ export default function TransactionPage() {
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="buy">Buy</SelectItem>
                 <SelectItem value="sell">Sell</SelectItem>
-                <SelectItem value="rebate">Rebate</SelectItem>
               </SelectContent>
             </Select>
 
@@ -132,7 +155,7 @@ export default function TransactionPage() {
             </Select>
           </div>
 
-          <TransactionList transactions={transactions} />
+          <TransactionList orders={completedOrders || []} loading={loading} />
       </main>
     </div>
   );

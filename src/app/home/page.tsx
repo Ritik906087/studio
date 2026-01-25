@@ -19,12 +19,13 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   History,
+  Loader2,
 } from 'lucide-react';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
 import React from 'react';
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
+import { doc, collection, query, where } from 'firebase/firestore';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
@@ -78,6 +79,28 @@ const faqs = [
     }
 ]
 
+const InProgressOrderCard = ({ order }: { order: any }) => {
+    const isProcessing = order.status === 'processing';
+    const buttonText = isProcessing ? "View" : "Complete Payment";
+    const buttonColor = isProcessing ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600";
+    const link = isProcessing ? `/order/${order.id}` : `/buy/confirm/${order.id}?type=${order.paymentType}`;
+
+    return (
+        <Card className="bg-secondary/50">
+            <CardContent className="p-3 flex items-center justify-between">
+                <div>
+                    <p className="font-bold">₹{order.amount.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{order.status.replace('_', ' ')}</p>
+                </div>
+                <Button asChild className={cn("text-white font-bold", buttonColor)}>
+                    <Link href={link}>{buttonText}</Link>
+                </Button>
+            </CardContent>
+        </Card>
+    );
+};
+
+
 export default function HomePage() {
    const plugin = React.useRef(
     Autoplay({ delay: 2000, stopOnInteraction: false, playOnInit: true, stopOnMouseEnter: true })
@@ -92,6 +115,17 @@ export default function HomePage() {
   }, [user, firestore]);
 
   const { data: userProfile } = useDoc(userProfileRef);
+
+  const ordersQuery = React.useMemo(() => {
+    if (!user || !firestore) return null;
+    return query(
+        collection(firestore, 'users', user.uid, 'orders'),
+        where('status', 'in', ['pending_payment', 'processing'])
+    );
+  }, [user, firestore]);
+
+  const { data: inProgressOrders, loading: ordersLoading } = useCollection(ordersQuery);
+
 
   const carouselImages = [
       "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002654720b92e47bf4b904ef1c.png?alt=media&token=76a4ec53-db8c-41f7-afd5-02f453e9983d",
@@ -189,10 +223,23 @@ export default function HomePage() {
         
         {/* In Progress Orders */}
         <GlassCard>
-            <CardContent className="p-4 flex flex-col items-center justify-center text-muted-foreground min-h-[120px]">
-                <History className="h-10 w-10 mb-2 opacity-60" />
-                <p className="text-sm">You have 0 orders in progress</p>
-            </CardContent>
+            {ordersLoading ? (
+                <CardContent className="p-4 flex items-center justify-center min-h-[120px]">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </CardContent>
+            ) : inProgressOrders && inProgressOrders.length > 0 ? (
+                <CardContent className="p-4 space-y-3">
+                    <h3 className="font-semibold text-muted-foreground">You have {inProgressOrders.length} order(s) in progress</h3>
+                    {inProgressOrders.map((order: any) => (
+                        <InProgressOrderCard key={order.id} order={order} />
+                    ))}
+                </CardContent>
+            ) : (
+                <CardContent className="p-4 flex flex-col items-center justify-center text-muted-foreground min-h-[120px]">
+                    <History className="h-10 w-10 mb-2 opacity-60" />
+                    <p className="text-sm">You have 0 orders in progress</p>
+                </CardContent>
+            )}
         </GlassCard>
 
         {/* FAQ Section */}

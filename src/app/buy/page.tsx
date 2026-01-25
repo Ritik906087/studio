@@ -17,11 +17,14 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { ChevronLeft, AlertCircle, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useUser, useFirestore } from '@/firebase';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+
 
 const purchaseOptions = [
   { id: 1, amount: 500, bonus: 5 },
@@ -38,7 +41,6 @@ const upiMethods = [
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
     { name: "Google Pay", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Google_Pay_logo.svg?alt=media&token=d827a53c-1b15-4603-959c-8516d2146522"},
 ];
-
 
 const PurchaseGrid = ({ onBuyClick }: { onBuyClick: (amount: number) => void }) => {
   return (
@@ -68,20 +70,58 @@ export default function BuyPage() {
   const [activeTab, setActiveTab] = useState('otp-upi');
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const { toast } = useToast();
 
-  const handleBuyClick = (amount: number) => {
+  const handleBuyClick = async (amount: number) => {
+    if (!user || !firestore) {
+      toast({ variant: 'destructive', title: 'Please log in to continue.' });
+      return;
+    }
     setSelectedAmount(amount);
+
     if (activeTab === 'bank') {
-      router.push(`/buy/confirm?amount=${amount}&type=bank`);
+      try {
+        const ordersRef = collection(firestore, 'users', user.uid, 'orders');
+        const newOrderRef = await addDoc(ordersRef, {
+          userId: user.uid,
+          amount,
+          status: 'pending_payment',
+          createdAt: serverTimestamp(),
+          paymentType: 'bank',
+        });
+        router.push(`/buy/confirm/${newOrderRef.id}?type=bank`);
+      } catch (error) {
+        console.error('Error creating order: ', error);
+        toast({ variant: 'destructive', title: 'Could not create order.' });
+      }
     } else {
       setIsDialogOpen(true);
     }
   };
 
-  const handleUpiSelect = (methodName: string) => {
+  const handleUpiSelect = async (methodName: string) => {
+    if (!user || !firestore || !selectedAmount) return;
     setIsDialogOpen(false);
-    router.push(`/buy/confirm?amount=${selectedAmount}&type=upi&provider=${methodName}`);
+
+    try {
+      const ordersRef = collection(firestore, 'users', user.uid, 'orders');
+      const newOrderRef = await addDoc(ordersRef, {
+        userId: user.uid,
+        amount: selectedAmount,
+        status: 'pending_payment',
+        createdAt: serverTimestamp(),
+        paymentType: 'upi',
+        paymentProvider: methodName,
+      });
+      router.push(`/buy/confirm/${newOrderRef.id}?type=upi&provider=${methodName}`);
+    } catch (error) {
+      console.error('Error creating order: ', error);
+      toast({ variant: 'destructive', title: 'Could not create order.' });
+    }
   };
+
 
   return (
     <div className="text-foreground pb-4 min-h-screen flex flex-col">

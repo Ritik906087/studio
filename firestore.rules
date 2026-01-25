@@ -25,5 +25,11 @@ service cloud.firestore {
       // In a real app, this should be restricted to admin users only.
       allow write, delete: if isSignedIn();
     }
+
+    // Rules for the 'orders' subcollection within 'users'
+    match /users/{userId}/orders/{orderId} {
+      // User can create, read, and update their own orders.
+      allow read, write: if isSignedIn() && isOwner(userId);
+    }
   }
 }

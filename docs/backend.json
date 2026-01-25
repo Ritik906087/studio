@@ -41,22 +41,22 @@
           "description": "The timestamp when the user profile was created."
         },
         "paymentMethods": {
-            "type": "array",
-            "description": "A list of the user's linked payment methods.",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "The name of the payment method (e.g., PhonePe, Paytm)."
-                    },
-                    "upiId": {
-                        "type": "string",
-                        "description": "The user's UPI ID for that payment method."
-                    }
-                },
-                "required": ["name", "upiId"]
-            }
+          "type": "array",
+          "description": "A list of the user's linked payment methods.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The name of the payment method (e.g., PhonePe, Paytm)."
+              },
+              "upiId": {
+                "type": "string",
+                "description": "The user's UPI ID for that payment method."
+              }
+            },
+            "required": ["name", "upiId"]
+          }
         }
       },
       "required": ["uid", "numericId", "balance", "createdAt"]
@@ -96,6 +96,65 @@
         }
       },
       "required": ["type"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Represents a user's request to buy LGB.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who created the order."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of LGB to buy, in INR."
+        },
+        "paymentType": {
+          "type": "string",
+          "description": "The payment method type chosen by the user.",
+          "enum": ["bank", "upi"]
+        },
+        "paymentProvider": {
+          "type": "string",
+          "description": "The specific UPI provider chosen (e.g., PhonePe)."
+        },
+        "adminPaymentMethodId": {
+          "type": "string",
+          "description": "The ID of the admin payment method used for the transaction."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the order.",
+          "enum": [
+            "pending_payment",
+            "processing",
+            "completed",
+            "cancelled",
+            "failed"
+          ]
+        },
+        "utr": {
+          "type": "string",
+          "description": "The UTR/reference number of the payment."
+        },
+        "screenshotURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the uploaded payment screenshot."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the order was created."
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the user submitted payment proof."
+        }
+      },
+      "required": ["userId", "amount", "status", "createdAt"]
     }
   },
   "auth": {
@@ -113,6 +172,12 @@
         "$ref": "#/entities/AdminPaymentMethod"
       },
       "description": "Stores admin-configured payment methods (Bank or UPI) for users to make payments to."
+    },
+    "/users/{userId}/orders/{orderId}": {
+      "schema": {
+        "$ref": "#/entities/Order"
+      },
+      "description": "Stores user orders to buy LGB."
     }
   }
 }

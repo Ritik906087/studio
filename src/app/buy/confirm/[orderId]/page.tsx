@@ -1,16 +1,19 @@
 
 'use client';
 
-import React, { Suspense, useMemo } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import React, { Suspense, useMemo, useState, useRef } from 'react';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ChevronLeft, Copy, Upload, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useCollection } from '@/firebase';
+import { useCollection, useDoc, useUser, useFirestore, useStorage } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import Image from 'next/image';
 
 type PaymentMethod = {
     id: string;
@@ -23,21 +26,44 @@ type PaymentMethod = {
     upiId?: string;
 }
 
+type Order = {
+    amount: number;
+}
+
 function PaymentDetailsContent() {
     const router = useRouter();
+    const params = useParams();
     const searchParams = useSearchParams();
     const { toast } = useToast();
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const storage = useStorage();
 
-    const { data: paymentMethods, loading } = useCollection<PaymentMethod>('paymentMethods');
-
-    const amount = searchParams.get('amount');
+    const orderId = params.orderId as string;
     const type = searchParams.get('type');
 
+    const [utr, setUtr] = useState('');
+    const [screenshot, setScreenshot] = useState<File | null>(null);
+    const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+    const [isConfirming, setIsConfirming] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const { data: paymentMethods, loading: paymentMethodsLoading } = useCollection<PaymentMethod>(firestore ? doc(firestore, 'paymentMethods', 'all') : null); // A bit of a hack to use useCollection for a single doc path
+    const { data: allPaymentMethods, loading: allPaymentMethodsLoading } = useCollection<PaymentMethod>(firestore ? collection(firestore, 'paymentMethods'): null);
+
+
+    const orderRef = useMemo(() => {
+        if (!firestore || !user || !orderId) return null;
+        return doc(firestore, 'users', user.uid, 'orders', orderId);
+    }, [firestore, user, orderId]);
+
+    const { data: order, loading: orderLoading } = useDoc<Order>(orderRef);
+
     const details = useMemo(() => {
-        if (!paymentMethods || paymentMethods.length === 0) return null;
+        if (!allPaymentMethods || allPaymentMethods.length === 0) return null;
 
         if (type === 'bank') {
-            const bankAccount = paymentMethods.find(m => m.type === 'bank');
+            const bankAccount = allPaymentMethods.find(m => m.type === 'bank');
             if (!bankAccount) return null;
             return {
                 'Bank Name': bankAccount.bankName,
@@ -47,7 +73,7 @@ function PaymentDetailsContent() {
             };
         }
         if (type === 'upi') {
-            const upiAccount = paymentMethods.find(m => m.type === 'upi');
+            const upiAccount = allPaymentMethods.find(m => m.type === 'upi');
             if (!upiAccount) return null;
             return {
                 'Recipient Name': upiAccount.upiHolderName,
@@ -55,14 +81,65 @@ function PaymentDetailsContent() {
             }
         }
         return null;
-    }, [paymentMethods, type]);
+    }, [allPaymentMethods, type]);
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
             toast({ title: 'Copied to clipboard!' });
         });
     };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setScreenshot(file);
+            setScreenshotPreview(URL.createObjectURL(file));
+        }
+    };
     
+    const handleConfirm = async () => {
+        if (!utr || utr.length !== 12) {
+            toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please provide a valid 12-digit UTR.' });
+            return;
+        }
+        if (!screenshot) {
+            toast({ variant: 'destructive', title: 'Missing Screenshot', description: 'Please upload a payment screenshot.' });
+            return;
+        }
+        if (!orderRef || !storage || !user) return;
+
+        setIsConfirming(true);
+        try {
+            const screenshotPath = `screenshots/${user.uid}/${orderId}/${screenshot.name}`;
+            const fileRef = storageRef(storage, screenshotPath);
+            await uploadBytes(fileRef, screenshot);
+            const screenshotURL = await getDownloadURL(fileRef);
+
+            await updateDoc(orderRef, {
+                utr,
+                screenshotURL,
+                status: 'processing',
+                submittedAt: serverTimestamp()
+            });
+
+            toast({ title: 'Payment Submitted!', description: 'Your order is now processing.' });
+            router.push('/home');
+
+        } catch (error) {
+            console.error("Error confirming payment: ", error);
+            toast({ variant: 'destructive', title: 'Submission Failed', description: 'There was a problem submitting your payment proof.' });
+            setIsConfirming(false);
+        }
+    }
+    
+    const handleCancel = async () => {
+        if (!orderRef) return;
+        await updateDoc(orderRef, { status: 'cancelled' });
+        router.push('/home');
+    }
+
+    const loading = allPaymentMethodsLoading || orderLoading;
+
     if (loading) {
         return (
              <div className="flex flex-col min-h-screen">
@@ -151,17 +228,24 @@ function PaymentDetailsContent() {
                     <CardContent className="p-4 space-y-4">
                          <div className="flex justify-between items-center">
                             <span className="text-muted-foreground text-sm">Amount to be paid</span>
-                            <span className="font-bold text-2xl text-primary">₹{amount}</span>
+                            <span className="font-bold text-2xl text-primary">₹{order?.amount}</span>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="utr">UTR / Reference Number</Label>
-                            <Input id="utr" placeholder="Enter 12-digit UTR number" />
+                            <Input id="utr" placeholder="Enter 12-digit UTR number" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} />
                         </div>
                         <div className="space-y-2">
-                            <Label>Upload Screenshot</Label>
-                             <Button variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed">
-                                <Upload className="h-4 w-4"/>
-                                Click to upload payment proof
+                             <Label>Upload Screenshot</Label>
+                             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
+                             <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24">
+                                {screenshotPreview ? (
+                                    <Image src={screenshotPreview} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
+                                ) : (
+                                    <>
+                                        <Upload className="h-4 w-4"/>
+                                        Click to upload payment proof
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </CardContent>
@@ -169,8 +253,10 @@ function PaymentDetailsContent() {
             </main>
 
             <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
-                <Button onClick={() => router.push('/home')} variant="destructive" className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white">CANCEL</Button>
-                <Button className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white">CONFIRM</Button>
+                <Button onClick={handleCancel} variant="destructive" className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" disabled={isConfirming}>CANCEL</Button>
+                <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming}>
+                    {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
+                </Button>
             </footer>
         </div>
     );
