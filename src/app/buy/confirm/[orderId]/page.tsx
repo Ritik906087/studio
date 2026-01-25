@@ -110,7 +110,7 @@ function PaymentDetailsContent() {
         }
     };
     
-    const handleConfirm = async () => {
+    const handleConfirm = () => {
         if (!utr || utr.length !== 12) {
             toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please provide a valid 12-digit UTR.' });
             return;
@@ -125,37 +125,54 @@ function PaymentDetailsContent() {
         }
 
         setIsConfirming(true);
-        try {
-            const sanitizedFileName = screenshot.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-            const screenshotPath = `screenshots/${user.uid}/${orderId}/${sanitizedFileName}`;
-            const fileRef = storageRef(storage, screenshotPath);
-            await uploadBytes(fileRef, screenshot);
-            const screenshotURL = await getDownloadURL(fileRef);
 
-            await updateDoc(orderRef, {
-                utr,
-                screenshotURL,
-                status: 'processing',
-                submittedAt: serverTimestamp()
-            });
+        const sanitizedFileName = screenshot.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        const screenshotPath = `screenshots/${user.uid}/${orderId}/${sanitizedFileName}`;
+        const fileRef = storageRef(storage, screenshotPath);
 
-            toast({ title: 'Payment Submitted!', description: 'Your order is now processing.' });
-            router.push('/home');
-
-        } catch (error) {
-            console.error("Error confirming payment: ", error);
-            let errorMessage = 'There was a problem submitting your payment proof.';
-             if (error instanceof Error && 'code' in error) {
-                const firebaseError = error as { code: string; message: string };
-                if (firebaseError.code === 'storage/unauthorized') {
-                    errorMessage = 'You do not have permission to upload files.';
-                } else if (firebaseError.code === 'storage/canceled') {
-                     errorMessage = 'The file upload was canceled.';
+        uploadBytes(fileRef, screenshot)
+            .then(snapshot => {
+                return getDownloadURL(snapshot.ref);
+            })
+            .then(screenshotURL => {
+                return updateDoc(orderRef, {
+                    utr,
+                    screenshotURL,
+                    status: 'processing',
+                    submittedAt: serverTimestamp()
+                });
+            })
+            .then(() => {
+                toast({ title: 'Payment Submitted!', description: 'Your order is now processing.' });
+                router.push('/home');
+            })
+            .catch(error => {
+                console.error("Error confirming payment: ", error);
+                let errorMessage = 'An unexpected error occurred during submission.';
+                 if (error && error.code) {
+                    switch (error.code) {
+                        case 'storage/unauthorized':
+                            errorMessage = 'Permission denied. Please check your storage security rules.';
+                            break;
+                        case 'storage/canceled':
+                            errorMessage = 'The file upload was canceled.';
+                            break;
+                        case 'permission-denied': // Firestore error
+                            errorMessage = 'Permission denied. Please check your Firestore security rules.';
+                            break;
+                        default:
+                            errorMessage = `An error occurred: ${error.code}. Please try again.`
+                            break;
+                    }
                 }
-            }
-            toast({ variant: 'destructive', title: 'Submission Failed', description: errorMessage });
-            setIsConfirming(false);
-        }
+                toast({ 
+                    variant: 'destructive', 
+                    title: 'Submission Failed', 
+                    description: errorMessage,
+                    duration: 9000,
+                });
+                setIsConfirming(false);
+            });
     }
     
     const handleCancel = async () => {
@@ -300,5 +317,3 @@ export default function ConfirmPage() {
     </Suspense>
   )
 }
-
-    
