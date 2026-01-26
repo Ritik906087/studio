@@ -1,3 +1,4 @@
+
 "use client";
 import {
   Card,
@@ -228,11 +229,13 @@ export default function HomePage() {
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </CardContent>
             ) : inProgressOrders && inProgressOrders.length > 0 ? (
-                <CardContent className="p-4 space-y-3">
-                    <h3 className="font-semibold text-muted-foreground">You have {inProgressOrders.length} order(s) in progress</h3>
-                    {inProgressOrders.map((order: any) => (
-                        <InProgressOrderCard key={order.id} order={order} />
-                    ))}
+                <CardContent className="p-4">
+                    <h3 className="font-semibold text-muted-foreground mb-3">You have {inProgressOrders.length} order(s) in progress</h3>
+                    <div className="flex flex-col space-y-3">
+                        {inProgressOrders.map((order: any) => (
+                            <InProgressOrderCard key={order.id} order={order} />
+                        ))}
+                    </div>
                 </CardContent>
             ) : (
                 <CardContent className="p-4 flex flex-col items-center justify-center text-muted-foreground min-h-[120px]">
