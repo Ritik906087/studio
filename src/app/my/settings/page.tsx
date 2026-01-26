@@ -53,6 +53,7 @@ export default function SettingsPage() {
   };
 
   const handleAvatarClick = () => {
+    if (isSaving) return;
     fileInputRef.current?.click();
   };
 
@@ -66,9 +67,9 @@ export default function SettingsPage() {
     }
 
     setIsSaving(true);
-    const storageRef = ref(storage, `avatars/${user.uid}/${file.name}`);
-
     try {
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const storageRef = ref(storage, `avatars/${user.uid}/${sanitizedFileName}`);
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
       await updateDoc(userProfileRef, { photoURL: downloadURL });
@@ -121,7 +122,7 @@ export default function SettingsPage() {
             />
           </div>
           <div className="mx-4 border-b"></div>
-          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50" onClick={() => { setNewName(userProfile?.displayName || ''); setIsNameDialogOpen(true); }}>
+          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50" onClick={() => { if (!isSaving) { setNewName(userProfile?.displayName || ''); setIsNameDialogOpen(true); } }}>
             <span className="font-medium">Nickname</span>
             <div className="flex items-center gap-2">
               <span className="font-semibold text-muted-foreground">{userProfile?.displayName || '...'}</span>
@@ -156,6 +157,7 @@ export default function SettingsPage() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 className="col-span-3"
+                disabled={isSaving}
               />
             </div>
           </div>

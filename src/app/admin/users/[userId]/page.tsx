@@ -9,12 +9,12 @@ import {
   CardFooter
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useDoc } from '@/firebase';
+import { useDoc, useCollection } from '@/firebase';
 import { useParams } from 'next/navigation';
 import { Wallet, ChevronLeft, Copy } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, orderBy, Timestamp } from 'firebase/firestore';
 import { useFirestore } from '@/firebase/provider';
 import {
   Table,
@@ -35,7 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -65,11 +65,13 @@ type UserProfile = {
     paymentMethods?: { name: string; upiId: string }[];
 };
 
-type Transaction = {
+type Order = {
   id: string;
-  type: 'Buy' | 'Sell' | 'Rebate';
   amount: number;
-  timestamp: string;
+  status: 'pending_payment' | 'processing' | 'completed' | 'cancelled' | 'failed';
+  utr?: string;
+  screenshotURL?: string;
+  createdAt: Timestamp;
 };
 
 
@@ -89,7 +91,7 @@ const BalanceActionDialog = ({ userId, currentBalance }: { userId: string, curre
 
         if (!firestore || !userId) return;
 
-        const newBalance = action === 'add' ? currentBalance + value : currentBalance - value;
+        const newBalance = action === 'add' ? Number(currentBalance) + value : Number(currentBalance) - value;
 
         if (newBalance < 0) {
             toast({ variant: 'destructive', title: 'Insufficient Balance' });
@@ -103,6 +105,7 @@ const BalanceActionDialog = ({ userId, currentBalance }: { userId: string, curre
             setOpen(false);
             setAmount('');
         } catch (error) {
+            console.error("Balance update error: ", error)
             toast({ variant: 'destructive', title: 'Update Failed' });
         }
     };
@@ -150,8 +153,12 @@ export default function UserDetailsPage() {
     
     const { data: user, loading, error } = useDoc<UserProfile>(userRef);
 
-    // Transactions will be fetched from Firestore in a real app
-    const transactions: Transaction[] = [];
+    const ordersQuery = useMemo(() => {
+        if (!firestore || !userId) return null;
+        return query(collection(firestore, 'users', userId, 'orders'), orderBy('createdAt', 'desc'));
+    }, [firestore, userId]);
+
+    const { data: orders, loading: ordersLoading } = useCollection<Order>(ordersQuery);
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -226,41 +233,53 @@ export default function UserDetailsPage() {
                         <CardTitle>User Balance</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="text-4xl font-bold">{(user.balance || 0).toFixed(2)} <span className="text-lg text-muted-foreground">LGB</span></div>
+                        <div className="text-4xl font-bold">{(Number(user.balance) || 0).toFixed(2)} <span className="text-lg text-muted-foreground">LGB</span></div>
                     </CardContent>
                     <CardFooter>
-                         <BalanceActionDialog userId={userId} currentBalance={user.balance || 0} />
+                         <BalanceActionDialog userId={userId} currentBalance={Number(user.balance) || 0} />
                     </CardFooter>
                 </Card>
             </div>
 
-            {/* Transaction History */}
+            {/* Order History */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Transaction History</CardTitle>
+                    <CardTitle>Order History</CardTitle>
                 </CardHeader>
                 <CardContent>
                      <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Amount (LGB)</TableHead>
+                                <TableHead>Amount</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>UTR</TableHead>
+                                <TableHead>Screenshot</TableHead>
                                 <TableHead className="text-right">Date</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {transactions.length > 0 ? transactions.map((tx) => (
-                                <TableRow key={tx.id}>
-                                    <TableCell className="font-medium">{tx.type}</TableCell>
-                                    <TableCell className={tx.type === 'Sell' ? 'text-destructive' : 'text-green-600'}>
-                                        {tx.type === 'Sell' ? '-' : '+'} {tx.amount.toFixed(2)}
+                            {ordersLoading ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-24 text-center">
+                                        Loading orders...
                                     </TableCell>
-                                    <TableCell className="text-right font-mono text-xs">{tx.timestamp}</TableCell>
+                                </TableRow>
+                            ) : orders && orders.length > 0 ? orders.map((order) => (
+                                <TableRow key={order.id}>
+                                    <TableCell className="font-medium">₹{order.amount.toFixed(2)}</TableCell>
+                                    <TableCell className="capitalize">{order.status.replace('_', ' ')}</TableCell>
+                                    <TableCell>{order.utr || 'N/A'}</TableCell>
+                                    <TableCell>
+                                        {order.screenshotURL ? (
+                                            <a href={order.screenshotURL} target="_blank" rel="noopener noreferrer" className="text-primary underline">View</a>
+                                        ): 'N/A'}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-xs">{order.createdAt.toDate().toLocaleString()}</TableCell>
                                 </TableRow>
                             )) : (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="h-24 text-center">
-                                        No transactions found.
+                                    <TableCell colSpan={5} className="h-24 text-center">
+                                        No orders found.
                                     </TableCell>
                                 </TableRow>
                             )}

@@ -244,7 +244,7 @@ function PaymentDetailsContent() {
     return (
         <div className="flex flex-col min-h-screen">
             <header className="flex items-center p-4 bg-white sticky top-0 z-10 border-b">
-                <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8">
+                <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8" disabled={isConfirming}>
                     <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
                 <h1 className="text-xl font-bold mx-auto pr-8">Confirm Payment</h1>
@@ -261,7 +261,7 @@ function PaymentDetailsContent() {
                                 <span className="text-muted-foreground">{key}</span>
                                 <div className="flex items-center gap-2">
                                     <span className="font-semibold">{value}</span>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(value!)}>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(value!)} disabled={isConfirming}>
                                         <Copy className="h-4 w-4" />
                                     </Button>
                                 </div>
@@ -278,12 +278,12 @@ function PaymentDetailsContent() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="utr">UTR / Reference Number</Label>
-                            <Input id="utr" placeholder="Enter 12-digit UTR number" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} />
+                            <Input id="utr" placeholder="Enter 12-digit UTR number" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} disabled={isConfirming} />
                         </div>
                         <div className="space-y-2">
                              <Label>Upload Screenshot</Label>
-                             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
-                             <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24">
+                             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" disabled={isConfirming} />
+                             <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming}>
                                 {screenshotPreview ? (
                                     <Image src={screenshotPreview} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
                                 ) : (
