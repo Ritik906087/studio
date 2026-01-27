@@ -21,12 +21,14 @@ import {
   ArrowUpFromLine,
   History,
   Loader2,
+  Clock,
 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
-import { doc, collection, query, where } from 'firebase/firestore';
+import { doc, collection, query, where, Timestamp } from 'firebase/firestore';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
@@ -80,22 +82,84 @@ const faqs = [
     }
 ]
 
+const Countdown = ({ expiryTimestamp, onExpire }: { expiryTimestamp: Timestamp, onExpire?: () => void }) => {
+    const [timeLeft, setTimeLeft] = useState('');
+
+    useEffect(() => {
+        const expiryTime = expiryTimestamp.toDate().getTime();
+
+        const interval = setInterval(() => {
+            const now = new Date().getTime();
+            const distance = expiryTime - now;
+
+            if (distance < 0) {
+                clearInterval(interval);
+                setTimeLeft("Expired");
+                onExpire?.();
+                return;
+            }
+
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            setTimeLeft(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [expiryTimestamp, onExpire]);
+
+    if (!timeLeft) return null;
+
+    return (
+        <div className="flex items-center gap-1 text-xs font-mono text-red-500">
+            <Clock className="h-3 w-3" />
+            <span>{timeLeft}</span>
+        </div>
+    );
+};
+
+
 const InProgressOrderCard = ({ order }: { order: any }) => {
-    const isProcessing = order.status === 'processing';
-    const buttonText = isProcessing ? "View" : "Complete Payment";
-    const buttonColor = isProcessing ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600";
-    const link = isProcessing ? `/order/${order.id}` : `/buy/confirm/${order.id}?type=${order.paymentType}`;
+    const isBuy = order.type === 'buy';
+    const isSell = order.type === 'sell';
+    
+    let buttonText = "View";
+    let buttonLink = "/order";
+    let statusText = order.status.replace('_', ' ');
+    let expiryTimestamp: Timestamp | undefined;
+
+    if (isBuy) {
+        if (order.status === 'pending_payment') {
+            buttonText = "Complete Payment";
+            buttonLink = `/buy/confirm/${order.id}?type=${order.paymentType}`;
+            expiryTimestamp = new Timestamp(order.createdAt.seconds + 30 * 60, order.createdAt.nanoseconds);
+        } else if (order.status === 'processing') {
+            buttonText = "View Status";
+            buttonLink = `/order/${order.id}`;
+            expiryTimestamp = new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds);
+        }
+    } else if (isSell) {
+         if (order.status === 'pending') {
+            buttonText = "View Status";
+            buttonLink = `/order/sell/${order.id}`;
+            expiryTimestamp = new Timestamp(order.createdAt.seconds + 30 * 60, order.createdAt.nanoseconds);
+            statusText = "Processing";
+        }
+    }
+
 
     return (
         <Card className="bg-secondary/50">
             <CardContent className="p-3 flex items-center justify-between">
                 <div>
                     <p className="font-bold">₹{order.amount.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{order.status.replace('_', ' ')}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{statusText}</p>
                 </div>
-                <Button asChild className={cn("text-white font-bold", buttonColor)}>
-                    <Link href={link}>{buttonText}</Link>
-                </Button>
+                <div className="flex items-center gap-4">
+                    {expiryTimestamp && <Countdown expiryTimestamp={expiryTimestamp} />}
+                    <Button asChild size="sm" className="font-bold">
+                        <Link href={buttonLink}>{buttonText}</Link>
+                    </Button>
+                </div>
             </CardContent>
         </Card>
     );
@@ -117,7 +181,7 @@ export default function HomePage() {
 
   const { data: userProfile } = useDoc(userProfileRef);
 
-  const ordersQuery = React.useMemo(() => {
+ const buyOrdersQuery = React.useMemo(() => {
     if (!user || !firestore) return null;
     return query(
         collection(firestore, 'users', user.uid, 'orders'),
@@ -125,8 +189,16 @@ export default function HomePage() {
     );
   }, [user, firestore]);
 
-  const { data: inProgressOrders, loading: ordersLoading } = useCollection(ordersQuery);
+  const sellOrdersQuery = React.useMemo(() => {
+    if (!user || !firestore) return null;
+    return query(
+        collection(firestore, 'users', user.uid, 'sellOrders'),
+        where('status', '==', 'pending')
+    );
+  }, [user, firestore]);
 
+  const { data: inProgressBuyOrders, loading: buyOrdersLoading } = useCollection(buyOrdersQuery);
+  const { data: inProgressSellOrders, loading: sellOrdersLoading } = useCollection(sellOrdersQuery);
 
   const carouselImages = [
       "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002654720b92e47bf4b904ef1c.png?alt=media&token=76a4ec53-db8c-41f7-afd5-02f453e9983d",
@@ -134,6 +206,9 @@ export default function HomePage() {
       "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260110_221845_327.jpg?alt=media&token=b03926fd-1ebe-4ed2-b8ec-031e4f00770c",
       "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260110_221847_606.jpg?alt=media&token=a56dbce6-9cc2-4d97-b623-97f3d726b66b"
   ];
+  
+  const ordersLoading = buyOrdersLoading || sellOrdersLoading;
+  const hasInProgressOrders = (inProgressBuyOrders && inProgressBuyOrders.length > 0) || (inProgressSellOrders && inProgressSellOrders.length > 0);
 
   return (
     <div className="flex flex-col pb-24 text-foreground">
@@ -230,15 +305,33 @@ export default function HomePage() {
                 <CardContent className="p-4 flex items-center justify-center min-h-[120px]">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </CardContent>
-            ) : inProgressOrders && inProgressOrders.length > 0 ? (
-                <CardContent className="p-4">
-                    <h3 className="font-semibold text-muted-foreground mb-3">You have {inProgressOrders.length} order(s) in progress</h3>
-                    <div className="flex flex-col space-y-3">
-                        {inProgressOrders.map((order: any) => (
-                            <InProgressOrderCard key={order.id} order={order} />
-                        ))}
-                    </div>
-                </CardContent>
+            ) : hasInProgressOrders ? (
+                <Tabs defaultValue="buy">
+                    <CardContent className="p-0">
+                         <TabsList className="w-full justify-start rounded-none bg-secondary/30 p-0 border-b">
+                            <TabsTrigger value="buy" className="flex-1 rounded-none data-[state=active]:bg-background data-[state=active]:shadow-none">Buy Orders</TabsTrigger>
+                            <TabsTrigger value="sell" className="flex-1 rounded-none data-[state=active]:bg-background data-[state=active]:shadow-none">Sell Orders</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="buy" className="p-3 space-y-3">
+                           {inProgressBuyOrders && inProgressBuyOrders.length > 0 ? (
+                                inProgressBuyOrders.map((order: any) => (
+                                    <InProgressOrderCard key={order.id} order={{...order, type: 'buy'}} />
+                                ))
+                           ) : (
+                                <p className="text-center text-sm text-muted-foreground py-4">No buy orders in progress.</p>
+                           )}
+                        </TabsContent>
+                         <TabsContent value="sell" className="p-3 space-y-3">
+                           {inProgressSellOrders && inProgressSellOrders.length > 0 ? (
+                                inProgressSellOrders.map((order: any) => (
+                                    <InProgressOrderCard key={order.id} order={{...order, type: 'sell'}} />
+                                ))
+                           ) : (
+                                <p className="text-center text-sm text-muted-foreground py-4">No sell orders in progress.</p>
+                           )}
+                        </TabsContent>
+                    </CardContent>
+                </Tabs>
             ) : (
                 <CardContent className="p-4 flex flex-col items-center justify-center text-muted-foreground min-h-[120px]">
                     <History className="h-10 w-10 mb-2 opacity-60" />

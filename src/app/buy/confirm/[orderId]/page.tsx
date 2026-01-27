@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { Suspense, useMemo, useState, useRef } from 'react';
+import React, { Suspense, useMemo, useState, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { ChevronLeft, Copy, Upload, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection, useDoc, useUser, useFirestore, useStorage } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
-import { doc, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, collection, Timestamp } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import Image from 'next/image';
 
@@ -28,7 +28,16 @@ type PaymentMethod = {
 
 type Order = {
     amount: number;
+    status: string;
+    createdAt: Timestamp;
 }
+
+const formatTime = (seconds: number) => {
+    if (seconds < 0) return '00:00';
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+};
 
 function PaymentDetailsContent() {
     const router = useRouter();
@@ -47,6 +56,8 @@ function PaymentDetailsContent() {
     const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
 
     const paymentMethodsQuery = useMemo(() => firestore ? collection(firestore, 'paymentMethods') : null, [firestore]);
     const { data: allPaymentMethods, loading: allPaymentMethodsLoading } = useCollection<PaymentMethod>(paymentMethodsQuery);
@@ -58,6 +69,53 @@ function PaymentDetailsContent() {
     }, [firestore, user, orderId]);
 
     const { data: order, loading: orderLoading } = useDoc<Order>(orderRef);
+    
+     const handleCancelOrder = async (isAutoCancel = false) => {
+        if (!orderRef) return;
+        
+        const currentOrder = await getDoc(orderRef);
+        if (currentOrder.data()?.status !== 'pending_payment') return;
+
+        try {
+            await updateDoc(orderRef, { status: 'cancelled' });
+            if (!isAutoCancel) {
+                toast({ title: 'Order Cancelled' });
+                router.push('/home');
+            } else {
+                toast({ variant: 'destructive', title: 'Order Expired', description: 'You did not complete the payment in time.' });
+                setTimeout(() => router.push('/home'), 1000);
+            }
+        } catch (e: any) {
+            console.error("Error cancelling order:", e);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not cancel the order.' });
+        }
+    };
+    
+    useEffect(() => {
+        if (!order || order.status !== 'pending_payment' || !order.createdAt) {
+            setTimeLeft(0);
+            return;
+        }
+
+        const createdAt = order.createdAt.toDate();
+        const expiryTime = new Date(createdAt.getTime() + 30 * 60 * 1000); // 30 minutes
+
+        const interval = setInterval(() => {
+            const now = new Date();
+            const secondsLeft = Math.floor((expiryTime.getTime() - now.getTime()) / 1000);
+
+            if (secondsLeft <= 0) {
+                setTimeLeft(0);
+                clearInterval(interval);
+                handleCancelOrder(true);
+            } else {
+                setTimeLeft(secondsLeft);
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [order]);
+
 
     const details = useMemo(() => {
         if (!allPaymentMethods || allPaymentMethods.length === 0) return null;
@@ -146,7 +204,7 @@ function PaymentDetailsContent() {
             });
             
             toast({ title: 'Payment Submitted!', description: 'Your order is now processing.' });
-            router.push('/home');
+            router.push(`/order/${orderId}`);
 
         } catch (error: any) {
             console.error("Error confirming payment: ", error);
@@ -176,12 +234,6 @@ function PaymentDetailsContent() {
         } finally {
             setIsConfirming(false);
         }
-    }
-    
-    const handleCancel = async () => {
-        if (!orderRef) return;
-        await updateDoc(orderRef, { status: 'cancelled' });
-        router.push('/home');
     }
 
     const loading = allPaymentMethodsLoading || orderLoading;
@@ -243,11 +295,19 @@ function PaymentDetailsContent() {
 
     return (
         <div className="flex flex-col min-h-screen">
-            <header className="flex items-center p-4 bg-white sticky top-0 z-10 border-b">
+            <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
                 <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8" disabled={isConfirming}>
                     <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
-                <h1 className="text-xl font-bold mx-auto pr-8">Confirm Payment</h1>
+                <h1 className="text-xl font-bold">Confirm Payment</h1>
+                <div className="flex flex-col items-center">
+                    {timeLeft !== null && timeLeft > 0 && (
+                        <>
+                            <p className="text-xs text-muted-foreground">Expires in</p>
+                            <p className="text-lg font-mono font-bold text-destructive">{formatTime(timeLeft)}</p>
+                        </>
+                    )}
+                </div>
             </header>
 
             <main className="flex-grow p-4 space-y-4">
@@ -299,7 +359,7 @@ function PaymentDetailsContent() {
             </main>
 
             <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
-                <Button onClick={handleCancel} variant="destructive" className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" disabled={isConfirming}>CANCEL</Button>
+                <Button onClick={() => handleCancelOrder(false)} variant="destructive" className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" disabled={isConfirming}>CANCEL</Button>
                 <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming}>
                     {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
                 </Button>
