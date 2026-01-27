@@ -18,6 +18,10 @@ type SellOrder = {
     amount: number;
     status: string;
     createdAt: Timestamp;
+    withdrawalMethod: {
+        name: string;
+        upiId: string;
+    };
 };
 
 const formatTime = (seconds: number) => {
@@ -185,6 +189,15 @@ function SellOrderStatusContent() {
                             <span className="text-muted-foreground">Amount</span>
                             <span className="font-semibold">₹{sellOrder.amount.toFixed(2)}</span>
                         </div>
+                        {sellOrder.withdrawalMethod && (
+                            <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Withdrawal to</span>
+                                <div className="text-right">
+                                    <p className="font-semibold">{sellOrder.withdrawalMethod.name}</p>
+                                    <p className="font-mono text-xs text-muted-foreground">{sellOrder.withdrawalMethod.upiId}</p>
+                                </div>
+                            </div>
+                        )}
                         <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">Order ID</span>
                             <span className="font-mono text-xs">{sellOrder.orderId}</span>

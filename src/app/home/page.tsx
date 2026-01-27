@@ -110,7 +110,10 @@ const Countdown = ({ expiryTimestamp, onExpire }: { expiryTimestamp: Timestamp, 
     if (!timeLeft) return null;
 
     return (
-        <div className="flex items-center gap-1 text-xs font-mono text-red-500">
+        <div className={cn(
+            "flex items-center gap-1 text-xs font-mono",
+            timeLeft === "Expired" ? "text-red-500" : "text-yellow-600"
+        )}>
             <Clock className="h-3 w-3" />
             <span>{timeLeft}</span>
         </div>
@@ -149,14 +152,16 @@ const InProgressOrderCard = ({ order }: { order: any }) => {
 
     return (
         <Card className="bg-secondary/50">
-            <CardContent className="p-3 flex items-center justify-between">
-                <div>
-                    <p className="font-bold">₹{order.amount.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{statusText}</p>
-                </div>
-                <div className="flex items-center gap-4">
-                    {expiryTimestamp && <Countdown expiryTimestamp={expiryTimestamp} />}
-                    <Button asChild size="sm" className="font-bold">
+            <CardContent className="p-3">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex-grow space-y-1">
+                        <p className="font-bold">₹{order.amount.toFixed(2)}</p>
+                        <div className="flex items-center gap-2">
+                             <p className="text-xs text-muted-foreground capitalize">{statusText}</p>
+                             {expiryTimestamp && <Countdown expiryTimestamp={expiryTimestamp} />}
+                        </div>
+                    </div>
+                    <Button asChild size="sm" className="font-bold flex-shrink-0">
                         <Link href={buttonLink}>{buttonText}</Link>
                     </Button>
                 </div>
