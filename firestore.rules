@@ -21,7 +21,9 @@ service cloud.firestore {
 
     // Rules for the 'paymentMethods' collection
     match /paymentMethods/{methodId} {
-      allow read: if isSignedIn();
+      // Allow any user (including admin) to read payment methods.
+      // Users need this to make payments, and admin needs it for the dashboard.
+      allow read;
       // In a real app, this should be restricted to admin users only.
       // For now, any signed-in user can write/delete, which is how the admin panel works.
       allow write, delete;
