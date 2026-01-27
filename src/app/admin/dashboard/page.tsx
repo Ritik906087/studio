@@ -406,9 +406,10 @@ function WithdrawalsTabContent() {
         if (!firestore) return;
         setLoading(true);
         try {
-            const q = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'pending'));
+            const q = query(collectionGroup(firestore, 'sellOrders'));
             const querySnapshot = await getDocs(q);
-            const pendingOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SellOrder));
+            const allOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SellOrder));
+            const pendingOrders = allOrders.filter(order => order.status === 'pending');
             setOrders(pendingOrders.sort((a,b) => a.createdAt.seconds - b.createdAt.seconds));
         } catch (error) {
             console.error("Error fetching withdrawals:", error);
