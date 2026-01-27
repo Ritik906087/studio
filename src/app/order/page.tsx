@@ -168,8 +168,7 @@ export default function TransactionPage() {
     if (!user || !firestore) return null;
     return query(
       collection(firestore, 'users', user.uid, 'orders'),
-      where('status', '==', 'completed'),
-      orderBy('createdAt', 'desc')
+      where('status', '==', 'completed')
     );
   }, [user, firestore]);
   
@@ -177,13 +176,22 @@ export default function TransactionPage() {
     if (!user || !firestore) return null;
     return query(
         collection(firestore, 'users', user.uid, 'sellOrders'),
-        where('status', 'in', ['completed', 'pending']),
-        orderBy('createdAt', 'desc')
+        where('status', 'in', ['completed', 'pending'])
     );
   }, [user, firestore]);
 
-  const { data: buyOrders, loading: buyLoading } = useCollection<Order>(buyOrdersQuery);
-  const { data: sellOrders, loading: sellLoading } = useCollection<SellOrder>(sellOrdersQuery);
+  const { data: unsortedBuyOrders, loading: buyLoading } = useCollection<Order>(buyOrdersQuery);
+  const { data: unsortedSellOrders, loading: sellLoading } = useCollection<SellOrder>(sellOrdersQuery);
+
+  const buyOrders = useMemo(() => {
+    if (!unsortedBuyOrders) return [];
+    return [...unsortedBuyOrders].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+  }, [unsortedBuyOrders]);
+
+  const sellOrders = useMemo(() => {
+    if (!unsortedSellOrders) return [];
+    return [...unsortedSellOrders].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+  }, [unsortedSellOrders]);
   
   return (
     <div className="text-foreground min-h-screen">
