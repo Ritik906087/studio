@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useCollection, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2, Clock } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2, Clock, History } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -485,6 +485,76 @@ function WithdrawalsTabContent() {
     );
 }
 
+function HistoryUsersGrid({ users, loading, error }: { users: UserProfile[], loading: boolean, error: any }) {
+    if (loading) {
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {[...Array(8)].map((_, i) => (
+                    <Card key={i}>
+                        <CardHeader className="space-y-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-24" />
+                        </CardHeader>
+                         <CardContent>
+                             <Skeleton className="h-4 w-full" />
+                         </CardContent>
+                        <CardFooter>
+                            <Skeleton className="h-10 w-full" />
+                        </CardFooter>
+                    </Card>
+                ))}
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <Card className="bg-destructive/10">
+                <CardHeader>
+                    <CardTitle className="text-destructive">Error Fetching Users</CardTitle>
+                    <CardDescription className="text-destructive/80">
+                        Could not retrieve user data.
+                    </CardDescription>
+                </CardHeader>
+            </Card>
+        )
+    }
+    
+    if (users.length === 0) {
+        return (
+            <Card>
+                <CardContent className="p-8 text-center text-muted-foreground">
+                    No users found.
+                </CardContent>
+            </Card>
+        )
+    }
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {users.map((user) => (
+            <Card key={user.id} className="flex flex-col">
+                <CardHeader>
+                    <CardTitle className="text-base">{user.displayName}</CardTitle>
+                    <CardDescription>UID: {user.numericId}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-grow">
+                     <p className="text-sm text-muted-foreground">{user.phoneNumber || 'No phone number'}</p>
+                </CardContent>
+                <CardFooter>
+                     <Button asChild className="w-full" variant="outline">
+                        <Link href={`/admin/history/${user.id}`}>
+                            <History className="mr-2 h-4 w-4" />
+                            View History
+                        </Link>
+                    </Button>
+                </CardFooter>
+            </Card>
+            ))}
+        </div>
+    );
+}
+
 export default function AdminDashboardPage() {
     const router = useRouter();
     const firestore = useFirestore();
@@ -549,7 +619,7 @@ export default function AdminDashboardPage() {
       </header>
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 md:w-auto md:inline-flex">
+          <TabsList className="grid w-full grid-cols-5 md:w-auto md:inline-flex">
             <TabsTrigger value="dashboard">
                 <LayoutDashboard className="mr-2" />
                 Dashboard
@@ -561,6 +631,10 @@ export default function AdminDashboardPage() {
              <TabsTrigger value="withdrawals">
                 <Banknote className="mr-2"/>
                 Withdrawals
+            </TabsTrigger>
+            <TabsTrigger value="history">
+                <History className="mr-2"/>
+                History
             </TabsTrigger>
              <TabsTrigger value="payment-methods">
                 <Wallet className="mr-2"/>
@@ -610,6 +684,20 @@ export default function AdminDashboardPage() {
            <TabsContent value="withdrawals" className="mt-4">
                 <WithdrawalsTabContent />
             </TabsContent>
+            <TabsContent value="history" className="mt-4">
+                <div className="space-y-4">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input
+                        placeholder="Search by UID or Phone Number..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 max-w-sm"
+                    />
+                </div>
+                <HistoryUsersGrid users={filteredUsers} loading={loading} error={error} />
+                </div>
+          </TabsContent>
           <TabsContent value="payment-methods" className="mt-4">
              <div className="w-full max-w-2xl mx-auto">
                 <Tabs defaultValue="bank">
