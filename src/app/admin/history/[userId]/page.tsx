@@ -275,13 +275,13 @@ export default function UserHistoryPage() {
     const filteredBuyOrders = useMemo(() => {
         if (!buyOrders) return [];
         if (!searchTerm.trim()) return buyOrders;
-        return buyOrders.filter(order => order.orderId.toLowerCase().includes(searchTerm.toLowerCase()));
+        return buyOrders.filter(order => order.orderId && order.orderId.toLowerCase().includes(searchTerm.toLowerCase()));
     }, [buyOrders, searchTerm]);
 
     const filteredSellOrders = useMemo(() => {
         if (!sellOrders) return [];
         if (!searchTerm.trim()) return sellOrders;
-        return sellOrders.filter(order => order.orderId.toLowerCase().includes(searchTerm.toLowerCase()));
+        return sellOrders.filter(order => order.orderId && order.orderId.toLowerCase().includes(searchTerm.toLowerCase()));
     }, [sellOrders, searchTerm]);
 
     const copyToClipboard = (text: string) => {
