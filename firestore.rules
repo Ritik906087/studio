@@ -2,48 +2,10 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    // Rules for the 'users' collection
-    match /users/{userId} {
-      // Admin can update any user's balance, for now.
-      // This is not secure for production.
-      allow read, write;
-    }
-
-    // Rules for the 'paymentMethods' collection
-    match /paymentMethods/{methodId} {
-      // Allow any user (including admin) to read payment methods.
-      // Users need this to make payments, and admin needs it for the dashboard.
-      allow read;
-      // In a real app, this should be restricted to admin users only.
-      // For now, any signed-in user can write/delete, which is how the admin panel works.
-      allow write, delete;
-    }
-
-    // Rules for the 'orders' subcollection within 'users'
-    match /users/{userId}/orders/{orderId} {
-      // User can write to their own orders.
-      allow write: if isSignedIn() && isOwner(userId);
-      // Admin needs to read all orders. This is insecure for production and
-      // should be replaced with a role-based system.
-      allow read;
-    }
-    
-    // Rules for the 'sellOrders' subcollection within 'users'
-    match /users/{userId}/sellOrders/{orderId} {
-      // Allow user to create their own order.
-      allow create: if isOwner(userId);
-      // Allow admin to read and update any order. This is simplified for the prototype.
-      allow read, update;
+    // WARNING: These rules are insecure and are for debugging purposes only.
+    // They allow anyone to read and write to your entire database.
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
