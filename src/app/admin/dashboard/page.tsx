@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -369,27 +369,37 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold">Process</Button>
+                <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold">View Details</Button>
             </DialogTrigger>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Process Withdrawal</DialogTitle>
-                    <CardDescription>Order ID: {order.orderId}</CardDescription>
+                    <div className="flex justify-between items-center text-sm pt-2">
+                        <CardDescription>Order ID: {order.orderId}</CardDescription>
+                        <CountdownTimer expiryTimestamp={new Timestamp(order.createdAt.seconds + 30 * 60, order.createdAt.nanoseconds)} />
+                    </div>
                 </DialogHeader>
-                <div className="space-y-4">
-                    <p>Amount: <span className="font-bold">₹{order.amount}</span></p>
-                    <p>To: <span className="font-bold">{order.withdrawalMethod.name} - {order.withdrawalMethod.upiId}</span></p>
-                    <div className="space-y-2">
+                <div className="space-y-4 py-4">
+                    <p><strong>Amount:</strong> <span className="font-bold text-lg text-primary">₹{order.amount}</span></p>
+                    <p><strong>User UID:</strong> {order.userNumericId}</p>
+                    <p><strong>Phone:</strong> {order.userPhoneNumber}</p>
+                    <p><strong>To ({order.withdrawalMethod.name}):</strong> {order.withdrawalMethod.upiId}</p>
+                    <div className="space-y-2 pt-2">
                         <Label htmlFor="utr">12-Digit UTR Number</Label>
                         <Input id="utr" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} placeholder="Enter payment UTR" />
                     </div>
                 </div>
-                <DialogFooter>
-                    <Button variant="destructive" onClick={() => setOpen(false)}>Cancel</Button>
-                    <Button className="bg-green-600 hover:bg-green-700" onClick={handleConfirm} disabled={isConfirming}>
-                        {isConfirming && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                        Confirm
+                <DialogFooter className="sm:justify-between">
+                    <Button asChild variant="secondary" className="sm:mr-auto">
+                        <Link href={`/admin/users/${order.userId}`} target="_blank">View User</Link>
                     </Button>
+                    <div className="flex gap-2">
+                        <Button variant="destructive" onClick={() => setOpen(false)} disabled={isConfirming}>Cancel</Button>
+                        <Button className="bg-green-600 hover:bg-green-700" onClick={handleConfirm} disabled={isConfirming}>
+                            {isConfirming && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                            Confirm
+                        </Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -447,7 +457,7 @@ function WithdrawalsTabContent() {
 
             {loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-56 w-full" />)}
+                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
                 </div>
             ) : filteredOrders.length === 0 ? (
                 <Card>
@@ -459,18 +469,12 @@ function WithdrawalsTabContent() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredOrders.map(order => (
                         <Card key={order.id} className="flex flex-col">
-                            <CardHeader>
-                                <CardTitle className="text-sm font-semibold">Withdrawal Request</CardTitle>
-                                <CountdownTimer expiryTimestamp={new Timestamp(order.createdAt.seconds + 30 * 60, order.createdAt.nanoseconds)} />
-                            </CardHeader>
-                            <CardContent className="flex-grow space-y-2 text-sm">
+                            <CardContent className="flex-grow p-4 space-y-2 text-sm">
                                 <p><strong>Amount:</strong> <span className="font-bold text-lg text-primary">₹{order.amount}</span></p>
                                 <p><strong>User UID:</strong> {order.userNumericId}</p>
                                 <p><strong>Phone:</strong> {order.userPhoneNumber}</p>
-                                <p><strong>Order ID:</strong> {order.orderId}</p>
-                                <p><strong>To ({order.withdrawalMethod.name}):</strong> {order.withdrawalMethod.upiId}</p>
                             </CardContent>
-                            <CardFooter>
+                            <CardFooter className="p-4 pt-0">
                                 <ProcessWithdrawalDialog order={order} onProcessed={fetchWithdrawals} />
                             </CardFooter>
                         </Card>
