@@ -119,9 +119,12 @@ export default function SellPage() {
             
             const sellOrdersRef = collection(firestore, 'users', user.uid, 'sellOrders');
             const newSellOrderRef = doc(sellOrdersRef);
+            
+            const orderId = `LGPAY${Date.now()}`;
 
             transaction.set(newSellOrderRef, {
                 userId: user.uid,
+                orderId: orderId,
                 amount: sellAmount,
                 withdrawalMethod: selectedUpi,
                 status: 'pending',
@@ -135,7 +138,7 @@ export default function SellPage() {
             title: 'Sell Order Placed!',
             description: `Your request to sell ${sellAmount} LGB is being processed.`,
         });
-        router.push('/home');
+        router.push('/order');
 
     } catch (error: any) {
         console.error('Sell transaction failed:', error);
@@ -265,4 +268,3 @@ export default function SellPage() {
     </div>
   );
 }
-

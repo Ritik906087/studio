@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -18,18 +19,28 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, query, where, Timestamp } from 'firebase/firestore';
+import { collection, query, where, Timestamp, orderBy } from 'firebase/firestore';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
 type Order = {
   id: string;
+  orderId: string;
   amount: number;
   status: string;
-  utr: string;
+  utr?: string;
   createdAt: Timestamp;
 };
 
-const TransactionCard = ({ transaction }: { transaction: Order }) => {
+type SellOrder = {
+  id: string;
+  orderId: string;
+  amount: number;
+  status: string;
+  createdAt: Timestamp;
+};
+
+const BuyTransactionCard = ({ transaction }: { transaction: Order }) => {
   const { toast } = useToast();
 
   const copyToClipboard = (text: string) => {
@@ -50,7 +61,7 @@ const TransactionCard = ({ transaction }: { transaction: Order }) => {
             >
               Buy
             </span>
-             <span className="font-semibold text-sm capitalize">{transaction.status}</span>
+             <span className="font-semibold text-sm capitalize">{transaction.status.replace('_', ' ')}</span>
         </div>
         <div className="space-y-2 text-sm">
            <div className="flex justify-between items-center">
@@ -64,8 +75,8 @@ const TransactionCard = ({ transaction }: { transaction: Order }) => {
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Order Number</span>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-muted-foreground">{transaction.id}</span>
-              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.id)} />
+              <span className="font-mono text-muted-foreground">{transaction.orderId || transaction.id}</span>
+              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderId || transaction.id)} />
             </div>
           </div>
         </div>
@@ -74,7 +85,50 @@ const TransactionCard = ({ transaction }: { transaction: Order }) => {
   );
 };
 
-const TransactionList = ({ orders, loading }: { orders: Order[], loading: boolean }) => {
+const SellTransactionCard = ({ transaction }: { transaction: SellOrder }) => {
+    const { toast } = useToast();
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+        toast({ title: 'Order number copied!' });
+        });
+    };
+
+    return (
+        <Card className="mb-4 bg-white text-foreground shadow-sm">
+        <CardContent className="p-4 space-y-3">
+            <div className="flex justify-between items-center">
+                <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-0.5 rounded">Sell</span>
+                <span className="text-green-600 font-semibold text-sm">Completed</span>
+            </div>
+            <div className="space-y-2 text-sm">
+            <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Amount</span>
+                <span className="font-bold text-lg">₹{transaction.amount.toFixed(2)}</span>
+            </div>
+             <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">UTR</span>
+                <span className="font-mono text-muted-foreground">---</span>
+            </div>
+            <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Time</span>
+                <span className="font-mono text-muted-foreground text-xs">{transaction.createdAt.toDate().toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Order Number</span>
+                <div className="flex items-center gap-2">
+                <span className="font-mono text-muted-foreground">{transaction.orderId}</span>
+                <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderId)} />
+                </div>
+            </div>
+            </div>
+        </CardContent>
+        </Card>
+    );
+};
+
+
+const TransactionList = ({ orders, loading, type }: { orders: any[], loading: boolean, type: 'buy' | 'sell' }) => {
   if (loading) {
       return (
         <div className="flex justify-center pt-20">
@@ -95,7 +149,9 @@ const TransactionList = ({ orders, loading }: { orders: Order[], loading: boolea
   return (
     <div className="space-y-4">
       {orders.map((order) => (
-        <TransactionCard key={order.id} transaction={order} />
+        type === 'buy' 
+            ? <BuyTransactionCard key={order.id} transaction={order} />
+            : <SellTransactionCard key={order.id} transaction={order} />
       ))}
       <p className="text-center text-sm text-muted-foreground/60">No more</p>
     </div>
@@ -105,16 +161,29 @@ const TransactionList = ({ orders, loading }: { orders: Order[], loading: boolea
 export default function TransactionPage() {
   const { user } = useUser();
   const firestore = useFirestore();
+  const [activeTab, setActiveTab] = useState('buy');
 
-  const completedOrdersQuery = useMemo(() => {
+
+  const buyOrdersQuery = useMemo(() => {
     if (!user || !firestore) return null;
     return query(
       collection(firestore, 'users', user.uid, 'orders'),
-      where('status', '==', 'completed')
+      where('status', '==', 'completed'),
+      orderBy('createdAt', 'desc')
+    );
+  }, [user, firestore]);
+  
+  const sellOrdersQuery = useMemo(() => {
+    if (!user || !firestore) return null;
+    return query(
+        collection(firestore, 'users', user.uid, 'sellOrders'),
+        where('status', 'in', ['completed', 'pending']),
+        orderBy('createdAt', 'desc')
     );
   }, [user, firestore]);
 
-  const { data: completedOrders, loading } = useCollection<Order>(completedOrdersQuery);
+  const { data: buyOrders, loading: buyLoading } = useCollection<Order>(buyOrdersQuery);
+  const { data: sellOrders, loading: sellLoading } = useCollection<SellOrder>(sellOrdersQuery);
   
   return (
     <div className="text-foreground min-h-screen">
@@ -130,33 +199,47 @@ export default function TransactionPage() {
       </header>
 
       <main className="p-4">
-          <div className="my-4 grid grid-cols-2 gap-4">
-            <Select defaultValue="all">
-              <SelectTrigger className="w-full bg-white border-border rounded-lg h-11">
-                <SelectValue placeholder="All Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="buy">Buy</SelectItem>
-                <SelectItem value="sell">Sell</SelectItem>
-              </SelectContent>
-            </Select>
+          <Tabs defaultValue="buy" className="w-full" onValueChange={setActiveTab}>
+             <TabsList className="grid w-full grid-cols-2 bg-transparent p-0 h-auto mb-4 border-b">
+                <TabsTrigger value="buy" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3">My Purchases</TabsTrigger>
+                <TabsTrigger value="sell" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3">My Sales</TabsTrigger>
+             </TabsList>
+             
+              <div className="my-4 grid grid-cols-2 gap-4">
+                <Select defaultValue="all">
+                  <SelectTrigger className="w-full bg-white border-border rounded-lg h-11">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
 
-            <Select>
-              <SelectTrigger className="w-full bg-white border-border rounded-lg h-11">
-                <SelectValue placeholder="Choose Time" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="this_week">This Week</SelectItem>
-                <SelectItem value="this_month">This Month</SelectItem>
-                <SelectItem value="all_time">All Time</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                <Select>
+                  <SelectTrigger className="w-full bg-white border-border rounded-lg h-11">
+                    <SelectValue placeholder="Choose Time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="this_week">This Week</SelectItem>
+                    <SelectItem value="this_month">This Month</SelectItem>
+                    <SelectItem value="all_time">All Time</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <TransactionList orders={completedOrders || []} loading={loading} />
+             <TabsContent value="buy">
+                <TransactionList orders={buyOrders || []} loading={buyLoading} type="buy"/>
+             </TabsContent>
+             <TabsContent value="sell">
+                <TransactionList orders={sellOrders || []} loading={sellLoading} type="sell"/>
+             </TabsContent>
+          </Tabs>
       </main>
     </div>
   );
 }
+

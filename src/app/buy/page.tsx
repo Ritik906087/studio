@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState } from 'react';
@@ -82,6 +83,8 @@ export default function BuyPage() {
       return;
     }
     setSelectedAmount(amount);
+    
+    const orderId = `LGPAY${Date.now()}`;
 
     if (activeTab === 'bank') {
       try {
@@ -89,6 +92,7 @@ export default function BuyPage() {
         const newOrderRef = await addDoc(ordersRef, {
           userId: user.uid,
           amount,
+          orderId,
           status: 'pending_payment',
           createdAt: serverTimestamp(),
           paymentType: 'bank',
@@ -106,12 +110,15 @@ export default function BuyPage() {
   const handleUpiSelect = async (methodName: string) => {
     if (!user || !firestore || !selectedAmount) return;
     setIsDialogOpen(false);
+    
+    const orderId = `LGPAY${Date.now()}`;
 
     try {
       const ordersRef = collection(firestore, 'users', user.uid, 'orders');
       const newOrderRef = await addDoc(ordersRef, {
         userId: user.uid,
         amount: selectedAmount,
+        orderId,
         status: 'pending_payment',
         createdAt: serverTimestamp(),
         paymentType: 'upi',
@@ -184,3 +191,4 @@ export default function BuyPage() {
     </div>
   );
 }
+
