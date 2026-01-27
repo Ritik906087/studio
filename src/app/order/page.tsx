@@ -27,7 +27,7 @@ type Order = {
   id: string;
   orderId: string;
   amount: number;
-  status: string;
+  status: 'pending_payment' | 'processing' | 'completed' | 'cancelled' | 'failed';
   utr?: string;
   createdAt: Timestamp;
 };
@@ -36,7 +36,7 @@ type SellOrder = {
   id: string;
   orderId: string;
   amount: number;
-  status: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
   createdAt: Timestamp;
 };
 
@@ -49,19 +49,42 @@ const BuyTransactionCard = ({ transaction }: { transaction: Order }) => {
     });
   };
 
+  const statusConfig = {
+      completed: {
+          style: "bg-green-100 text-green-800",
+          text: "Completed"
+      },
+      cancelled: {
+          style: "bg-red-100 text-red-800",
+          text: "Cancelled"
+      },
+      failed: {
+          style: "bg-red-100 text-red-800",
+          text: "Failed"
+      },
+      processing: {
+           style: "bg-blue-100 text-blue-800",
+           text: "Processing"
+      },
+      pending_payment: {
+           style: "bg-yellow-100 text-yellow-800",
+           text: "Pending Payment"
+      }
+  }
+  const currentStatus = statusConfig[transaction.status] || { style: "bg-gray-100 text-gray-800", text: transaction.status.replace(/_/g, ' ') };
+
   return (
     <Card className="mb-4 bg-white text-foreground shadow-sm">
       <CardContent className="p-4 space-y-3">
          <div className="flex justify-between items-center">
             <span
               className={cn(
-                "rounded px-2 py-0.5 text-xs font-bold",
-                transaction.status === 'completed' ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                "rounded px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-800"
               )}
             >
               Buy
             </span>
-             <span className="font-semibold text-sm capitalize">{transaction.status.replace('_', ' ')}</span>
+             <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
         </div>
         <div className="space-y-2 text-sm">
            <div className="flex justify-between items-center">
@@ -94,12 +117,32 @@ const SellTransactionCard = ({ transaction }: { transaction: SellOrder }) => {
         });
     };
 
+    const statusConfig = {
+      completed: {
+          style: "bg-green-100 text-green-800",
+          text: "Completed"
+      },
+      failed: {
+          style: "bg-red-100 text-red-800",
+          text: "Failed"
+      },
+      pending: {
+           style: "bg-yellow-100 text-yellow-800",
+           text: "Pending"
+      },
+      processing: {
+           style: "bg-blue-100 text-blue-800",
+           text: "Processing"
+      },
+    }
+    const currentStatus = statusConfig[transaction.status] || { style: "bg-gray-100 text-gray-800", text: transaction.status };
+
     return (
         <Card className="mb-4 bg-white text-foreground shadow-sm">
         <CardContent className="p-4 space-y-3">
             <div className="flex justify-between items-center">
                 <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-0.5 rounded">Sell</span>
-                <span className="text-green-600 font-semibold text-sm">Completed</span>
+                 <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
             </div>
             <div className="space-y-2 text-sm">
             <div className="flex justify-between items-center">
@@ -168,7 +211,7 @@ export default function TransactionPage() {
     if (!user || !firestore) return null;
     return query(
       collection(firestore, 'users', user.uid, 'orders'),
-      where('status', '==', 'completed')
+      where('status', 'in', ['completed', 'cancelled', 'failed'])
     );
   }, [user, firestore]);
   
@@ -176,7 +219,7 @@ export default function TransactionPage() {
     if (!user || !firestore) return null;
     return query(
         collection(firestore, 'users', user.uid, 'sellOrders'),
-        where('status', 'in', ['completed', 'pending'])
+        where('status', 'in', ['completed', 'failed'])
     );
   }, [user, firestore]);
 
@@ -250,4 +293,3 @@ export default function TransactionPage() {
     </div>
   );
 }
-
