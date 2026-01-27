@@ -214,6 +214,10 @@
             "type": "string",
             "description": "The UTR/reference number of the payment sent by the admin."
         },
+        "failureReason": {
+            "type": "string",
+            "description": "Reason for a failed or cancelled sell order."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",

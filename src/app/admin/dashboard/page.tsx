@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -13,14 +13,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useCollection, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2, Clock, History, CheckCircle, Download } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2, Clock, History, CheckCircle, Download, XCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp, runTransaction } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -63,6 +63,7 @@ type SellOrder = {
     status: 'pending' | 'processing' | 'completed' | 'failed';
     withdrawalMethod: { name: string, upiId: string };
     createdAt: Timestamp;
+    failureReason?: string;
 }
 
 const CountdownTimer = ({ expiryTimestamp }: { expiryTimestamp: Timestamp }) => {
@@ -392,6 +393,9 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
     const [isConfirming, setIsConfirming] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
     const [open, setOpen] = useState(false);
+    const [showRejectionUI, setShowRejectionUI] = useState(false);
+    const [rejectionReason, setRejectionReason] = useState('');
+    const [isRejecting, setIsRejecting] = useState(false);
     const firestore = useFirestore();
     const { toast } = useToast();
     const receiptRef = useRef<HTMLDivElement>(null);
@@ -419,6 +423,40 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
         }
     };
     
+     const handleReject = async () => {
+        if (!rejectionReason.trim()) {
+            toast({ variant: 'destructive', title: 'Reason Required', description: 'Please provide a reason for rejection.' });
+            return;
+        }
+        setIsRejecting(true);
+        try {
+            const orderRef = doc(firestore, 'users', order.userId, 'sellOrders', order.id);
+            const userRef = doc(firestore, 'users', order.userId);
+
+            await runTransaction(firestore, async (transaction) => {
+                const userDoc = await transaction.get(userRef);
+                if (!userDoc.exists()) {
+                    throw new Error("User not found");
+                }
+                const newBalance = userDoc.data().balance + order.amount;
+                transaction.update(orderRef, {
+                    status: 'failed',
+                    failureReason: rejectionReason,
+                });
+                transaction.update(userRef, { balance: newBalance });
+            });
+
+            toast({ title: 'Withdrawal Rejected', description: `Order ${order.orderId} has been rejected and amount refunded.` });
+            setOpen(false);
+            onProcessed();
+        } catch (e: any) {
+            console.error("Failed to reject withdrawal:", e);
+            toast({ variant: 'destructive', title: 'Error', description: e.message });
+        } finally {
+            setIsRejecting(false);
+        }
+    };
+
     const handleDownloadImage = async () => {
         if (!receiptRef.current) {
             toast({ variant: 'destructive', title: 'Error', description: 'Receipt element not found.' });
@@ -457,7 +495,7 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
                 <PaymentReceipt ref={receiptRef} order={order} utr={utr} />
             </div>
-            <Dialog open={open} onOpenChange={setOpen}>
+            <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setShowRejectionUI(false); }}>
                 <DialogTrigger asChild>
                     <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold">View Details</Button>
                 </DialogTrigger>
@@ -469,31 +507,48 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
                             <CountdownTimer expiryTimestamp={new Timestamp(order.createdAt.seconds + 30 * 60, order.createdAt.nanoseconds)} />
                         </div>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <p><strong>Amount:</strong> <span className="font-bold text-lg text-primary">₹{order.amount}</span></p>
-                        <p><strong>User UID:</strong> {order.userNumericId}</p>
-                        <p><strong>Phone:</strong> {order.userPhoneNumber}</p>
-                        <p><strong>To ({order.withdrawalMethod.name}):</strong> {order.withdrawalMethod.upiId}</p>
-                        <div className="space-y-2 pt-2">
-                            <Label htmlFor="utr">12-Digit UTR Number</Label>
-                            <Input id="utr" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} placeholder="Enter payment UTR" />
+                    {showRejectionUI ? (
+                        <div className="py-4 space-y-2">
+                            <Label htmlFor="rejection-reason">Reason for Rejection</Label>
+                            <Input id="rejection-reason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="e.g., Invalid UPI details" />
                         </div>
-                    </div>
+                    ) : (
+                        <div className="space-y-4 py-4">
+                            <p><strong>Amount:</strong> <span className="font-bold text-lg text-primary">₹{order.amount}</span></p>
+                            <p><strong>User UID:</strong> {order.userNumericId}</p>
+                            <p><strong>Phone:</strong> {order.userPhoneNumber}</p>
+                            <p><strong>To ({order.withdrawalMethod.name}):</strong> {order.withdrawalMethod.upiId}</p>
+                            <div className="space-y-2 pt-2">
+                                <Label htmlFor="utr">12-Digit UTR Number</Label>
+                                <Input id="utr" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} placeholder="Enter payment UTR" />
+                            </div>
+                        </div>
+                    )}
                     <DialogFooter className="sm:justify-between flex-col-reverse sm:flex-row sm:items-center gap-2">
-                        <Button asChild variant="secondary" className="sm:mr-auto">
+                         <Button asChild variant="secondary" className="sm:mr-auto">
                             <Link href={`/admin/users/${order.userId}`} target="_blank">View User</Link>
                         </Button>
-                        <div className="flex gap-2 justify-end">
-                            <Button variant="outline" className="text-primary border-primary" onClick={handleDownloadImage} disabled={isDownloading || isConfirming}>
-                                {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />}
-                                Receipt
-                            </Button>
-                            <Button variant="destructive" onClick={() => setOpen(false)} disabled={isConfirming}>Cancel</Button>
-                            <Button className="bg-green-600 hover:bg-green-700" onClick={handleConfirm} disabled={isConfirming || !utr || utr.length !== 12}>
-                                {isConfirming && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                                Confirm
-                            </Button>
-                        </div>
+                        {showRejectionUI ? (
+                             <div className="flex gap-2 justify-end">
+                                <Button variant="ghost" onClick={() => setShowRejectionUI(false)} disabled={isRejecting}>Back</Button>
+                                <Button variant="destructive" onClick={handleReject} disabled={isRejecting || !rejectionReason.trim()}>
+                                    {isRejecting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                    Confirm Rejection
+                                </Button>
+                             </div>
+                        ) : (
+                            <div className="flex gap-2 justify-end">
+                                <Button variant="outline" className="text-primary border-primary" onClick={handleDownloadImage} disabled={isDownloading || isConfirming}>
+                                    {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Download className="mr-2 h-4 w-4" />}
+                                    Receipt
+                                </Button>
+                                <Button variant="destructive" onClick={() => setShowRejectionUI(true)} disabled={isConfirming}>Reject</Button>
+                                <Button className="bg-green-600 hover:bg-green-700" onClick={handleConfirm} disabled={isConfirming || !utr || utr.length !== 12}>
+                                    {isConfirming && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                    Confirm
+                                </Button>
+                            </div>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -511,10 +566,13 @@ function WithdrawalsTabContent() {
         if (!firestore) return;
         setLoading(true);
         try {
-            const q = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'pending'));
+            const q = query(collectionGroup(firestore, 'sellOrders'));
             const querySnapshot = await getDocs(q);
-            const allOrders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SellOrder));
-            setOrders(allOrders.sort((a,b) => a.createdAt.seconds - b.createdAt.seconds));
+            const allOrders = querySnapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() } as SellOrder))
+                .filter(order => order.status === 'pending')
+                .sort((a,b) => a.createdAt.seconds - b.createdAt.seconds);
+            setOrders(allOrders);
         } catch (error) {
             console.error("Error fetching withdrawals:", error);
         } finally {
