@@ -299,7 +299,7 @@ export default function HelpPage() {
   if (chatStarted) {
     return (
       <div className="flex flex-col h-screen bg-secondary">
-        <audio ref={audioRef} src="https://firebasestorage.googleapis.com/v0/b/genkit-red-team.appspot.com/o/message.mp3?alt=media&token=9632d431-1504-4b53-9357-12492f02fcf4" preload="auto"></audio>
+        <audio ref={audioRef} src="https://cdn.jsdelivr.net/gh/pixel-point/rpg-sounds@main/assets/interface/message-received.mp3" preload="auto"></audio>
         <header className="grid grid-cols-3 items-center p-3 bg-white sticky top-0 z-10 border-b shadow-sm">
             <div className="flex items-center gap-2">
                  <Button asChild variant="ghost" size="icon" className="h-9 w-9 -ml-2">
@@ -501,4 +501,5 @@ export default function HelpPage() {
   );
 }
 
+    
     
