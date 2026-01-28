@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ChevronLeft, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, ShoppingCart, Banknote, Landmark } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore } from '@/firebase';
@@ -152,9 +152,21 @@ export default function BuyPage() {
 
       <main className="p-4 flex-grow">
         <Tabs defaultValue="otp-upi" className="w-full" onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2 bg-transparent p-0 h-auto">
-            <TabsTrigger value="otp-upi" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3 relative">OTP-UPI <span className="absolute top-1 right-1 text-xs text-red-500 font-bold">+5%</span></TabsTrigger>
-            <TabsTrigger value="bank" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3 relative">BANK <span className="absolute top-1 right-1 text-xs text-red-500 font-bold">+6%</span></TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 gap-2 h-auto p-0 bg-transparent">
+             <TabsTrigger value="otp-upi" className="flex flex-col items-center justify-center p-3 h-auto rounded-xl border-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all space-y-1">
+                <div className="flex items-center gap-2">
+                    <Banknote className="h-5 w-5 text-primary" />
+                    <span className="font-bold text-base text-foreground">OTP-UPI</span>
+                </div>
+                <span className="text-xs text-green-600 font-semibold">+5% Bonus</span>
+            </TabsTrigger>
+            <TabsTrigger value="bank" className="flex flex-col items-center justify-center p-3 h-auto rounded-xl border-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all space-y-1">
+                <div className="flex items-center gap-2">
+                    <Landmark className="h-5 w-5 text-primary" />
+                    <span className="font-bold text-base text-foreground">BANK</span>
+                </div>
+                <span className="text-xs text-green-600 font-semibold">+6% Bonus</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="otp-upi">
