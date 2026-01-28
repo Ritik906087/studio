@@ -37,9 +37,10 @@ import { cn } from '@/lib/utils';
 
 
 const purchaseConfig = {
-  100: 5, 200: 6, 300: 7, 400: 5, 500: 6, 600: 5, 700: 4, 800: 3, 1000: 4,
-  2000: 3, 3000: 3, 4000: 5, 5000: 4, 6000: 3, 7000: 2, 8000: 3, 10000: 2
+  100: 2, 200: 3, 300: 3, 400: 2, 500: 3, 600: 4, 700: 2, 800: 1, 1000: 2,
+  2000: 1, 3000: 1, 4000: 3, 5000: 2, 6000: 1, 7000: 1, 8000: 1, 10000: 1
 };
+
 
 let idCounter = 1;
 const smallPurchaseOptions = [100, 200, 300, 400, 500, 600, 700, 800, 1000]
@@ -130,7 +131,7 @@ export default function BuyPage() {
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
   
   const [smallOptions, setSmallOptions] = useState(() => [...smallPurchaseOptions].sort((a,b) => a.amount - b.amount));
-  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => b.amount - a.amount));
+  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => a.amount - b.amount));
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
 
 
@@ -145,7 +146,12 @@ export default function BuyPage() {
   const { data: inProgressBuyOrders } = useCollection(inProgressBuyOrdersQuery);
   
   useEffect(() => {
-    const updateOptions = (setter: React.Dispatch<React.SetStateAction<any[]>>, initialOpts: any[], sortOrder: 'asc' | 'desc') => {
+    const updateOptions = () => {
+      const isSmallTab = activeSubTab === 'small';
+      const setter = isSmallTab ? setSmallOptions : setHighOptions;
+      const initialOpts = isSmallTab ? smallPurchaseOptions : highPurchaseOptions;
+      const sortOrder = isSmallTab ? 'asc' : 'desc';
+
       setter(currentOpts => {
         let newOpts = [...currentOpts];
         if (newOpts.length > 1) {
@@ -159,7 +165,9 @@ export default function BuyPage() {
           const newItem = availableToAdd[Math.floor(Math.random() * availableToAdd.length)];
           newOpts.unshift(newItem);
         } else {
-            newOpts.unshift(initialOpts[Math.floor(Math.random() * initialOpts.length)]);
+            const newId = Math.max(...initialOpts.map(o => o.id)) + 1 + Math.random();
+            const randomExistingOption = initialOpts[Math.floor(Math.random() * initialOpts.length)];
+            newOpts.unshift({ ...randomExistingOption, id: newId });
         }
         
         newOpts.sort((a, b) => sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount);
@@ -168,14 +176,10 @@ export default function BuyPage() {
       });
     };
 
-    const smallTimeout = setInterval(() => updateOptions(setSmallOptions, smallPurchaseOptions, 'asc'), Math.random() * 1500 + 1500);
-    const highTimeout = setInterval(() => updateOptions(setHighOptions, highPurchaseOptions, 'desc'), Math.random() * 1500 + 1500);
+    const interval = setInterval(updateOptions, Math.random() * 1500 + 1500);
     
-    return () => {
-        clearInterval(smallTimeout);
-        clearInterval(highTimeout);
-    }
-  }, []);
+    return () => clearInterval(interval);
+  }, [activeSubTab]);
 
   useEffect(() => {
     const highlightInterval = setInterval(() => {
