@@ -78,6 +78,8 @@ type ChatRequest = {
     status: 'pending' | 'active' | 'closed';
     createdAt: Timestamp;
     chatHistory: { text: string; isUser: boolean; timestamp: number }[];
+    agentId?: string;
+    agentJoinedAt?: Timestamp;
 }
 
 const CountdownTimer = ({ expiryTimestamp, className }: { expiryTimestamp: Timestamp, className?: string }) => {
@@ -583,19 +585,26 @@ function WithdrawalsTabContent() {
     const [searchTerm, setSearchTerm] = useState('');
     const [orders, setOrders] = useState<SellOrder[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<any>(null); // Added for error handling
 
     const fetchWithdrawals = useCallback(async () => {
         if (!firestore) return;
         setLoading(true);
+        setError(null); // Reset error on new fetch
         try {
-            const q = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'pending'));
+            // This query fetches all sell orders. We then filter for 'pending' on the client-side.
+            // This approach is used to avoid a Firestore index requirement for the collectionGroup query.
+            // It may become inefficient if there's a very large number of total sell orders.
+            const q = query(collectionGroup(firestore, 'sellOrders'));
             const querySnapshot = await getDocs(q);
             const allOrders = querySnapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as SellOrder))
-                .sort((a,b) => a.createdAt.seconds - b.createdAt.seconds);
+                .filter(order => order.status === 'pending')
+                .sort((a, b) => a.createdAt.seconds - b.createdAt.seconds);
             setOrders(allOrders);
         } catch (error) {
             console.error("Error fetching withdrawals:", error);
+            setError(error);
         } finally {
             setLoading(false);
         }
@@ -615,6 +624,23 @@ function WithdrawalsTabContent() {
         );
     }, [orders, searchTerm]);
 
+    if (error) { // Added error UI
+        return (
+            <Card className="bg-destructive/10">
+                <CardHeader>
+                    <CardTitle className="text-destructive">Error Fetching Withdrawals</CardTitle>
+                    <CardDescription className="text-destructive/80">
+                        Could not retrieve withdrawal data. This might be due to Firestore security rules or a missing database index.
+                    </CardDescription>
+                </CardHeader>
+                 <CardContent>
+                    <p className="text-xs text-destructive/80 font-mono bg-destructive/10 p-2 rounded-md break-all">
+                        {error.message}
+                    </p>
+                 </CardContent>
+            </Card>
+        )
+    }
 
     return (
         <div className="space-y-4">
@@ -740,7 +766,7 @@ function ChatHistoryDialog({ request }: { request: ChatRequest }) {
         setIsUpdating(true);
         try {
             const requestRef = doc(firestore, 'chatRequests', request.id);
-            await updateDoc(requestRef, { status: 'active', agentJoinedAt: serverTimestamp() });
+            await updateDoc(requestRef, { status: 'active', agentId: 'admin', agentJoinedAt: serverTimestamp() });
             setIsJoined(true);
             toast({ title: 'Chat Joined!', description: "You can now chat with the user." });
         } catch (e) {
@@ -1076,3 +1102,5 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+
+    
