@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useRef } from 'react';
@@ -68,11 +69,15 @@ export default function SettingsPage() {
 
     setIsSaving(true);
     try {
-      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-      const storageRef = ref(storage, `avatars/${user.uid}/${sanitizedFileName}`);
-      const snapshot = await uploadBytes(storageRef, file);
+      const uniqueFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+      const storagePath = `avatars/${user.uid}/${uniqueFileName}`;
+      const fileRef = ref(storage, storagePath);
+      
+      const snapshot = await uploadBytes(fileRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
+      
       await updateDoc(userProfileRef, { photoURL: downloadURL });
+      
       toast({ title: 'Success', description: 'Profile picture updated.' });
     } catch (error) {
       console.error("Error uploading image: ", error);
