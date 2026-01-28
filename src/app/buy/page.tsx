@@ -45,24 +45,27 @@ const upiMethods = [
 const PurchaseGrid = ({ onBuyClick }: { onBuyClick: (amount: number) => void }) => {
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
-      {purchaseOptions.map((option) => (
-        <Card key={option.id} className="rounded-xl shadow-sm overflow-hidden bg-white">
-          <div className="flex items-center justify-between p-3">
-             <div className="flex items-center gap-4">
-                 <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <ShoppingCart className="h-6 w-6" />
-                 </div>
-                 <div>
-                    <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
-                    <p className="text-xs text-green-600 font-semibold">Bonus +{option.bonus}%</p>
-                 </div>
-             </div>
-             <Button onClick={() => onBuyClick(option.amount)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
-                Buy
-             </Button>
-          </div>
-        </Card>
-      ))}
+      {purchaseOptions.map((option) => {
+        const bonusLGB = option.amount * (option.bonus / 100);
+        return (
+          <Card key={option.id} className="rounded-xl shadow-sm overflow-hidden bg-white">
+            <div className="flex items-center justify-between p-3">
+               <div className="flex items-center gap-4">
+                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <ShoppingCart className="h-6 w-6" />
+                   </div>
+                   <div>
+                      <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
+                      <p className="text-xs text-green-600 font-semibold">Bonus +{option.bonus}% = {bonusLGB.toLocaleString('en-IN')} LGB</p>
+                   </div>
+               </div>
+               <Button onClick={() => onBuyClick(option.amount)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
+                  Buy
+               </Button>
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 };
@@ -191,4 +194,3 @@ export default function BuyPage() {
     </div>
   );
 }
-
