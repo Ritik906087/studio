@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { ChevronLeft, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
@@ -53,54 +54,84 @@ const upiMethods = [
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
 ];
 
-const PurchaseGrid = ({ onBuyClick, options, activeTab }: { onBuyClick: (option: any) => void; options: any[]; activeTab: string }) => {
+const PurchaseGrid = ({ onBuyClick, initialOptions, activeTab, sortOrder }: { onBuyClick: (option: any) => void; initialOptions: any[]; activeTab: string, sortOrder: 'asc' | 'desc' }) => {
     
   const bonusPercentage = activeTab === 'bank' ? 6 : 5;
+  const [options, setOptions] = useState(() => 
+    [...initialOptions].sort((a,b) => sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount)
+  );
 
-  if (options.length === 0) {
-    return (
-      <Card className="rounded-xl shadow-sm overflow-hidden bg-white mt-4">
-          <CardContent className="p-8 text-center text-muted-foreground flex flex-col items-center justify-center h-32">
-              <p className="font-semibold">Searching for available orders...</p>
-              <p className="text-xs mt-1">Please check other amounts or try again later.</p>
-          </CardContent>
-      </Card>
-    );
-  }
+  useEffect(() => {
+    const timeout = setInterval(() => {
+      setOptions(currentOpts => {
+        let newOpts = [...currentOpts];
+        // 1. Randomly remove one item
+        if (newOpts.length > 1) {
+          const indexToRemove = Math.floor(Math.random() * newOpts.length);
+          newOpts.splice(indexToRemove, 1);
+        }
+        
+        // 2. Find an item from initialOptions that is not in the current list
+        const currentAmounts = new Set(newOpts.map(o => o.amount));
+        const availableToAdd = initialOptions.filter(o => !currentAmounts.has(o.amount));
+        
+        // 3. Add one of the available items
+        if (availableToAdd.length > 0) {
+          const newItem = availableToAdd[Math.floor(Math.random() * availableToAdd.length)];
+          newOpts.push(newItem);
+        }
+        
+        // 4. Re-sort the list to maintain order
+        newOpts.sort((a, b) => sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount);
+        
+        return newOpts;
+      });
+    }, Math.random() * 1500 + 1500); // 1.5 - 3 seconds
+
+    return () => clearInterval(timeout);
+  }, [initialOptions, sortOrder]);
+
 
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
-      {options.map((option) => {
-        const totalLGB = option.amount + (option.amount * (bonusPercentage / 100));
+      <AnimatePresence>
+        {options.map((option) => {
+          const totalLGB = option.amount + (option.amount * (bonusPercentage / 100));
 
-        return (
-          <div
-            key={option.id}
-            className="relative"
-          >
-            <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
-               <div className="flex items-center justify-between p-3 relative z-10">
-                   <div className="flex items-center gap-4">
-                       <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <ShoppingCart className="h-6 w-6" />
-                       </div>
-                       <div>
-                          <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
-                          <p
-                              className="text-xs text-green-600 font-semibold"
-                          >
-                              You Get: {option.amount}+{bonusPercentage}%={totalLGB.toFixed(0)}
-                          </p>
-                       </div>
-                   </div>
-                   <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
-                      Buy
-                   </Button>
-                </div>
-            </Card>
-          </div>
-        );
-      })}
+          return (
+            <motion.div
+              key={option.id}
+              layout
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, x: -50, transition: { duration: 0.3 } }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="relative"
+            >
+              <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
+                 <div className="flex items-center justify-between p-3 relative z-10">
+                     <div className="flex items-center gap-4">
+                         <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <ShoppingCart className="h-6 w-6" />
+                         </div>
+                         <div>
+                            <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
+                            <p
+                                className="text-xs text-green-600 font-semibold"
+                            >
+                                You Get: {option.amount}+{bonusPercentage}%={totalLGB.toFixed(0)}
+                            </p>
+                         </div>
+                     </div>
+                     <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
+                        Buy
+                     </Button>
+                  </div>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
     </div>
   );
 };
@@ -182,8 +213,7 @@ export default function BuyPage() {
         router.push(path);
     }
   };
-
-
+  
   return (
     <div className="text-foreground pb-4 min-h-screen flex flex-col">
       {/* Header */}
@@ -219,10 +249,10 @@ export default function BuyPage() {
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} activeTab={activeTab} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} initialOptions={smallPurchaseOptions} activeTab={activeTab} sortOrder="asc" />
                 </TabsContent>
                 <TabsContent value="high">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} activeTab={activeTab} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} initialOptions={highPurchaseOptions} activeTab={activeTab} sortOrder="desc" />
                 </TabsContent>
             </Tabs>
           </TabsContent>
@@ -233,10 +263,10 @@ export default function BuyPage() {
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} activeTab={activeTab} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} initialOptions={smallPurchaseOptions} activeTab={activeTab} sortOrder="asc" />
                 </TabsContent>
                 <TabsContent value="high">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} activeTab={activeTab} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} initialOptions={highPurchaseOptions} activeTab={activeTab} sortOrder="desc" />
                 </TabsContent>
             </Tabs>
           </TabsContent>
