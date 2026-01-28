@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useCollection, useDoc, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -34,6 +34,7 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import Image from 'next/image';
 
 type UserProfile = {
     id: string;
@@ -69,11 +70,19 @@ type SellOrder = {
     failureReason?: string;
 }
 
-type Message = { 
-    text: string; 
-    isUser: boolean; 
-    timestamp: number; 
-    userName?: string; 
+type Attachment = {
+  name: string;
+  type: string;
+  url: string;
+};
+
+
+type Message = {
+  text: string;
+  isUser: boolean;
+  timestamp: number;
+  userName?: string;
+  attachment?: Attachment;
 };
 
 type ChatRequest = {
@@ -766,7 +775,9 @@ function ChatHistoryDialog({ request, onUpdate }: { request: ChatRequest; onUpda
     const [isUpdating, setIsUpdating] = useState(false);
     const [open, setOpen] = useState(false);
     const [newMessage, setNewMessage] = useState("");
+    const [attachment, setAttachment] = useState<Attachment | null>(null);
     const chatContentRef = useRef<HTMLDivElement>(null);
+    const adminFileInputRef = useRef<HTMLInputElement>(null);
 
     const liveRequestRef = useMemo(() => firestore ? doc(firestore, 'chatRequests', request.id) : null, [firestore, request.id]);
     const { data: liveRequest } = useDoc<ChatRequest>(liveRequestRef);
@@ -786,7 +797,7 @@ function ChatHistoryDialog({ request, onUpdate }: { request: ChatRequest; onUpda
         try {
             await updateDoc(liveRequestRef, { status: 'active', agentId: 'admin', agentJoinedAt: serverTimestamp() });
             toast({ title: 'Chat Joined!', description: "You can now chat with the user." });
-            onUpdate();
+            // onUpdate(); // Do not call onUpdate, so the dialog stays open
         } catch (e) {
             toast({ variant: 'destructive', title: 'Failed to join chat' });
         } finally {
@@ -809,8 +820,24 @@ function ChatHistoryDialog({ request, onUpdate }: { request: ChatRequest; onUpda
         }
     };
     
+    const handleAdminFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                toast({ variant: 'destructive', title: 'File is too large', description: 'Please upload a file smaller than 10MB.' });
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const url = e.target?.result as string;
+                setAttachment({ name: file.name, type: file.type, url });
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+    
     const handleAdminSendMessage = async () => {
-        if (!liveRequestRef || !newMessage.trim()) return;
+        if (!liveRequestRef || (!newMessage.trim() && !attachment)) return;
         
         const message: Message = {
             text: newMessage.trim(),
@@ -819,11 +846,16 @@ function ChatHistoryDialog({ request, onUpdate }: { request: ChatRequest; onUpda
             userName: 'JONNY'
         };
 
+        if (attachment) {
+            message.attachment = attachment;
+        }
+
         try {
             await updateDoc(liveRequestRef, {
                 chatHistory: arrayUnion(message)
             });
             setNewMessage('');
+            setAttachment(null);
         } catch (e) {
             console.error("Failed to send message:", e);
             toast({ variant: 'destructive', title: 'Failed to send message' });
@@ -865,7 +897,15 @@ function ChatHistoryDialog({ request, onUpdate }: { request: ChatRequest; onUpda
                             )}
                             <div className="flex flex-col max-w-[80%]">
                                 <div className={cn("rounded-2xl px-3 py-2", msg.isUser ? "bg-primary text-primary-foreground rounded-br-none" : "bg-white rounded-bl-none shadow-sm")}>
-                                    <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                                     {msg.attachment?.url && msg.attachment.type.startsWith('image/') ? (
+                                        <Image src={msg.attachment.url} alt={msg.attachment.name || 'attachment'} width={200} height={200} className="rounded-lg mb-2 cursor-pointer" onClick={() => window.open(msg.attachment?.url, '_blank')} />
+                                    ) : msg.attachment?.url ? (
+                                        <a href={msg.attachment.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-secondary p-2 rounded-lg mb-2">
+                                            <Paperclip className="h-5 w-5 text-muted-foreground" />
+                                            <span className="text-sm text-secondary-foreground truncate">{msg.attachment.name || 'View Attachment'}</span>
+                                        </a>
+                                    ) : null}
+                                    {msg.text && <p className="text-sm whitespace-pre-wrap">{msg.text}</p>}
                                 </div>
                                 <p className={cn("text-xs text-muted-foreground px-1 pt-1", msg.isUser ? "text-right" : "text-left")}>
                                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
@@ -879,19 +919,33 @@ function ChatHistoryDialog({ request, onUpdate }: { request: ChatRequest; onUpda
                         </div>
                     ))}
                 </ScrollArea>
-                <DialogFooter className="p-4 border-t">
+                <DialogFooter className="p-2 border-t">
                     {isJoined ? (
-                         <div className="w-full flex items-center gap-2">
-                             <Input 
-                                placeholder="Type your message..."
-                                value={newMessage}
-                                onChange={e => setNewMessage(e.target.value)}
-                                onKeyPress={e => e.key === 'Enter' && handleAdminSendMessage()}
-                             />
-                             <Button onClick={handleAdminSendMessage} disabled={!newMessage.trim()}>
-                                <Send className="h-4 w-4"/>
-                             </Button>
-                            <Button variant="outline" onClick={handleCloseChat} disabled={isUpdating}>Close Chat</Button>
+                         <div className="w-full flex flex-col gap-2">
+                             {attachment && (
+                                <div className="relative w-20 h-20 ml-2">
+                                    <Image src={attachment.url} alt="preview" fill objectFit="cover" className="rounded-md" />
+                                    <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => setAttachment(null)}>
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                                <input type="file" ref={adminFileInputRef} onChange={handleAdminFileChange} className="hidden" />
+                                <Button variant="ghost" size="icon" onClick={() => adminFileInputRef.current?.click()}>
+                                    <Paperclip className="h-5 w-5" />
+                                </Button>
+                                <Input 
+                                   placeholder="Type your message..."
+                                   value={newMessage}
+                                   onChange={e => setNewMessage(e.target.value)}
+                                   onKeyPress={e => e.key === 'Enter' && handleAdminSendMessage()}
+                                />
+                                <Button onClick={handleAdminSendMessage} disabled={!newMessage.trim() && !attachment}>
+                                   <Send className="h-4 w-4"/>
+                                </Button>
+                               <Button variant="outline" onClick={handleCloseChat} disabled={isUpdating}>Close Chat</Button>
+                            </div>
                          </div>
                     ) : (
                         <Button className="w-full h-12 bg-green-600 hover:bg-green-700 text-lg" onClick={handleJoinChat} disabled={isUpdating}>

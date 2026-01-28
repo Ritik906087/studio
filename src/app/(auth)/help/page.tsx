@@ -22,11 +22,22 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const CHAT_STORAGE_KEY = 'lg-pay-help-chat-history';
 const SOUND_PREF_KEY = 'lg-pay-help-sound-pref';
 
-type StorableAttachment = {
+type Attachment = {
   name: string;
   type: string;
   url: string;
@@ -35,7 +46,7 @@ type StorableAttachment = {
 type Message = {
   text: string;
   isUser: boolean;
-  attachment?: StorableAttachment;
+  attachment?: Attachment;
   timestamp: number;
   userName?: string;
 };
@@ -71,7 +82,7 @@ export default function HelpPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [attachment, setAttachment] = useState<StorableAttachment | null>(null);
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [enteredIdentifier, setEnteredIdentifier] = useState('');
@@ -88,10 +99,8 @@ export default function HelpPage() {
 
   const { data: userProfile } = useDoc<{ numericId?: string, displayName?: string, photoURL?: string }>(userProfileRef);
 
-  const chatRequestQuery = useMemo(() => {
+  const allUserChatRequestsQuery = useMemo(() => {
     if (!user || !firestore) return null;
-    // This query is intentionally broad to avoid a composite index requirement.
-    // Filtering and sorting will be done client-side.
     const q = query(
         collection(firestore, 'chatRequests'),
         where('userId', '==', user.uid),
@@ -103,7 +112,6 @@ export default function HelpPage() {
   
   const activeRequest = useMemo(() => {
       if (!allUserChatRequests || allUserChatRequests.length === 0) return null;
-      // Filter for active/pending and sort to find the most recent one.
       return allUserChatRequests
         .filter(req => ['pending', 'active'].includes(req.status))
         .sort((a, b) => b.createdAt.seconds - a.createdAt.seconds)[0];
@@ -240,74 +248,86 @@ export default function HelpPage() {
     }, 1500);
   };
   
-  const handleSendMessage = async () => {
-    if ((!currentMessage.trim() && !attachment) || isWaitingForAgent) return;
-    if (isAgentActive) {
-        if (!firestore || !activeRequest) return;
-        const requestRef = doc(firestore, 'chatRequests', activeRequest.id);
-        const agentMessage = {
-            text: currentMessage.trim(),
+    const handleSendMessage = async () => {
+        if ((!currentMessage.trim() && !attachment) || isWaitingForAgent) return;
+        setIsSending(true);
+
+        const textForPrompt = currentMessage.trim();
+        
+        const messagePayload: Message = {
+            text: textForPrompt,
             isUser: true,
             timestamp: Date.now(),
             userName: userProfile?.displayName || 'You',
         };
-        try {
-            await updateDoc(requestRef, { chatHistory: arrayUnion(agentMessage) });
-            setCurrentMessage('');
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Could not send message', description: error.message });
+
+        if (attachment) {
+            messagePayload.attachment = attachment;
         }
-        return;
-    }
+        
+        setCurrentMessage('');
+        setAttachment(null);
 
-    if (isSending) return;
+        if (isAgentActive) {
+            if (!firestore || !activeRequest) {
+                setIsSending(false);
+                return;
+            }
+            const requestRef = doc(firestore, 'chatRequests', activeRequest.id);
+            try {
+                await updateDoc(requestRef, { chatHistory: arrayUnion(messagePayload) });
+            } catch (error: any) {
+                toast({ variant: 'destructive', title: 'Could not send message', description: error.message });
+            } finally {
+                setIsSending(false);
+            }
+            return;
+        }
 
-    const textForPrompt = currentMessage.trim();
-    
-    const messagePayload: Message = {
-      text: textForPrompt,
-      isUser: true,
-      timestamp: Date.now(),
-      userName: userProfile?.displayName || 'You',
-    };
-
-    if (attachment) {
-      // This is a simplified attachment handling for the prompt.
-      // The AI flow would need to be able to process the data URI.
-      messagePayload.attachment = attachment;
-    }
-    
-    setCurrentMessage('');
-    setAttachment(null);
-    
-    const updatedMessages = [...messages, messagePayload];
-    setMessages(updatedMessages);
-    setIsSending(true);
-
-    try {
-      const input: HelpChatInput = { 
-          prompt: textForPrompt, 
-          uid: user?.uid,
-          chatHistory: updatedMessages,
-          enteredIdentifier: enteredIdentifier,
-      };
+        const updatedMessages = [...messages, messagePayload];
+        setMessages(updatedMessages);
+        
+        try {
+            const input: HelpChatInput = { 
+                prompt: textForPrompt, 
+                uid: user?.uid,
+                chatHistory: updatedMessages,
+                enteredIdentifier: enteredIdentifier,
+            };
             
-      const response = await helpChat(input);
-      const aiResponse: Message = { text: response, isUser: false, timestamp: Date.now(), userName: 'AI HELP' };
-      setMessages(prev => [...prev, aiResponse]);
-    } catch (error) {
-      console.error("AI chat error:", error);
-      const aiResponse: Message = { 
-          text: "I'm having some trouble connecting. Let me find a human agent for you. Please wait.", 
-          isUser: false, 
-          timestamp: Date.now(),
-          userName: 'AI HELP'
-      };
-      setMessages(prev => [...prev, aiResponse]);
-    } finally {
-      setIsSending(false);
-    }
-  };
+            if (attachment) {
+                // Simplified for AI: just send the text part of the attachment message
+                input.prompt += ` (Attachment: ${attachment.name})`;
+            }
+                  
+            const response = await helpChat(input);
+            const aiResponse: Message = { text: response, isUser: false, timestamp: Date.now(), userName: 'AI HELP' };
+            setMessages(prev => [...prev, aiResponse]);
+        } catch (error) {
+            console.error("AI chat error, escalating to human agent:", error);
+            // Error handling is now inside the flow, which automatically creates a request
+            // The flow returns a user-friendly message in case of an error.
+            const response = "Thank you. Your request has been submitted. A support agent will review your case and connect with you shortly.";
+            const aiResponse: Message = { text: response, isUser: false, timestamp: Date.now(), userName: 'AI HELP' };
+            setMessages(prev => [...prev, aiResponse]);
+        } finally {
+            setIsSending(false);
+        }
+    };
+    
+    const handleCloseChat = async () => {
+        if (!firestore || !activeRequest) return;
+        const requestRef = doc(firestore, 'chatRequests', activeRequest.id);
+        try {
+            await updateDoc(requestRef, { status: 'closed' });
+            toast({ title: 'Chat Closed' });
+            setChatStarted(false);
+            setMessages([]);
+            localStorage.removeItem(CHAT_STORAGE_KEY);
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Could not close chat', description: error.message });
+        }
+    };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -352,10 +372,10 @@ export default function HelpPage() {
                         <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                     </Link>
                 </Button>
-                {isWaitingForAgent && !isAgentActive && timeLeft !== null && (
+                {(isWaitingForAgent || (isAgentActive && timeLeft !== null && timeLeft > 0)) && !isAgentActive && (
                     <div className="flex items-center gap-1 text-yellow-600">
                         <Clock className="h-4 w-4" />
-                        <span className="font-mono font-bold text-sm">{formatTime(timeLeft)}</span>
+                        <span className="font-mono font-bold text-sm">{formatTime(timeLeft!)}</span>
                     </div>
                 )}
             </div>
@@ -366,27 +386,41 @@ export default function HelpPage() {
                     <p className="text-xs text-muted-foreground font-semibold">Online</p>
                 </div>
             </div>
-            <div className="flex justify-end">
+            <div className="flex justify-end items-center">
+                 {(isWaitingForAgent || isAgentActive) && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                           <Button variant="destructive" size="sm" className="h-7 rounded-full text-xs mr-2">Close</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                <AlertDialogDescription>This will end your current chat session.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleCloseChat} className="bg-destructive hover:bg-destructive/90">Confirm</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                 )}
                 <Button onClick={handleSoundToggle} variant="ghost" size="icon" className="h-9 w-9">
                     {isSoundOn ? <Volume2 className="h-5 w-5 text-muted-foreground" /> : <VolumeX className="h-5 w-5 text-muted-foreground" />}
                 </Button>
             </div>
         </header>
+         {isWaitingForAgent && !isAgentActive && (
+            <div className="p-3 bg-blue-100 border-b border-blue-200 text-center text-sm text-blue-800 font-semibold flex items-center justify-center gap-2 sticky top-[69px] z-10">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Connecting you to an agent... Please wait.
+            </div>
+        )}
         <main ref={chatContainerRef} className="flex-1 space-y-4 p-4 overflow-y-auto">
-            {isWaitingForAgent && !isAgentActive && (
-                 <Card className="bg-blue-50 border-blue-200">
-                    <CardContent className="p-4 text-center text-blue-800">
-                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                        <p className="font-semibold">Connecting you to an agent...</p>
-                        <p className="text-sm">Please wait, an agent will join shortly.</p>
-                    </CardContent>
-                </Card>
-            )}
             {displayedMessages.map((msg, index) => (
               <div key={index} className={cn("flex items-end gap-2", msg.isUser ? "justify-end" : "justify-start")}>
                 {!msg.isUser && (
                     <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-primary text-primary-foreground font-bold text-sm">{msg.userName === 'JONNY' ? 'J' : 'LG'}</AvatarFallback>
+                         <AvatarFallback className="bg-primary text-primary-foreground font-bold text-sm">{msg.userName === 'JONNY' ? 'J' : 'LG'}</AvatarFallback>
                     </Avatar>
                 )}
                 <div className="flex flex-col max-w-[75%]">
@@ -462,7 +496,7 @@ export default function HelpPage() {
                     disabled={isSending || isWaitingForAgent}
                 />
                 <Button onClick={handleSendMessage} disabled={isSending || isWaitingForAgent || (!currentMessage.trim() && !attachment)} className="btn-gradient rounded-full w-12 h-12">
-                    {isSending && !isAgentActive ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                    {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </Button>
             </div>
         </footer>
@@ -545,9 +579,3 @@ export default function HelpPage() {
     </div>
   );
 }
-
-    
-
-    
-
-    
