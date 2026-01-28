@@ -37,8 +37,8 @@ import { cn } from '@/lib/utils';
 
 
 const purchaseConfig = {
-  100: 5, 200: 6, 300: 7, 400: 5, 500: 6, 600: 5, 700: 4, 800: 3, 1000: 4,
-  2000: 3, 3000: 3, 4000: 5, 5000: 4, 6000: 3, 7000: 2, 8000: 3, 10000: 2
+    "100": 5, "200": 6, "300": 7, "400": 5, "500": 6, "600": 5, "700": 4, "800": 3, "1000": 4,
+    "2000": 3, "3000": 3, "4000": 5, "5000": 4, "6000": 3, "7000": 2, "8000": 3, "10000": 2
 };
 
 
@@ -84,7 +84,7 @@ const PurchaseGrid = ({ onBuyClick, options, bonusPercentage }: { onBuyClick: (o
               layout
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20, transition: { duration: 0.3 } }}
+              exit={{ opacity: 0, transition: { duration: 0.2 } }}
               transition={{ type: 'spring', stiffness: 200, damping: 25 }}
             >
               <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
@@ -131,7 +131,7 @@ export default function BuyPage() {
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
   
   const [smallOptions, setSmallOptions] = useState(() => [...smallPurchaseOptions].sort((a,b) => a.amount - b.amount));
-  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => a.amount - b.amount).reverse());
+  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => b.amount - a.amount));
 
   const inProgressBuyOrdersQuery = useMemo(() => {
     if (!user || !firestore) return null;
@@ -145,53 +145,54 @@ export default function BuyPage() {
   
   useEffect(() => {
     const interval = setInterval(() => {
-        if (activeSubTab === 'small') {
-            setSmallOptions(prevOptions => {
-                let newOpts = [...prevOptions];
-                const itemsToRemove = Math.floor(Math.random() * 2) + 2; // 2 or 3
+        // Update small options
+        setSmallOptions(prevOptions => {
+            const numToUpdate = Math.floor(Math.random() * 2) + 2; // 2 or 3
+            let currentOpts = [...prevOptions];
+            
+            // Remove `numToUpdate` random items
+            for (let i = 0; i < numToUpdate && currentOpts.length > 0; i++) {
+                const removeIndex = Math.floor(Math.random() * currentOpts.length);
+                currentOpts.splice(removeIndex, 1);
+            }
+            
+            const currentIds = new Set(currentOpts.map(o => o.id));
+            const availableToAdd = smallPurchaseOptions.filter(opt => !currentIds.has(opt.id));
+            
+            // Add `numToUpdate` new random items
+            for (let i = 0; i < numToUpdate && availableToAdd.length > 0; i++) {
+                const addIndex = Math.floor(Math.random() * availableToAdd.length);
+                currentOpts.push(availableToAdd.splice(addIndex, 1)[0]);
+            }
+            
+            return currentOpts.sort((a, b) => a.amount - b.amount);
+        });
 
-                for (let i = 0; i < itemsToRemove && newOpts.length > 0; i++) {
-                    const removeIndex = Math.floor(Math.random() * newOpts.length);
-                    newOpts.splice(removeIndex, 1);
-                }
+        // Update high options
+        setHighOptions(prevOptions => {
+            const numToUpdate = Math.floor(Math.random() * 2) + 2; // 2 or 3
+            let currentOpts = [...prevOptions];
 
-                const availableToAdd = smallPurchaseOptions.filter(o => !newOpts.some(opt => opt.id === o.id));
+            for (let i = 0; i < numToUpdate && currentOpts.length > 0; i++) {
+                const removeIndex = Math.floor(Math.random() * currentOpts.length);
+                currentOpts.splice(removeIndex, 1);
+            }
 
-                for (let i = 0; i < itemsToRemove && availableToAdd.length > 0; i++) {
-                    const newItemIndex = Math.floor(Math.random() * availableToAdd.length);
-                    const newItem = availableToAdd.splice(newItemIndex, 1)[0];
-                    if (newItem) {
-                        newOpts.push(newItem);
-                    }
-                }
-                return newOpts.sort((a, b) => a.amount - b.amount);
-            });
-        } else { // high
-            setHighOptions(prevOptions => {
-                let newOpts = [...prevOptions];
-                const itemsToRemove = Math.floor(Math.random() * 2) + 2; // 2 or 3
+            const currentIds = new Set(currentOpts.map(o => o.id));
+            const availableToAdd = highPurchaseOptions.filter(opt => !currentIds.has(opt.id));
 
-                for (let i = 0; i < itemsToRemove && newOpts.length > 0; i++) {
-                    const removeIndex = Math.floor(Math.random() * newOpts.length);
-                    newOpts.splice(removeIndex, 1);
-                }
-
-                const availableToAdd = highPurchaseOptions.filter(o => !newOpts.some(opt => opt.id === o.id));
-
-                for (let i = 0; i < itemsToRemove && availableToAdd.length > 0; i++) {
-                    const newItemIndex = Math.floor(Math.random() * availableToAdd.length);
-                    const newItem = availableToAdd.splice(newItemIndex, 1)[0];
-                    if (newItem) {
-                        newOpts.push(newItem);
-                    }
-                }
-                return newOpts.sort((a,b) => b.amount - a.amount);
-            });
-        }
+            for (let i = 0; i < numToUpdate && availableToAdd.length > 0; i++) {
+                const addIndex = Math.floor(Math.random() * availableToAdd.length);
+                currentOpts.push(availableToAdd.splice(addIndex, 1)[0]);
+            }
+            
+            return currentOpts.sort((a, b) => b.amount - a.amount);
+        });
+        
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [activeSubTab]);
+  }, []);
 
 
   const handleBuyClick = (option: { amount: number }) => {
