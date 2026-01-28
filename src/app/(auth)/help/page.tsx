@@ -89,17 +89,21 @@ export default function HelpPage() {
 
   const chatRequestQuery = useMemo(() => {
     if (!user || !firestore) return null;
+    // Query without orderBy to avoid needing a composite index
     return query(
         collection(firestore, 'chatRequests'),
         where('userId', '==', user.uid),
-        where('status', 'in', ['pending', 'active']),
-        orderBy('createdAt', 'desc'),
-        limit(1)
+        where('status', 'in', ['pending', 'active'])
     );
   }, [user, firestore]);
 
-  const { data: activeChatRequests } = useCollection<ChatRequest>(chatRequestQuery);
-  const activeRequest = activeChatRequests?.[0];
+  const { data: activeChatRequests, loading: chatRequestsLoading } = useCollection<ChatRequest>(chatRequestQuery);
+  
+  const activeRequest = useMemo(() => {
+      if (!activeChatRequests || activeChatRequests.length === 0) return null;
+      // Sort client-side to get the most recent request
+      return [...activeChatRequests].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds)[0];
+  }, [activeChatRequests]);
 
   const isWaitingForAgent = activeRequest?.status === 'pending';
   const isAgentActive = activeRequest?.status === 'active';
@@ -284,7 +288,7 @@ export default function HelpPage() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || (user && chatRequestsLoading)) {
     return (
       <div className="flex items-center justify-center h-screen bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
