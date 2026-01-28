@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -57,22 +56,6 @@ const upiMethods = [
 const PurchaseGrid = ({ onBuyClick, options: initialOptions }: { onBuyClick: (option: any) => void; options: any[] }) => {
     
   const [options, setOptions] = useState(() => initialOptions.map(o => ({...o, key: o.id})));
-  const [highlightedKey, setHighlightedKey] = useState<number | null>(null);
-
-  // Interval for highlighting an item
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const id = setInterval(() => {
-      if (options.length === 0) return;
-      const randomIndex = Math.floor(Math.random() * options.length);
-      const randomKey = options[randomIndex].key;
-      setHighlightedKey(randomKey);
-      setTimeout(() => {
-        setHighlightedKey(k => (k === randomKey ? null : k));
-      }, 700);
-    }, Math.random() * 2000 + 2000); // 2-4 seconds
-    return () => clearInterval(id);
-  }, [options]);
 
   // Interval for updating the list (add/remove/flicker)
   useEffect(() => {
@@ -130,7 +113,6 @@ const PurchaseGrid = ({ onBuyClick, options: initialOptions }: { onBuyClick: (op
       <AnimatePresence>
         {options.map((option) => {
           const totalLGB = option.amount + (option.amount * (option.bonus / 100));
-          const isHighlighted = highlightedKey === option.key;
 
           return (
             <motion.div
@@ -143,15 +125,6 @@ const PurchaseGrid = ({ onBuyClick, options: initialOptions }: { onBuyClick: (op
               className="relative"
             >
               <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
-                {isHighlighted && (
-                  <motion.div
-                    className="absolute inset-0 rounded-xl border-2 border-primary pointer-events-none z-20"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: [0, 1, 0] }}
-                    transition={{ duration: 0.7, repeat: 0 }}
-                    style={{ boxShadow: '0 0 12px hsl(var(--primary))' }}
-                  />
-                )}
                  <div className="flex items-center justify-between p-3 relative z-10">
                      <div className="flex items-center gap-4">
                          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
