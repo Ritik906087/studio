@@ -7,10 +7,11 @@ import { useDoc, useUser, useFirestore } from '@/firebase';
 import { doc, runTransaction, Timestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Loader2, FileClock, XCircle } from 'lucide-react';
+import { ChevronLeft, Loader2, FileClock, XCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 type SellOrder = {
     id: string;
@@ -161,8 +162,14 @@ function SellOrderStatusContent() {
                     <CardContent className="p-6 space-y-3 flex flex-col items-center">
                         {isRefunding || isFailed ? (
                             <>
-                                <XCircle className="h-16 w-16 text-destructive" />
-                                <h2 className="text-2xl font-bold text-destructive">{isTimeout ? "Time out" : "Order Failed"}</h2>
+                                {isTimeout ? (
+                                    <AlertTriangle className="h-16 w-16 text-orange-500" />
+                                ) : (
+                                    <XCircle className="h-16 w-16 text-destructive" />
+                                )}
+                                <h2 className={cn("text-2xl font-bold", isTimeout ? "text-orange-600" : "text-destructive")}>
+                                    {isTimeout ? "Timeout" : "Order Failed"}
+                                </h2>
                                 <p className="text-muted-foreground">₹{sellOrder.amount.toFixed(2)} has been refunded to your balance.</p>
                             </>
                         ) : (
@@ -207,7 +214,9 @@ function SellOrderStatusContent() {
                         </div>
                          <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">Status</span>
-                            <span className="font-semibold capitalize">{isRefunding ? 'Refunding...' : (isTimeout ? 'Time out' : sellOrder.status)}</span>
+                            <span className={cn("font-semibold capitalize", isTimeout ? "text-orange-600" : "")}>
+                                {isRefunding ? 'Refunding...' : (isTimeout ? 'Timeout' : sellOrder.status)}
+                            </span>
                         </div>
                     </CardContent>
                 </Card>

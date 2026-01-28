@@ -7,10 +7,11 @@ import { useDoc, useUser, useFirestore } from '@/firebase';
 import { doc, getDoc, updateDoc, runTransaction, Timestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Loader2, CheckCircle, FileClock, XCircle } from 'lucide-react';
+import { ChevronLeft, Loader2, CheckCircle, FileClock, XCircle, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
 
 type Order = {
     id: string;
@@ -155,10 +156,18 @@ function OrderStatusContent() {
                                 <p className="text-muted-foreground">Your payment is being verified.</p>
                             </>
                         ) : (
-                             <>
-                                <XCircle className="h-16 w-16 text-destructive" />
-                                <h2 className="text-2xl font-bold text-destructive capitalize">{isTimeout ? 'Time out' : order.status.replace('_', ' ')}</h2>
-                                <p className="text-muted-foreground">This order could not be completed.</p>
+                            <>
+                                {isTimeout ? (
+                                    <AlertTriangle className="h-16 w-16 text-orange-500" />
+                                ) : (
+                                    <XCircle className="h-16 w-16 text-destructive" />
+                                )}
+                                <h2 className={cn("text-2xl font-bold capitalize", isTimeout ? "text-orange-600" : "text-destructive")}>
+                                    {isTimeout ? 'Timeout' : order.status.replace('_', ' ')}
+                                </h2>
+                                <p className="text-muted-foreground">
+                                    {isTimeout ? "This order has expired." : "This order could not be completed."}
+                                </p>
                             </>
                         )}
                         
@@ -175,7 +184,9 @@ function OrderStatusContent() {
                             ) : order.status === 'completed' ? (
                                  <p className="w-full text-center text-sm text-green-600 font-semibold">Processed successfully!</p>
                             ) : (
-                                <p className="w-full text-center text-sm text-destructive font-semibold">This order is no longer active.</p>
+                                <p className={cn("w-full text-center text-sm font-semibold", isTimeout ? "text-orange-600" : "text-destructive")}>
+                                    This order is no longer active.
+                                </p>
                             )}
                          </div>
                     </CardFooter>
@@ -200,7 +211,9 @@ function OrderStatusContent() {
                         </div>
                          <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">Status</span>
-                            <span className="font-semibold capitalize">{isUpdatingStatus ? 'Updating...' : (isTimeout ? 'Time out' : order.status.replace('_', ' '))}</span>
+                            <span className={cn("font-semibold capitalize", isTimeout ? "text-orange-600" : "")}>
+                                {isUpdatingStatus ? 'Updating...' : (isTimeout ? 'Timeout' : order.status.replace('_', ' '))}
+                            </span>
                         </div>
                          <div className="flex justify-between items-center">
                             <span className="text-muted-foreground">Screenshot</span>

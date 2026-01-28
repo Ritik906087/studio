@@ -64,8 +64,8 @@ const BuyTransactionCard = ({ transaction }: { transaction: Order }) => {
           text: "Cancelled"
       },
       failed: {
-          style: "bg-red-100 text-red-800",
-          text: isTimeout ? "Time out" : "Failed"
+          style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800",
+          text: isTimeout ? "Timeout" : "Failed"
       },
       processing: {
            style: "bg-blue-100 text-blue-800",
@@ -130,8 +130,8 @@ const SellTransactionCard = ({ transaction }: { transaction: SellOrder }) => {
           text: "Completed"
       },
       failed: {
-          style: "bg-red-100 text-red-800",
-          text: isTimeout ? "Time out" : "Failed"
+          style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800",
+          text: isTimeout ? "Timeout" : "Failed"
       },
       pending: {
            style: "bg-yellow-100 text-yellow-800",
