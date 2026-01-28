@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -66,7 +65,7 @@ const upiMethods = [
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
 ];
 
-const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, highlightedId }: { onBuyClick: (option: any) => void; options: any[]; bonusPercentage: number; highlightedId: number | null }) => {
+const PurchaseGrid = ({ onBuyClick, options, bonusPercentage }: { onBuyClick: (option: any) => void; options: any[]; bonusPercentage: number; }) => {
   
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
@@ -82,10 +81,7 @@ const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, highlightedId }: {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -50, transition: { duration: 0.3 } }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className={cn(
-                "relative transition-all duration-500 rounded-xl",
-                highlightedId === option.id && "shadow-2xl shadow-primary/40 ring-2 ring-primary"
-              )}
+              className="relative transition-all duration-500 rounded-xl"
             >
               <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
                  <div className="flex items-center justify-between p-3 relative z-10">
@@ -135,8 +131,6 @@ export default function BuyPage() {
 
   const [smallOptions, setSmallOptions] = useState(() => [...memoizedSmallPurchaseOptions].sort((a,b) => a.amount - b.amount));
   const [highOptions, setHighOptions] = useState(() => [...memoizedHighPurchaseOptions].sort((a,b) => b.amount - a.amount));
-  const [highlightedId, setHighlightedId] = useState<number | null>(null);
-
 
   const inProgressBuyOrdersQuery = useMemo(() => {
     if (!user || !firestore) return null;
@@ -183,28 +177,10 @@ export default function BuyPage() {
                 
                 return newOpts;
             });
-        }, 2000);
+        }, 2000); // Update every 2 seconds
 
         return () => clearInterval(interval);
     }, [activeSubTab, memoizedSmallPurchaseOptions, memoizedHighPurchaseOptions]);
-
-
-  useEffect(() => {
-    const highlightInterval = setInterval(() => {
-        const currentOptions = activeSubTab === 'small' ? smallOptions : highOptions;
-        if (currentOptions.length > 0) {
-            const randomIndex = Math.floor(Math.random() * currentOptions.length);
-            const randomId = currentOptions[randomIndex].id;
-            setHighlightedId(randomId);
-
-            setTimeout(() => {
-                setHighlightedId(null);
-            }, 700);
-        }
-    }, Math.random() * 2000 + 2000);
-
-    return () => clearInterval(highlightInterval);
-  }, [smallOptions, highOptions, activeSubTab]);
 
 
   const handleBuyClick = (option: { amount: number }) => {
@@ -298,10 +274,10 @@ export default function BuyPage() {
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallOptions} bonusPercentage={bonusPercentage} highlightedId={highlightedId} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallOptions} bonusPercentage={bonusPercentage} />
                 </TabsContent>
                 <TabsContent value="high">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={highOptions} bonusPercentage={bonusPercentage} highlightedId={highlightedId} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={highOptions} bonusPercentage={bonusPercentage} />
                 </TabsContent>
             </Tabs>
           </TabsContent>
@@ -312,10 +288,10 @@ export default function BuyPage() {
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small">
-                     <PurchaseGrid onBuyClick={handleBuyClick} options={smallOptions} bonusPercentage={bonusPercentage} highlightedId={highlightedId} />
+                     <PurchaseGrid onBuyClick={handleBuyClick} options={smallOptions} bonusPercentage={bonusPercentage} />
                 </TabsContent>
                 <TabsContent value="high">
-                     <PurchaseGrid onBuyClick={handleBuyClick} options={highOptions} bonusPercentage={bonusPercentage} highlightedId={highlightedId} />
+                     <PurchaseGrid onBuyClick={handleBuyClick} options={highOptions} bonusPercentage={bonusPercentage} />
                 </TabsContent>
             </Tabs>
           </TabsContent>
