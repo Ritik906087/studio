@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2 } from 'lucide-react';
+import { ChevronLeft, Copy, Upload, Loader2, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection, useDoc, useUser, useFirestore, useStorage } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +20,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -32,6 +34,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
 
 
 type PaymentMethod = {
@@ -107,7 +111,18 @@ function PaymentDetailsContent() {
 
     const [isVerificationDialogOpen, setIsVerificationDialogOpen] = useState(false);
     const [methodToVerify, setMethodToVerify] = useState<string | null>(null);
+    const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
+    const [otherReason, setOtherReason] = useState('');
+    const [isCancelling, setIsCancelling] = useState(false);
 
+    const cancellationReasons = [
+        "I don't want to continue payment",
+        "Want to use another payment method",
+        "Bank system is under maintenance",
+        "UPI payment error",
+        "Other reasons"
+    ];
 
     const upiMethods = [
         { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae" },
@@ -133,14 +148,14 @@ function PaymentDetailsContent() {
 
     const { data: userProfile, loading: profileLoading } = useDoc<UserProfile>(userProfileRef);
 
-     const handleCancelOrder = async (isAutoCancel = false) => {
+     const handleCancelOrder = async (isAutoCancel = false, reason = "Order expired") => {
         if (!orderRef) return;
         
         const currentOrder = await getDoc(orderRef);
         if (currentOrder.data()?.status !== 'pending_payment') return;
-
+        setIsCancelling(true);
         try {
-            await updateDoc(orderRef, { status: 'cancelled' });
+            await updateDoc(orderRef, { status: 'cancelled', cancellationReason: reason });
             if (!isAutoCancel) {
                 toast({ title: 'Order Cancelled' });
                 router.push('/home');
@@ -151,7 +166,26 @@ function PaymentDetailsContent() {
         } catch (e: any) {
             console.error("Error cancelling order:", e);
             toast({ variant: 'destructive', title: 'Error', description: 'Could not cancel the order.' });
+        } finally {
+             setIsCancelling(false);
+             setIsCancelDialogOpen(false);
         }
+    };
+    
+    const handleConfirmCancellation = async () => {
+        let finalReason = cancelReason;
+        if (cancelReason === 'Other reasons') {
+            if (!otherReason.trim()) {
+                toast({ variant: 'destructive', title: 'Please provide a reason.' });
+                return;
+            }
+            finalReason = otherReason.trim();
+        }
+        if (!finalReason) {
+            toast({ variant: 'destructive', title: 'Please select a reason.' });
+            return;
+        }
+        await handleCancelOrder(false, finalReason);
     };
 
     const handlePaymentMethodChange = async (newProvider: string) => {
@@ -200,7 +234,7 @@ function PaymentDetailsContent() {
             if (secondsLeft <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                handleCancelOrder(true);
+                handleCancelOrder(true, 'Order automatically expired');
             } else {
                 setTimeLeft(secondsLeft);
             }
@@ -521,27 +555,12 @@ function PaymentDetailsContent() {
             </main>
 
             <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                         <Button variant="destructive" className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" disabled={isConfirming || isUpdatingProvider}>CANCEL</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Are you sure to cancel?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                The order will be cancelled after confirmation and cannot be restored. Please confirm carefully.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction 
-                                onClick={() => handleCancelOrder(false)}
-                                className="bg-red-500 hover:bg-red-600">
-                                Confirm
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+                <Button 
+                    variant="destructive" 
+                    className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" 
+                    disabled={isConfirming || isUpdatingProvider}
+                    onClick={() => setIsCancelDialogOpen(true)}
+                >CANCEL</Button>
 
                 <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isUpdatingProvider}>
                     {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
@@ -589,6 +608,49 @@ function PaymentDetailsContent() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+             <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cancel Order</DialogTitle>
+                        <DialogDescription>Please select a reason for cancellation.</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <RadioGroup value={cancelReason} onValueChange={setCancelReason} className="space-y-2">
+                            {cancellationReasons.map(reason => (
+                                <div key={reason} className="flex items-center space-x-3">
+                                    <RadioGroupItem value={reason} id={reason} />
+                                    <Label htmlFor={reason} className="font-normal">{reason}</Label>
+                                </div>
+                            ))}
+                        </RadioGroup>
+                        {cancelReason === 'Other reasons' && (
+                            <Textarea 
+                                placeholder="Please fill in other reasons" 
+                                value={otherReason} 
+                                onChange={(e) => setOtherReason(e.target.value)} 
+                                className="mt-2"
+                            />
+                        )}
+                        <div className="flex items-start gap-3 rounded-lg bg-yellow-100 p-3 text-yellow-900 text-xs mt-4">
+                            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                            <p>
+                                If you have already transferred money to the other party's collection account, please do not cancel the order to avoid causing losses to you.
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setIsCancelDialogOpen(false)} disabled={isCancelling}>Back</Button>
+                        <Button 
+                            variant="destructive" 
+                            onClick={handleConfirmCancellation}
+                            disabled={isCancelling || !cancelReason || (cancelReason === 'Other reasons' && !otherReason.trim())}
+                        >
+                            {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Confirm Cancellation
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

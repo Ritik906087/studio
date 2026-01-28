@@ -138,6 +138,10 @@
             "failed"
           ]
         },
+        "cancellationReason": {
+          "type": "string",
+          "description": "The reason provided by the user for cancelling the order."
+        },
         "utr": {
           "type": "string",
           "description": "The UTR/reference number of the payment."
