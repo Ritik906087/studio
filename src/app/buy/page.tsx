@@ -7,9 +7,6 @@ import { useRouter } from 'next/navigation';
 import {
   Card,
   CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -19,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ChevronLeft, AlertCircle, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore } from '@/firebase';
@@ -36,16 +33,19 @@ const purchaseOptions = [
   { id: 6, amount: 20000, bonus: 6 },
 ];
 
+const smallPurchaseOptions = purchaseOptions.filter(o => o.amount < 5000);
+const highPurchaseOptions = purchaseOptions.filter(o => o.amount >= 5000);
+
 const upiMethods = [
     { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae" },
     { name: "Paytm", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8" },
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
 ];
 
-const PurchaseGrid = ({ onBuyClick }: { onBuyClick: (amount: number) => void }) => {
+const PurchaseGrid = ({ onBuyClick, options }: { onBuyClick: (amount: number) => void; options: typeof purchaseOptions }) => {
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
-      {purchaseOptions.map((option) => {
+      {options.map((option) => {
         const totalLGB = option.amount + (option.amount * (option.bonus / 100));
         return (
           <Card key={option.id} className="rounded-xl shadow-sm overflow-hidden bg-white">
@@ -146,7 +146,6 @@ export default function BuyPage() {
         </Button>
         <div className="flex flex-col items-center">
             <h1 className="text-xl font-bold">Buy</h1>
-            <p className="text-xs text-muted-foreground">1INR=1LGB 1U=97.00 INR</p>
         </div>
         <div className="w-8"></div>
       </header>
@@ -157,17 +156,34 @@ export default function BuyPage() {
             <TabsTrigger value="otp-upi" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3 relative">OTP-UPI <span className="absolute top-1 right-1 text-xs text-red-500 font-bold">+5%</span></TabsTrigger>
             <TabsTrigger value="bank" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3 relative">BANK <span className="absolute top-1 right-1 text-xs text-red-500 font-bold">+6%</span></TabsTrigger>
           </TabsList>
-          
-          <div className="mt-4 p-2 bg-orange-100 text-orange-700 text-xs rounded-md flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            <span>Tips: Requires KYC connection to purchase.</span>
-          </div>
 
           <TabsContent value="otp-upi">
-            <PurchaseGrid onBuyClick={handleBuyClick} />
+            <Tabs defaultValue="small" className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="small">Small Amount</TabsTrigger>
+                    <TabsTrigger value="high">High Amount</TabsTrigger>
+                </TabsList>
+                <TabsContent value="small">
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} />
+                </TabsContent>
+                <TabsContent value="high">
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} />
+                </TabsContent>
+            </Tabs>
           </TabsContent>
           <TabsContent value="bank">
-            <PurchaseGrid onBuyClick={handleBuyClick} />
+            <Tabs defaultValue="small" className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="small">Small Amount</TabsTrigger>
+                    <TabsTrigger value="high">High Amount</TabsTrigger>
+                </TabsList>
+                <TabsContent value="small">
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} />
+                </TabsContent>
+                <TabsContent value="high">
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} />
+                </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
       </main>
