@@ -27,7 +27,7 @@ export function middleware(request: NextRequest) {
 
 
   // ===== User Auth Routes =====
-  const authRoutes = ['/login', '/register', '/forgot-password', '/terms', '/help'];
+  const authRoutes = ['/login', '/register', '/forgot-password', '/terms'];
   const isAuthRoute = authRoutes.some(route => pathname.startsWith(route));
 
   const protectedRoutes = ['/home', '/my', '/order', '/rewards', '/buy', '/sell'];
