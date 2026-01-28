@@ -555,12 +555,31 @@ function PaymentDetailsContent() {
             </main>
 
             <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
-                <Button 
-                    variant="destructive" 
-                    className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" 
-                    disabled={isConfirming || isUpdatingProvider}
-                    onClick={() => setIsCancelDialogOpen(true)}
-                >CANCEL</Button>
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button 
+                            variant="destructive" 
+                            className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" 
+                            disabled={isConfirming || isUpdatingProvider}
+                        >CANCEL</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure to cancel?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently cancel your order.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => setIsCancelDialogOpen(true)}
+                            className='bg-red-500 hover:bg-red-600'
+                            >Continue</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
 
                 <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isUpdatingProvider}>
                     {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
@@ -667,3 +686,5 @@ export default function ConfirmPage() {
     </Suspense>
   )
 }
+
+    
