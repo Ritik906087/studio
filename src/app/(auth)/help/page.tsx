@@ -90,11 +90,12 @@ export default function HelpPage() {
   const chatRequestQuery = useMemo(() => {
     if (!user || !firestore) return null;
     // Query without orderBy to avoid needing a composite index
-    return query(
+    const q = query(
         collection(firestore, 'chatRequests'),
         where('userId', '==', user.uid),
         where('status', 'in', ['pending', 'active'])
     );
+    return q;
   }, [user, firestore]);
 
   const { data: activeChatRequests, loading: chatRequestsLoading } = useCollection<ChatRequest>(chatRequestQuery);
@@ -299,7 +300,7 @@ export default function HelpPage() {
   if (chatStarted) {
     return (
       <div className="flex flex-col h-screen bg-secondary">
-        <audio ref={audioRef} src="https://cdn.jsdelivr.net/gh/pixel-point/rpg-sounds@main/assets/interface/message-received.mp3" preload="auto"></audio>
+        <audio ref={audioRef} src="https://firebasestorage.googleapis.com/v0/b/prototyper.appspot.com/o/message-received.mp3?alt=media&token=952473a3-34e8-4660-8451-344c3a110a3c" preload="auto"></audio>
         <header className="grid grid-cols-3 items-center p-3 bg-white sticky top-0 z-10 border-b shadow-sm">
             <div className="flex items-center gap-2">
                  <Button asChild variant="ghost" size="icon" className="h-9 w-9 -ml-2">
@@ -307,7 +308,7 @@ export default function HelpPage() {
                         <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                     </Link>
                 </Button>
-                {isWaitingForAgent && timeLeft !== null && (
+                {isWaitingForAgent && timeLeft !== null && !isAgentActive && (
                     <div className="flex items-center gap-1 text-yellow-600">
                         <Clock className="h-4 w-4" />
                         <span className="font-mono font-bold text-sm">{formatTime(timeLeft)}</span>
@@ -315,7 +316,7 @@ export default function HelpPage() {
                 )}
             </div>
             <div className="flex flex-col items-center text-center">
-                <h1 className="text-lg font-bold">{isAgentActive ? "Agent" : "LG Pay Support"}</h1>
+                <h1 className="text-lg font-bold">{isAgentActive ? "JONNY" : "AI HELP"}</h1>
                 <div className="flex items-center gap-1.5">
                     <div className="h-2 w-2 rounded-full bg-green-500"></div>
                     <p className="text-xs text-muted-foreground font-semibold">Online</p>
@@ -328,7 +329,7 @@ export default function HelpPage() {
             </div>
         </header>
         <main ref={chatContainerRef} className="flex-1 space-y-4 p-4 overflow-y-auto">
-            {isWaitingForAgent && (
+            {isWaitingForAgent && !isAgentActive && (
                  <Card className="bg-blue-50 border-blue-200">
                     <CardContent className="p-4 text-center text-blue-800">
                         <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
@@ -500,6 +501,3 @@ export default function HelpPage() {
     </div>
   );
 }
-
-    
-    

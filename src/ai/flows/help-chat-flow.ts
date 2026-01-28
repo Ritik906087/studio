@@ -145,18 +145,32 @@ const helpChatFlow = ai.defineFlow(
     outputSchema: z.string(),
   },
   async input => {
-    const {text, toolCalls, toolOutputs} = await prompt(input);
+    try {
+      const {text, toolCalls, toolOutputs} = await prompt(input);
 
-    const humanRequestToolCall = toolCalls?.find(tc => tc.toolName === 'requestHumanAgent');
-    if (humanRequestToolCall) {
-        const toolOutput = toolOutputs?.find(to => to.toolName === 'requestHumanAgent');
-        if (toolOutput?.output.success) {
-            return "Thank you. Your request has been submitted. A support agent will review your case and connect with you shortly.";
-        } else {
-            return "I'm sorry, I was unable to submit your request for a human agent at this time. Please try again in a few moments.";
-        }
+      const humanRequestToolCall = toolCalls?.find(tc => tc.toolName === 'requestHumanAgent');
+      if (humanRequestToolCall) {
+          const toolOutput = toolOutputs?.find(to => to.toolName === 'requestHumanAgent');
+          if (toolOutput?.output.success) {
+              return "Thank you. Your request has been submitted. A support agent will review your case and connect with you shortly.";
+          } else {
+              return "I'm sorry, I was unable to submit your request for a human agent at this time. Please try again in a few moments.";
+          }
+      }
+      
+      return text;
+    } catch (error) {
+        console.error("AI prompt error, escalating to human agent:", error);
+        
+        // Automatically request a human agent on any error
+        await requestHumanAgent({
+            uid: input.uid,
+            enteredIdentifier: input.enteredIdentifier!,
+            chatHistory: input.chatHistory || [],
+        });
+        
+        // Return the standard message for agent request
+        return "Thank you. Your request has been submitted. A support agent will review your case and connect with you shortly.";
     }
-    
-    return text;
   }
 );
