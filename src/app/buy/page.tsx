@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -32,20 +32,21 @@ import Image from 'next/image';
 import { useUser, useFirestore, useCollection } from '@/firebase';
 import { addDoc, collection, serverTimestamp, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 
-
-const purchaseOptions = [
+const smallPurchaseOptions = [
   { id: 1, amount: 500, bonus: 5 },
   { id: 2, amount: 1000, bonus: 5 },
   { id: 3, amount: 3000, bonus: 5 },
   { id: 4, amount: 5000, bonus: 6 },
-  { id: 5, amount: 10000, bonus: 6 },
-  { id: 6, amount: 20000, bonus: 6 },
 ];
 
-const smallPurchaseOptions = [...purchaseOptions].sort((a, b) => a.amount - b.amount);
-const highPurchaseOptions = [...purchaseOptions].sort((a, b) => b.amount - a.amount);
-
+const highPurchaseOptions = [
+  { id: 5, amount: 10000, bonus: 6 },
+  { id: 6, amount: 20000, bonus: 6 },
+  { id: 7, amount: 50000, bonus: 7 },
+  { id: 8, amount: 100000, bonus: 7 },
+];
 
 const upiMethods = [
     { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae" },
@@ -53,13 +54,71 @@ const upiMethods = [
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
 ];
 
-const PurchaseGrid = ({ onBuyClick, options }: { onBuyClick: (option: (typeof purchaseOptions)[0]) => void; options: typeof purchaseOptions }) => {
-  
+const PurchaseGrid = ({ onBuyClick, options: initialOptions }: { onBuyClick: (option: any) => void; options: any[] }) => {
+    
+  const [options, setOptions] = useState(() => initialOptions.map(o => ({...o, key: o.id})));
+  const [highlightedKey, setHighlightedKey] = useState<number | null>(null);
+
+  // Interval for highlighting an item
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const id = setInterval(() => {
+      if (options.length === 0) return;
+      const randomIndex = Math.floor(Math.random() * options.length);
+      const randomKey = options[randomIndex].key;
+      setHighlightedKey(randomKey);
+      setTimeout(() => {
+        setHighlightedKey(k => (k === randomKey ? null : k));
+      }, 700);
+    }, Math.random() * 2000 + 2000); // 2-4 seconds
+    return () => clearInterval(id);
+  }, [options]);
+
+  // Interval for updating the list (add/remove/flicker)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const id = setInterval(() => {
+      setOptions(prevOptions => {
+        if (prevOptions.length === 0) return prevOptions;
+
+        const action = Math.random();
+        let newOptions = [...prevOptions];
+
+        if (action < 0.2 && newOptions.length > 3) { // 20% chance to remove
+            const indexToRemove = Math.floor(Math.random() * newOptions.length);
+            newOptions.splice(indexToRemove, 1);
+        } else if (action < 0.7) { // 50% chance to add (0.7-0.2)
+            const newId = Date.now();
+            const baseAmount = initialOptions[Math.floor(Math.random() * initialOptions.length)].amount;
+            const newAmount = baseAmount + (Math.floor(Math.random() * 10) - 5) * 100;
+            if (newAmount > 0) {
+                newOptions.unshift({
+                    id: newId, key: newId,
+                    amount: newAmount,
+                    bonus: initialOptions[0].bonus + (Math.random() > 0.8 ? 1 : 0)
+                });
+            }
+        } else { // 30% chance to flicker
+            const indexToFlicker = Math.floor(Math.random() * newOptions.length);
+            const originalBonus = newOptions[indexToFlicker].bonus;
+            newOptions[indexToFlicker].bonus = originalBonus + 1;
+            setTimeout(() => {
+                setOptions(currentOpts => currentOpts.map(opt => 
+                    opt.key === newOptions[indexToFlicker].key ? {...opt, bonus: originalBonus} : opt
+                ));
+            }, 400);
+        }
+        return newOptions;
+      });
+    }, 4500); // every 4.5 seconds
+    return () => clearInterval(id);
+  }, [initialOptions]);
+
   if (options.length === 0) {
     return (
       <Card className="rounded-xl shadow-sm overflow-hidden bg-white mt-4">
           <CardContent className="p-8 text-center text-muted-foreground flex flex-col items-center justify-center h-32">
-              <p className="font-semibold">All orders for this amount have been taken.</p>
+              <p className="font-semibold">Searching for available orders...</p>
               <p className="text-xs mt-1">Please check other amounts or try again later.</p>
           </CardContent>
       </Card>
@@ -67,29 +126,60 @@ const PurchaseGrid = ({ onBuyClick, options }: { onBuyClick: (option: (typeof pu
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 mt-4">
+    <motion.div layout className="grid grid-cols-1 gap-3 mt-4">
+      <AnimatePresence>
         {options.map((option) => {
           const totalLGB = option.amount + (option.amount * (option.bonus / 100));
+          const isHighlighted = highlightedKey === option.key;
+
           return (
-            <Card key={option.id} className="rounded-xl shadow-sm overflow-hidden bg-white animate-fade-in">
-              <div className="flex items-center justify-between p-3">
-                 <div className="flex items-center gap-4">
-                     <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <ShoppingCart className="h-6 w-6" />
+            <motion.div
+              key={option.key}
+              layout
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="relative"
+            >
+              <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
+                {isHighlighted && (
+                  <motion.div
+                    className="absolute inset-0 rounded-xl border-2 border-primary pointer-events-none z-20"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: [0, 1, 0] }}
+                    transition={{ duration: 0.7, repeat: 0 }}
+                    style={{ boxShadow: '0 0 12px hsl(var(--primary))' }}
+                  />
+                )}
+                 <div className="flex items-center justify-between p-3 relative z-10">
+                     <div className="flex items-center gap-4">
+                         <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                            <ShoppingCart className="h-6 w-6" />
+                         </div>
+                         <div>
+                            <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
+                            <motion.p
+                                key={totalLGB} // Animate when bonus changes
+                                initial={{ opacity: 0.5 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ duration: 0.3 }}
+                                className="text-xs text-green-600 font-semibold"
+                            >
+                                You Get: {option.amount}+{option.bonus}%={totalLGB.toFixed(0)}
+                            </motion.p>
+                         </div>
                      </div>
-                     <div>
-                        <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
-                        <p className="text-xs text-green-600 font-semibold">You Get: {option.amount}+{option.bonus}%={totalLGB}</p>
-                     </div>
-                 </div>
-                 <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
-                    Buy
-                 </Button>
-              </div>
-            </Card>
+                     <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
+                        Buy
+                     </Button>
+                  </div>
+              </Card>
+            </motion.div>
           );
         })}
-    </div>
+      </AnimatePresence>
+    </motion.div>
   );
 };
 
@@ -98,11 +188,6 @@ export default function BuyPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('otp-upi');
   
-  const [visibleSmallUpiOptions, setVisibleSmallUpiOptions] = useState(smallPurchaseOptions);
-  const [visibleHighUpiOptions, setVisibleHighUpiOptions] = useState(highPurchaseOptions);
-  const [visibleSmallBankOptions, setVisibleSmallBankOptions] = useState(smallPurchaseOptions);
-  const [visibleHighBankOptions, setVisibleHighBankOptions] = useState(highPurchaseOptions);
-
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { user } = useUser();
@@ -122,7 +207,7 @@ export default function BuyPage() {
 
   const { data: inProgressBuyOrders } = useCollection(inProgressBuyOrdersQuery);
 
-  const handleBuyClick = (option: (typeof purchaseOptions)[0]) => {
+  const handleBuyClick = (option: { amount: number }) => {
      if (!user || !firestore) {
       toast({ variant: 'destructive', title: 'Please log in to continue.' });
       return;
