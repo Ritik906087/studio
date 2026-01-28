@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useCollection, useDoc, useUser, useFirestore, useStorage } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { doc, getDoc, updateDoc, serverTimestamp, collection, Timestamp } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -300,7 +300,7 @@ function PaymentDetailsContent() {
         }
     };
     
-    const handleConfirm = async () => {
+    const handleConfirm = () => {
         if (!utr || utr.length !== 12) {
             toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please provide a valid 12-digit UTR.' });
             return;
@@ -316,52 +316,48 @@ function PaymentDetailsContent() {
 
         setIsConfirming(true);
 
-        try {
-            const sanitizedFileName = screenshot.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-            const screenshotPath = `screenshots/${user.uid}/${orderId}/${sanitizedFileName}`;
-            const fileRef = storageRef(storage, screenshotPath);
+        const sanitizedFileName = screenshot.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        const screenshotPath = `screenshots/${user.uid}/${orderId}/${sanitizedFileName}`;
+        const fileRef = storageRef(storage, screenshotPath);
+        const uploadTask = uploadBytesResumable(fileRef, screenshot);
 
-            const snapshot = await uploadBytes(fileRef, screenshot);
-            const screenshotURL = await getDownloadURL(snapshot.ref);
-
-            await updateDoc(orderRef, {
-                utr,
-                screenshotURL,
-                status: 'processing',
-                submittedAt: serverTimestamp()
-            });
-            
-            toast({ title: 'Payment Submitted!', description: 'Your order is now processing.' });
-            router.push(`/order/${orderId}`);
-
-        } catch (error: any) {
-            console.error("Error confirming payment: ", error);
-            let errorMessage = 'An unexpected error occurred during submission.';
-             if (error && error.code) {
-                switch (error.code) {
-                    case 'storage/unauthorized':
-                        errorMessage = 'Permission denied. Please check your storage security rules.';
-                        break;
-                    case 'storage/canceled':
-                        errorMessage = 'The file upload was canceled.';
-                        break;
-                    case 'permission-denied': // Firestore error
-                        errorMessage = 'Permission denied. Please check your Firestore security rules.';
-                        break;
-                    default:
-                        errorMessage = `An error occurred: ${error.code}. Please try again.`
-                        break;
-                }
+        uploadTask.on('state_changed',
+            (snapshot) => {
+                // Optional: handle progress
+            },
+            (error) => {
+                console.error("Error uploading screenshot: ", error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Upload Failed',
+                    description: `Could not upload screenshot. Error: ${error.code}`,
+                    duration: 9000,
+                });
+                setIsConfirming(false);
+            },
+            () => {
+                getDownloadURL(uploadTask.snapshot.ref).then(async (downloadURL) => {
+                    try {
+                        await updateDoc(orderRef, {
+                            utr,
+                            screenshotURL: downloadURL,
+                            status: 'processing',
+                            submittedAt: serverTimestamp()
+                        });
+                        toast({ title: 'Payment Submitted!', description: 'Your order is now processing.' });
+                        router.push(`/order/${orderId}`);
+                    } catch (dbError) {
+                        console.error("Error updating Firestore after upload: ", dbError);
+                        toast({ variant: 'destructive', title: 'Submission Failed', description: 'Screenshot uploaded, but failed to save order details.' });
+                        setIsConfirming(false);
+                    }
+                }).catch(urlError => {
+                    console.error("Error getting download URL: ", urlError);
+                    toast({ variant: 'destructive', title: 'Submission Failed', description: 'Could not get screenshot URL after upload.' });
+                    setIsConfirming(false);
+                });
             }
-            toast({ 
-                variant: 'destructive', 
-                title: 'Submission Failed', 
-                description: errorMessage,
-                duration: 9000,
-            });
-        } finally {
-            setIsConfirming(false);
-        }
+        );
     }
 
     const loading = allPaymentMethodsLoading || orderLoading || profileLoading;
@@ -686,5 +682,7 @@ export default function ConfirmPage() {
     </Suspense>
   )
 }
+
+    
 
     

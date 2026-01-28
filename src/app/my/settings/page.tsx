@@ -78,29 +78,26 @@ export default function SettingsPage() {
     uploadTask.on('state_changed', 
       (snapshot: UploadTaskSnapshot) => {
         // Optional: handle progress
-        // const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
       }, 
       (error) => {
-        // Handle unsuccessful uploads
         console.error("Error uploading image: ", error);
-        let description = 'Failed to upload image. Please check permissions and network.';
-        if (error.code === 'storage/unauthorized') {
-            description = 'Permission denied. Please check your storage rules.';
-        }
-        toast({ variant: 'destructive', title: 'Upload Error', description: description });
+        toast({
+          variant: 'destructive',
+          title: 'Upload Error',
+          description: `Upload failed. Error: ${error.code}`,
+          duration: 9000,
+        });
         setIsSaving(false);
       }, 
       () => {
-        // Handle successful uploads on complete
         getDownloadURL(uploadTask.snapshot.ref).then(async (downloadURL) => {
           try {
             await updateDoc(userProfileRef, { photoURL: downloadURL });
             toast({ title: 'Success', description: 'Profile picture updated.' });
           } catch (dbError) {
              console.error("Error updating firestore: ", dbError);
-             toast({ variant: 'destructive', title: 'Database Error', description: 'Failed to save profile picture.' });
+             toast({ variant: 'destructive', title: 'Database Error', description: 'Failed to save profile picture URL.' });
           } finally {
-            // This will be called regardless of the database update success or failure
             setIsSaving(false);
           }
         }).catch(urlError => {
@@ -203,4 +200,6 @@ export default function SettingsPage() {
     </div>
   );
 }
+    
+
     
