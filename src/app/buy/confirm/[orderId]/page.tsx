@@ -2,7 +2,7 @@
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect } from 'react';
-import { useRouter, useSearchParams, useParams } from 'next/navigation';
+import { useRouter, useSearchParams, useParams, usePathname } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,13 @@ import { doc, getDoc, updateDoc, serverTimestamp, collection, Timestamp } from '
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+
 
 type PaymentMethod = {
     id: string;
@@ -60,6 +67,7 @@ function PaymentDetailsContent() {
     const router = useRouter();
     const params = useParams();
     const searchParams = useSearchParams();
+    const pathname = usePathname();
     const { toast } = useToast();
     const { user } = useUser();
     const firestore = useFirestore();
@@ -73,10 +81,16 @@ function PaymentDetailsContent() {
     const [screenshot, setScreenshot] = useState<File | null>(null);
     const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
-    const [isChanging, setIsChanging] = useState(false);
+    const [isUpdatingProvider, setIsUpdatingProvider] = useState(false);
+    const [isChangeDialogOpen, setIsChangeDialogOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
+    const upiMethods = [
+        { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae" },
+        { name: "Paytm", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8" },
+        { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
+    ];
 
     const paymentMethodsQuery = useMemo(() => firestore ? collection(firestore, 'paymentMethods') : null, [firestore]);
     const { data: allPaymentMethods, loading: allPaymentMethodsLoading } = useCollection<PaymentMethod>(paymentMethodsQuery);
@@ -110,18 +124,23 @@ function PaymentDetailsContent() {
         }
     };
 
-    const handleCancelAndChange = async () => {
+    const handlePaymentMethodChange = async (newProvider: string) => {
         if (!orderRef) return;
-        setIsChanging(true);
+        setIsUpdatingProvider(true);
         try {
-            await updateDoc(orderRef, { status: 'cancelled' });
-            toast({ title: 'Order Cancelled', description: 'You can now select a new payment method.' });
-            router.back();
+            await updateDoc(orderRef, { paymentProvider: newProvider });
+            
+            const newSearchParams = new URLSearchParams(searchParams.toString());
+            newSearchParams.set('provider', newProvider);
+            router.replace(`${pathname}?${newSearchParams.toString()}`, { scroll: false });
+
+            setIsChangeDialogOpen(false);
+            toast({ title: 'Payment method updated!' });
         } catch (e: any) {
-            console.error("Error cancelling order:", e);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not cancel the order to change method.' });
+            console.error("Error changing payment method:", e);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not change payment method.' });
         } finally {
-            setIsChanging(false);
+            setIsUpdatingProvider(false);
         }
     };
     
@@ -331,7 +350,7 @@ function PaymentDetailsContent() {
     return (
         <div className="flex flex-col min-h-screen">
             <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
-                <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8" disabled={isConfirming || isChanging}>
+                <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8" disabled={isConfirming || isUpdatingProvider}>
                     <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
                 <h1 className="text-xl font-bold">Confirm Payment</h1>
@@ -365,12 +384,12 @@ function PaymentDetailsContent() {
                                 </div>
                             </div>
                             <Button 
-                                onClick={handleCancelAndChange}
+                                onClick={() => setIsChangeDialogOpen(true)}
                                 variant="ghost" 
                                 className="bg-white/20 text-white hover:bg-white/30 h-auto px-4 py-1.5 rounded-full"
-                                disabled={isConfirming || isChanging}
+                                disabled={isConfirming || isUpdatingProvider}
                             >
-                                {isChanging ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Change'}
+                                {isUpdatingProvider ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Change'}
                             </Button>
                         </CardContent>
                     </Card>
@@ -386,29 +405,30 @@ function PaymentDetailsContent() {
                                 <span className="text-muted-foreground">{key}</span>
                                 <div className="flex items-center gap-2">
                                     <span className="font-semibold">{value}</span>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(value!)} disabled={isConfirming || isChanging}>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(value!)} disabled={isConfirming || isUpdatingProvider}>
                                         <Copy className="h-4 w-4" />
                                     </Button>
                                 </div>
                             </div>
                         ))}
+                        <div className="border-t border-dashed -mx-4 my-4"></div>
+                        <div className="flex justify-between items-center pt-0">
+                            <span className="text-muted-foreground text-base">Amount to be paid</span>
+                            <span className="font-bold text-2xl text-primary">₹{order?.amount}</span>
+                        </div>
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardContent className="p-4 space-y-4">
-                         <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground text-sm">Amount to be paid</span>
-                            <span className="font-bold text-2xl text-primary">₹{order?.amount}</span>
-                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="utr">UTR / Reference Number</Label>
-                            <Input id="utr" placeholder="Enter 12-digit UTR number" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} disabled={isConfirming || isChanging} />
+                            <Input id="utr" placeholder="Enter 12-digit UTR number" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} disabled={isConfirming || isUpdatingProvider} />
                         </div>
                         <div className="space-y-2">
                              <Label>Upload Screenshot</Label>
-                             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" disabled={isConfirming || isChanging} />
-                             <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming || isChanging}>
+                             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" disabled={isConfirming || isUpdatingProvider} />
+                             <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming || isUpdatingProvider}>
                                 {screenshotPreview ? (
                                     <Image src={screenshotPreview} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
                                 ) : (
@@ -424,11 +444,33 @@ function PaymentDetailsContent() {
             </main>
 
             <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
-                <Button onClick={() => handleCancelOrder(false)} variant="destructive" className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" disabled={isConfirming || isChanging}>CANCEL</Button>
-                <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isChanging}>
+                <Button onClick={() => handleCancelOrder(false)} variant="destructive" className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" disabled={isConfirming || isUpdatingProvider}>CANCEL</Button>
+                <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isUpdatingProvider}>
                     {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
                 </Button>
             </footer>
+
+            <Dialog open={isChangeDialogOpen} onOpenChange={setIsChangeDialogOpen}>
+              <DialogContent className="sm:max-w-md p-0">
+                <DialogHeader className="p-4 border-b">
+                  <DialogTitle className="text-lg font-semibold text-center">Change Payment Method</DialogTitle>
+                </DialogHeader>
+                <div className="p-4 space-y-3">
+                  {upiMethods.map((method) => (
+                      <button 
+                          key={method.name}
+                          onClick={() => handlePaymentMethodChange(method.name)}
+                          disabled={isUpdatingProvider}
+                          className="w-full flex items-center p-3 rounded-lg border hover:bg-secondary transition-colors disabled:opacity-50"
+                      >
+                          {isUpdatingProvider && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                          <Image src={method.logo} alt={method.name} width={32} height={32} className="mr-4" />
+                          <span className="font-medium">{method.name}</span>
+                      </button>
+                  ))}
+                </div>
+              </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -445,3 +487,5 @@ export default function ConfirmPage() {
     </Suspense>
   )
 }
+
+    
