@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -32,7 +32,6 @@ import Image from 'next/image';
 import { useUser, useFirestore, useCollection } from '@/firebase';
 import { addDoc, collection, serverTimestamp, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { motion, AnimatePresence } from 'framer-motion';
 
 const smallPurchaseOptions = [
   { id: 1, amount: 500 },
@@ -42,10 +41,10 @@ const smallPurchaseOptions = [
 ];
 
 const highPurchaseOptions = [
-  { id: 5, amount: 10000 },
-  { id: 6, amount: 20000 },
-  { id: 7, amount: 50000 },
   { id: 8, amount: 100000 },
+  { id: 7, amount: 50000 },
+  { id: 6, amount: 20000 },
+  { id: 5, amount: 10000 },
 ];
 
 const upiMethods = [
@@ -54,44 +53,9 @@ const upiMethods = [
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
 ];
 
-const PurchaseGrid = ({ onBuyClick, options: initialOptions, activeTab }: { onBuyClick: (option: any) => void; options: any[]; activeTab: string }) => {
+const PurchaseGrid = ({ onBuyClick, options, activeTab }: { onBuyClick: (option: any) => void; options: any[]; activeTab: string }) => {
     
   const bonusPercentage = activeTab === 'bank' ? 6 : 5;
-  const [options, setOptions] = useState(() => initialOptions.map(o => ({...o, bonus: bonusPercentage, key: o.id})));
-
-  // Interval for updating the list (add/remove)
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const id = setInterval(() => {
-      setOptions(prevOptions => {
-        if (prevOptions.length === 0) return prevOptions;
-
-        let newOptions = [...prevOptions];
-        
-        // 50% chance to do something
-        if (Math.random() < 0.5) {
-            // Remove a random item (if more than 3)
-            if (newOptions.length > 3) {
-                 const indexToRemove = Math.floor(Math.random() * newOptions.length);
-                 newOptions.splice(indexToRemove, 1);
-            }
-
-            // Add a new random item from initialOptions
-            const baseOption = initialOptions[Math.floor(Math.random() * initialOptions.length)];
-            const newId = Date.now();
-            newOptions.unshift({
-                ...baseOption,
-                id: newId,
-                key: newId,
-                bonus: bonusPercentage,
-            });
-        }
-        
-        return newOptions.slice(0, 8); // Keep list size reasonable
-      });
-    }, 3500); // every 3.5 seconds
-    return () => clearInterval(id);
-  }, [initialOptions, bonusPercentage]);
 
   if (options.length === 0) {
     return (
@@ -105,50 +69,39 @@ const PurchaseGrid = ({ onBuyClick, options: initialOptions, activeTab }: { onBu
   }
 
   return (
-    <motion.div layout className="grid grid-cols-1 gap-3 mt-4">
-      <AnimatePresence>
-        {options.map((option) => {
-          const totalLGB = option.amount + (option.amount * (option.bonus / 100));
+    <div className="grid grid-cols-1 gap-3 mt-4">
+      {options.map((option) => {
+        const totalLGB = option.amount + (option.amount * (bonusPercentage / 100));
 
-          return (
-            <motion.div
-              key={option.key}
-              layout
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-              transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              className="relative"
-            >
-              <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
-                 <div className="flex items-center justify-between p-3 relative z-10">
-                     <div className="flex items-center gap-4">
-                         <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <ShoppingCart className="h-6 w-6" />
-                         </div>
-                         <div>
-                            <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
-                            <motion.p
-                                key={totalLGB} // Animate when bonus changes
-                                initial={{ opacity: 0.5 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ duration: 0.3 }}
-                                className="text-xs text-green-600 font-semibold"
-                            >
-                                You Get: {option.amount}+{option.bonus}%={totalLGB.toFixed(0)}
-                            </motion.p>
-                         </div>
-                     </div>
-                     <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
-                        Buy
-                     </Button>
-                  </div>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-    </motion.div>
+        return (
+          <div
+            key={option.id}
+            className="relative"
+          >
+            <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
+               <div className="flex items-center justify-between p-3 relative z-10">
+                   <div className="flex items-center gap-4">
+                       <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <ShoppingCart className="h-6 w-6" />
+                       </div>
+                       <div>
+                          <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
+                          <p
+                              className="text-xs text-green-600 font-semibold"
+                          >
+                              You Get: {option.amount}+{bonusPercentage}%={totalLGB.toFixed(0)}
+                          </p>
+                       </div>
+                   </div>
+                   <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
+                      Buy
+                   </Button>
+                </div>
+            </Card>
+          </div>
+        );
+      })}
+    </div>
   );
 };
 
@@ -331,5 +284,3 @@ export default function BuyPage() {
     </div>
   );
 }
-
-    
