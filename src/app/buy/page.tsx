@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -34,28 +33,28 @@ import { useUser, useFirestore, useCollection } from '@/firebase';
 import { addDoc, collection, serverTimestamp, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 
-const smallPurchaseOptions = [
-  { id: 1, amount: 100 },
-  { id: 2, amount: 200 },
-  { id: 3, amount: 300 },
-  { id: 4, amount: 400 },
-  { id: 5, amount: 500 },
-  { id: 6, amount: 600 },
-  { id: 7, amount: 700 },
-  { id: 8, amount: 800 },
-  { id: 9, amount: 1000 },
-];
+const purchaseConfig = {
+  100: 5, 200: 6, 300: 7, 400: 5, 500: 6, 600: 5, 700: 4, 800: 3, 1000: 4,
+  2000: 3, 3000: 3, 4000: 5, 5000: 4, 6000: 3, 7000: 2, 8000: 3, 10000: 2
+};
 
-const highPurchaseOptions = [
-  { id: 10, amount: 2000 },
-  { id: 11, amount: 3000 },
-  { id: 12, amount: 4000 },
-  { id: 13, amount: 5000 },
-  { id: 14, amount: 6000 },
-  { id: 15, amount: 7000 },
-  { id: 16, amount: 8000 },
-  { id: 17, amount: 10000 },
-];
+let idCounter = 1;
+const smallPurchaseOptions = [100, 200, 300, 400, 500, 600, 700, 800, 1000]
+  .flatMap(amount =>
+    Array.from({ length: purchaseConfig[amount] }, () => ({
+      id: idCounter++,
+      amount,
+    }))
+  );
+
+const highPurchaseOptions = [2000, 3000, 4000, 5000, 6000, 7000, 8000, 10000]
+    .flatMap(amount =>
+    Array.from({ length: purchaseConfig[amount] || 0 }, () => ({
+      id: idCounter++,
+      amount,
+    }))
+  );
+
 
 const upiMethods = [
     { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae" },
@@ -81,13 +80,15 @@ const PurchaseGrid = ({ onBuyClick, initialOptions, activeTab, sortOrder }: { on
         }
         
         // 2. Find an item from initialOptions that is not in the current list
-        const currentAmounts = new Set(newOpts.map(o => o.amount));
-        const availableToAdd = initialOptions.filter(o => !currentAmounts.has(o.amount));
+        const availableToAdd = initialOptions.filter(o => !newOpts.find(opt => opt.id === o.id));
         
         // 3. Add one of the available items
         if (availableToAdd.length > 0) {
           const newItem = availableToAdd[Math.floor(Math.random() * availableToAdd.length)];
           newOpts.push(newItem);
+        } else {
+            // if all items are already in the list, just add a random one from initial options
+            newOpts.push(initialOptions[Math.floor(Math.random() * initialOptions.length)]);
         }
         
         // 4. Re-sort the list to maintain order
