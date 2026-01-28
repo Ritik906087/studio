@@ -36,6 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 
+// New configuration from the user
 const purchaseConfig = {
     "100": 5, "200": 6, "300": 7, "400": 5, "500": 6, "600": 5, "700": 4, "800": 3, "1000": 4,
     "2000": 3, "3000": 3, "4000": 5, "5000": 4, "6000": 3, "7000": 2, "8000": 3, "10000": 2
@@ -43,25 +44,17 @@ const purchaseConfig = {
 
 
 let idCounter = 1;
-const smallPurchaseOptions = Object.entries(purchaseConfig)
-  .filter(([amount]) => parseInt(amount) <= 1000)
+const allPurchaseOptions = Object.entries(purchaseConfig)
   .flatMap(([amountStr, count]) => {
     const amount = parseInt(amountStr);
     return Array.from({ length: count }, () => ({
       id: idCounter++,
       amount,
-    }))
+    }));
   });
 
-const highPurchaseOptions = Object.entries(purchaseConfig)
-  .filter(([amount]) => parseInt(amount) > 1000)
-  .flatMap(([amountStr, count]) => {
-    const amount = parseInt(amountStr);
-    return Array.from({ length: count }, () => ({
-      id: idCounter++,
-      amount,
-    }))
-  });
+const smallPurchaseOptions = allPurchaseOptions.filter(opt => opt.amount <= 1000);
+const highPurchaseOptions = allPurchaseOptions.filter(opt => opt.amount > 1000);
 
 
 const upiMethods = [
@@ -130,8 +123,8 @@ export default function BuyPage() {
   const [isInProgressDialogOpen, setIsInProgressDialogOpen] = useState(false);
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
   
-  const [smallOptions, setSmallOptions] = useState(() => [...smallPurchaseOptions].sort((a,b) => a.amount - b.amount));
-  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => b.amount - a.amount));
+  const [smallOptions, setSmallOptions] = useState(() => [...smallPurchaseOptions]);
+  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions]);
 
   const inProgressBuyOrdersQuery = useMemo(() => {
     if (!user || !firestore) return null;
@@ -144,55 +137,75 @@ export default function BuyPage() {
   const { data: inProgressBuyOrders } = useCollection(inProgressBuyOrdersQuery);
   
   useEffect(() => {
-    const interval = setInterval(() => {
-        // Update small options
+    // --- REMOVAL INTERVAL ---
+    const removalInterval = setInterval(() => {
+        const numToRemove = Math.floor(Math.random() * 2) + 2; // 2 or 3
+        
         setSmallOptions(prevOptions => {
-            const numToUpdate = Math.floor(Math.random() * 2) + 2; // 2 or 3
+            if (prevOptions.length <= numToRemove) return prevOptions;
             let currentOpts = [...prevOptions];
-            
-            // Remove `numToUpdate` random items
-            for (let i = 0; i < numToUpdate && currentOpts.length > 0; i++) {
+            for (let i = 0; i < numToRemove; i++) {
                 const removeIndex = Math.floor(Math.random() * currentOpts.length);
                 currentOpts.splice(removeIndex, 1);
             }
-            
+            return currentOpts;
+        });
+
+        setHighOptions(prevOptions => {
+            if (prevOptions.length <= numToRemove) return prevOptions;
+            let currentOpts = [...prevOptions];
+            for (let i = 0; i < numToRemove; i++) {
+                const removeIndex = Math.floor(Math.random() * currentOpts.length);
+                currentOpts.splice(removeIndex, 1);
+            }
+            return currentOpts;
+        });
+        
+    }, 2000); // Runs every 2 seconds
+
+    // --- ADDITION INTERVAL ---
+    const additionInterval = setInterval(() => {
+        const numToAdd = Math.floor(Math.random() * 2) + 2; // 2 or 3
+
+        setSmallOptions(prevOptions => {
+            let currentOpts = [...prevOptions];
             const currentIds = new Set(currentOpts.map(o => o.id));
             const availableToAdd = smallPurchaseOptions.filter(opt => !currentIds.has(opt.id));
             
-            // Add `numToUpdate` new random items
-            for (let i = 0; i < numToUpdate && availableToAdd.length > 0; i++) {
+            for (let i = 0; i < numToAdd && availableToAdd.length > 0; i++) {
                 const addIndex = Math.floor(Math.random() * availableToAdd.length);
-                currentOpts.push(availableToAdd.splice(addIndex, 1)[0]);
+                const itemToAdd = availableToAdd.splice(addIndex, 1)[0];
+                
+                // Insert at random position
+                const insertAtIndex = Math.floor(Math.random() * (currentOpts.length + 1));
+                currentOpts.splice(insertAtIndex, 0, itemToAdd);
             }
-            
-            return currentOpts.sort((a, b) => a.amount - b.amount);
+            return currentOpts;
         });
 
-        // Update high options
         setHighOptions(prevOptions => {
-            const numToUpdate = Math.floor(Math.random() * 2) + 2; // 2 or 3
             let currentOpts = [...prevOptions];
-
-            for (let i = 0; i < numToUpdate && currentOpts.length > 0; i++) {
-                const removeIndex = Math.floor(Math.random() * currentOpts.length);
-                currentOpts.splice(removeIndex, 1);
-            }
-
             const currentIds = new Set(currentOpts.map(o => o.id));
             const availableToAdd = highPurchaseOptions.filter(opt => !currentIds.has(opt.id));
 
-            for (let i = 0; i < numToUpdate && availableToAdd.length > 0; i++) {
+            for (let i = 0; i < numToAdd && availableToAdd.length > 0; i++) {
                 const addIndex = Math.floor(Math.random() * availableToAdd.length);
-                currentOpts.push(availableToAdd.splice(addIndex, 1)[0]);
+                const itemToAdd = availableToAdd.splice(addIndex, 1)[0];
+                
+                // Insert at random position
+                const insertAtIndex = Math.floor(Math.random() * (currentOpts.length + 1));
+                currentOpts.splice(insertAtIndex, 0, itemToAdd);
             }
-            
-            return currentOpts.sort((a, b) => b.amount - a.amount);
+            return currentOpts;
         });
         
-    }, 2000);
+    }, 4000); // Runs every 4 seconds
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      clearInterval(removalInterval);
+      clearInterval(additionInterval);
+    };
+  }, []); // Empty dependency array ensures this runs only once
 
 
   const handleBuyClick = (option: { amount: number }) => {
@@ -251,10 +264,18 @@ export default function BuyPage() {
 
   const bonusPercentage = activeTab === 'bank' ? 6 : 5;
   
+  const displayedOptions = useMemo(() => {
+      if (activeSubTab === 'small') {
+          return [...smallOptions].sort((a,b) => a.amount - b.amount);
+      } else {
+          return [...highOptions].sort((a,b) => b.amount - a.amount);
+      }
+  }, [smallOptions, highOptions, activeSubTab]);
+  
   return (
     <div className="text-foreground pb-4 min-h-screen flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between p-4 bg-white border-b">
+       <header className="flex items-center justify-between p-4 bg-white border-b">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
           <Link href="/home">
             <ChevronLeft className="h-6 w-6 text-muted-foreground" />
@@ -278,35 +299,36 @@ export default function BuyPage() {
                 <span className="text-xs text-green-600 font-semibold">+6% Bonus</span>
             </TabsTrigger>
           </TabsList>
+          
+          <TabsContent value="otp-upi" className="mt-4">
+            <Tabs defaultValue="small" className="w-full" onValueChange={setActiveSubTab}>
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="small">Small Amount</TabsTrigger>
+                    <TabsTrigger value="high">High Amount</TabsTrigger>
+                </TabsList>
+                <TabsContent value="small" className="mt-0">
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} />
+                </TabsContent>
+                <TabsContent value="high" className="mt-0">
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} />
+                </TabsContent>
+            </Tabs>
+          </TabsContent>
+          <TabsContent value="bank" className="mt-4">
+            <Tabs defaultValue="small" className="w-full" onValueChange={setActiveSubTab}>
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="small">Small Amount</TabsTrigger>
+                    <TabsTrigger value="high">High Amount</TabsTrigger>
+                </TabsList>
+                <TabsContent value="small" className="mt-0">
+                     <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} />
+                </TabsContent>
+                <TabsContent value="high" className="mt-0">
+                     <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} />
+                </TabsContent>
+            </Tabs>
+          </TabsContent>
 
-          <TabsContent value="otp-upi">
-            <Tabs defaultValue="small" className="w-full mt-4" onValueChange={setActiveSubTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="small">Small Amount</TabsTrigger>
-                    <TabsTrigger value="high">High Amount</TabsTrigger>
-                </TabsList>
-                <TabsContent value="small">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallOptions} bonusPercentage={bonusPercentage} />
-                </TabsContent>
-                <TabsContent value="high">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={highOptions} bonusPercentage={bonusPercentage} />
-                </TabsContent>
-            </Tabs>
-          </TabsContent>
-          <TabsContent value="bank">
-            <Tabs defaultValue="small" className="w-full mt-4" onValueChange={setActiveSubTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="small">Small Amount</TabsTrigger>
-                    <TabsTrigger value="high">High Amount</TabsTrigger>
-                </TabsList>
-                <TabsContent value="small">
-                     <PurchaseGrid onBuyClick={handleBuyClick} options={smallOptions} bonusPercentage={bonusPercentage} />
-                </TabsContent>
-                <TabsContent value="high">
-                     <PurchaseGrid onBuyClick={handleBuyClick} options={highOptions} bonusPercentage={bonusPercentage} />
-                </TabsContent>
-            </Tabs>
-          </TabsContent>
         </Tabs>
       </main>
 
