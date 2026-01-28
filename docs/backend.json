@@ -229,6 +229,48 @@
         }
       },
       "required": ["userId", "amount", "withdrawalMethod", "status", "createdAt", "orderId", "userNumericId", "userPhoneNumber"]
+    },
+    "ChatRequest": {
+      "title": "Chat Request",
+      "description": "Represents a user's request to chat with a human agent.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the user who requested the chat, if they are logged in."
+        },
+        "userNumericId": {
+          "type": "string",
+          "description": "The numeric ID of the user, if they are logged in."
+        },
+        "enteredIdentifier": {
+          "type": "string",
+          "description": "The phone number or UID the user entered to start the chat."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the chat request.",
+          "enum": ["pending", "active", "closed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the chat request was created."
+        },
+        "chatHistory": {
+          "type": "array",
+          "description": "The full conversation history with the AI before escalating.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "isUser": { "type": "boolean" },
+              "timestamp": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["enteredIdentifier", "status", "createdAt", "chatHistory"]
     }
   },
   "auth": {
@@ -258,6 +300,12 @@
         "$ref": "#/entities/SellOrder"
       },
       "description": "Stores user orders to sell LGB."
+    },
+    "/chatRequests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/ChatRequest"
+      },
+      "description": "Stores user requests to chat with a human agent."
     }
   }
 }

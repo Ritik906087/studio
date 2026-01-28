@@ -51,7 +51,7 @@ export default function HelpPage() {
   const [phone, setPhone] = useState('');
   const [phoneError, setPhoneError] = useState('');
 
-  const [isVerifying, setIsVerifying] = useState(isVerifying);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [chatStarted, setChatStarted] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState('');
@@ -59,6 +59,8 @@ export default function HelpPage() {
   const [attachment, setAttachment] = useState<StorableAttachment | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [enteredIdentifier, setEnteredIdentifier] = useState('');
+
 
   const userProfileRef = useMemo(() => {
     if (!user || !firestore) return null;
@@ -114,20 +116,24 @@ export default function HelpPage() {
   }, [messages]);
 
   const handleStartChat = () => {
+    let identifier = '';
     if (user) {
         if (uid.length !== 8 || !/^\d+$/.test(uid)) {
             setUidError('Please enter a valid 8-digit UID.');
             return;
         }
         setUidError('');
+        identifier = uid;
     } else {
         if (phone.length !== 10 || !/^[6-9]\d{9}$/.test(phone)) {
             setPhoneError('Please enter a valid 10-digit mobile number.');
             return;
         }
         setPhoneError('');
+        identifier = phone;
     }
 
+    setEnteredIdentifier(identifier);
     setIsVerifying(true);
     setTimeout(() => {
       setIsVerifying(false);
@@ -150,15 +156,19 @@ export default function HelpPage() {
       userName: userProfile?.displayName ?? 'You'
     };
 
-    setMessages(prev => [...prev, newUserMessage]);
+    const updatedMessages = [...messages, newUserMessage];
+    setMessages(updatedMessages);
     setCurrentMessage('');
     setAttachment(null);
     setIsSending(true);
 
     try {
-      const input: HelpChatInput = user 
-          ? { prompt: currentMessage, uid: user.uid }
-          : { prompt: currentMessage };
+      const input: HelpChatInput = { 
+          prompt: currentMessage, 
+          uid: user?.uid,
+          chatHistory: updatedMessages,
+          enteredIdentifier: enteredIdentifier,
+      };
             
       const response = await helpChat(input);
       const aiResponse: Message = { text: response, isUser: false, timestamp: Date.now() };
@@ -385,5 +395,3 @@ export default function HelpPage() {
     </div>
   );
 }
-
-    

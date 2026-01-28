@@ -25,6 +25,14 @@ service cloud.firestore {
       allow write: if false; 
     }
     
+    match /chatRequests/{requestId} {
+      // Any authenticated user can create a request to talk to an agent.
+      allow create: if request.auth != null;
+      // Unsafe: allows any authenticated user to read/update.
+      // Needed for the admin panel to function without a proper admin backend.
+      allow read, update: if true;
+    }
+
     // The admin panel reads all user documents and all sell orders across all users.
     // The secure rules above will break this functionality.
     // To maintain admin functionality, you would need insecure rules like:

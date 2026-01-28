@@ -13,13 +13,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useCollection, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2, Clock, History, CheckCircle, Download, XCircle } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Loader2, Clock, History, CheckCircle, Download, XCircle, MessageSquare } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp, runTransaction, limit, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -28,6 +29,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -65,6 +67,16 @@ type SellOrder = {
     withdrawalMethod: { name: string, upiId: string };
     createdAt: Timestamp;
     failureReason?: string;
+}
+
+type ChatRequest = {
+    id: string;
+    userId?: string;
+    userNumericId?: string;
+    enteredIdentifier: string;
+    status: 'pending' | 'active' | 'closed';
+    createdAt: Timestamp;
+    chatHistory: { text: string; isUser: boolean; timestamp: number }[];
 }
 
 const CountdownTimer = ({ expiryTimestamp }: { expiryTimestamp: Timestamp }) => {
@@ -714,6 +726,132 @@ function HistoryUsersGrid({ users, loading, error }: { users: UserProfile[], loa
     );
 }
 
+function ChatHistoryDialog({ request }: { request: ChatRequest }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [open, setOpen] = useState(false);
+
+    const handleUpdateStatus = async (status: 'active' | 'closed') => {
+        if (!firestore) return;
+        setIsUpdating(true);
+        try {
+            const requestRef = doc(firestore, 'chatRequests', request.id);
+            await updateDoc(requestRef, { status: status });
+            toast({ title: `Chat status updated to ${status}` });
+            setOpen(false);
+        } catch (e) {
+            toast({ variant: 'destructive', title: 'Failed to update status' });
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-bold">CHAT</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Chat Request</DialogTitle>
+                    <DialogDescription>
+                        User: {request.userNumericId || request.enteredIdentifier}
+                    </DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="h-96 w-full rounded-md border bg-secondary/50 p-4 my-4">
+                    {request.chatHistory.map((msg, index) => (
+                        <div key={index} className={cn("flex items-end gap-2 mb-3", msg.isUser ? "justify-end" : "justify-start")}>
+                            {!msg.isUser && (
+                                <Avatar className="h-8 w-8">
+                                    <AvatarFallback className="bg-primary text-primary-foreground font-bold">LG</AvatarFallback>
+                                </Avatar>
+                            )}
+                            <div className="flex flex-col max-w-[80%]">
+                                <div className={cn("rounded-2xl px-3 py-2", msg.isUser ? "bg-primary text-primary-foreground rounded-br-none" : "bg-white rounded-bl-none shadow-sm")}>
+                                    <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                                </div>
+                                <p className={cn("text-xs text-muted-foreground px-1 pt-1", msg.isUser ? "text-right" : "text-left")}>
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                </ScrollArea>
+                <DialogFooter className="sm:justify-between">
+                     <p className="text-xs text-muted-foreground">This is a read-only history.</p>
+                     <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => handleUpdateStatus('closed')} disabled={isUpdating}>Close Chat</Button>
+                        <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleUpdateStatus('active')} disabled={isUpdating}>
+                            {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : "Accept & Chat"}
+                        </Button>
+                    </div>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+
+function LiveChatTabContent() {
+    const firestore = useFirestore();
+    const chatRequestsQuery = useMemo(() => firestore ? query(collection(firestore, 'chatRequests'), where('status', '==', 'pending'), orderBy('createdAt', 'desc')) : null, [firestore]);
+    const { data: chatRequests, loading, error } = useCollection<ChatRequest>(chatRequestsQuery);
+
+    if (loading) {
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
+            </div>
+        );
+    }
+    
+    if (error) {
+        return (
+            <Card className="bg-destructive/10">
+                <CardHeader>
+                    <CardTitle className="text-destructive">Error Fetching Chat Requests</CardTitle>
+                    <CardDescription className="text-destructive/80">
+                        Could not retrieve chat data. Check security rules.
+                    </CardDescription>
+                </CardHeader>
+            </Card>
+        )
+    }
+
+    if (!chatRequests || chatRequests.length === 0) {
+        return (
+            <Card>
+                <CardContent className="p-8 text-center text-muted-foreground">
+                    No pending live chat requests.
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {chatRequests.map(request => (
+                <Card key={request.id} className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="text-base">New Chat Request</CardTitle>
+                        <CardDescription>
+                            {new Date(request.createdAt.toDate()).toLocaleString()}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow space-y-2 text-sm">
+                        <p><strong>User UID:</strong> {request.userNumericId || 'N/A'}</p>
+                        <p><strong>Identifier:</strong> {request.enteredIdentifier}</p>
+                    </CardContent>
+                    <CardFooter>
+                        <ChatHistoryDialog request={request} />
+                    </CardFooter>
+                </Card>
+            ))}
+        </div>
+    );
+}
+
 export default function AdminDashboardPage() {
     const router = useRouter();
     const firestore = useFirestore();
@@ -778,7 +916,7 @@ export default function AdminDashboardPage() {
       </header>
       <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
         <Tabs defaultValue="dashboard" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 md:w-auto md:inline-flex">
+          <TabsList className="grid w-full grid-cols-6 md:w-auto md:inline-flex">
             <TabsTrigger value="dashboard">
                 <LayoutDashboard className="mr-2" />
                 Dashboard
@@ -790,6 +928,10 @@ export default function AdminDashboardPage() {
              <TabsTrigger value="withdrawals">
                 <Banknote className="mr-2"/>
                 Withdrawals
+            </TabsTrigger>
+            <TabsTrigger value="live-chat">
+                <MessageSquare className="mr-2"/>
+                Live Chat
             </TabsTrigger>
             <TabsTrigger value="history">
                 <History className="mr-2"/>
@@ -842,6 +984,9 @@ export default function AdminDashboardPage() {
           </TabsContent>
            <TabsContent value="withdrawals" className="mt-4">
                 <WithdrawalsTabContent />
+            </TabsContent>
+            <TabsContent value="live-chat" className="mt-4">
+              <LiveChatTabContent />
             </TabsContent>
             <TabsContent value="history" className="mt-4">
                 <div className="space-y-4">
