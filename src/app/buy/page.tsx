@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -35,34 +35,29 @@ const purchaseOptions = [
 const smallPurchaseOptions = [...purchaseOptions].sort((a, b) => a.amount - b.amount);
 const highPurchaseOptions = [...purchaseOptions].sort((a, b) => b.amount - a.amount);
 
+
 const upiMethods = [
     { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae" },
     { name: "Paytm", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8" },
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
 ];
 
-const PurchaseGrid = ({ onBuyClick, options }: { onBuyClick: (amount: number) => void; options: typeof purchaseOptions }) => {
-  const [visibleOptions, setVisibleOptions] = useState(options);
-
-  useEffect(() => {
-    // Reset the options when the parent component changes them (e.g., switching tabs)
-    setVisibleOptions(options);
-  }, [options]);
-
-  const handleBuy = (option: (typeof purchaseOptions)[0]) => {
-    // Optimistically hide the card
-    setVisibleOptions(prev => prev.filter(o => o.id !== option.id));
-
-    // Proceed with the buy action after a short delay
-    setTimeout(() => {
-      onBuyClick(option.amount);
-    }, 100);
-  };
+const PurchaseGrid = ({ onBuyClick, options }: { onBuyClick: (option: (typeof purchaseOptions)[0]) => void; options: typeof purchaseOptions }) => {
+  
+  if (options.length === 0) {
+    return (
+      <Card className="rounded-xl shadow-sm overflow-hidden bg-white mt-4">
+          <CardContent className="p-8 text-center text-muted-foreground flex flex-col items-center justify-center h-32">
+              <p className="font-semibold">All orders for this amount have been taken.</p>
+              <p className="text-xs mt-1">Please check other amounts or try again later.</p>
+          </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
-      {visibleOptions.length > 0 ? (
-        visibleOptions.map((option) => {
+        {options.map((option) => {
           const totalLGB = option.amount + (option.amount * (option.bonus / 100));
           return (
             <Card key={option.id} className="rounded-xl shadow-sm overflow-hidden bg-white animate-fade-in">
@@ -76,21 +71,13 @@ const PurchaseGrid = ({ onBuyClick, options }: { onBuyClick: (amount: number) =>
                         <p className="text-xs text-green-600 font-semibold">You Get: {option.amount}+{option.bonus}%={totalLGB.toLocaleString('en-IN')}</p>
                      </div>
                  </div>
-                 <Button onClick={() => handleBuy(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
+                 <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
                     Buy
                  </Button>
               </div>
             </Card>
           );
-        })
-      ) : (
-        <Card className="rounded-xl shadow-sm overflow-hidden bg-white mt-4">
-            <CardContent className="p-8 text-center text-muted-foreground flex flex-col items-center justify-center h-32">
-                <p className="font-semibold">All orders for this amount have been taken.</p>
-                <p className="text-xs mt-1">Please check other amounts or try again later.</p>
-            </CardContent>
-        </Card>
-      )}
+        })}
     </div>
   );
 };
@@ -99,40 +86,44 @@ const PurchaseGrid = ({ onBuyClick, options }: { onBuyClick: (amount: number) =>
 export default function BuyPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('otp-upi');
+  const [activeSubTab, setActiveSubTab] = useState('small');
+  
+  // State for optimistic UI updates
+  const [visibleSmallUpiOptions, setVisibleSmallUpiOptions] = useState(smallPurchaseOptions);
+  const [visibleHighUpiOptions, setVisibleHighUpiOptions] = useState(highPurchaseOptions);
+  const [visibleSmallBankOptions, setVisibleSmallBankOptions] = useState(smallPurchaseOptions);
+  const [visibleHighBankOptions, setVisibleHighBankOptions] = useState(highPurchaseOptions);
+
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const handleBuyClick = async (amount: number) => {
-    if (!user || !firestore) {
+  const handleBuyClick = (option: (typeof purchaseOptions)[0]) => {
+     if (!user || !firestore) {
       toast({ variant: 'destructive', title: 'Please log in to continue.' });
       return;
     }
-    setSelectedAmount(amount);
-    
-    const orderId = `LGPAY${Date.now()}`;
 
-    if (activeTab === 'bank') {
-      try {
-        const ordersRef = collection(firestore, 'users', user.uid, 'orders');
-        const newOrderRef = await addDoc(ordersRef, {
-          userId: user.uid,
-          amount,
-          orderId,
-          status: 'pending_payment',
-          createdAt: serverTimestamp(),
-          paymentType: 'bank',
-        });
-        router.push(`/buy/confirm/${newOrderRef.id}?type=bank`);
-      } catch (error) {
-        console.error('Error creating order: ', error);
-        toast({ variant: 'destructive', title: 'Could not create order.' });
+    // Optimistically hide the card
+    if (activeTab === 'otp-upi') {
+      if (activeSubTab === 'small') {
+        setVisibleSmallUpiOptions(prev => prev.filter(o => o.id !== option.id));
+      } else {
+        setVisibleHighUpiOptions(prev => prev.filter(o => o.id !== option.id));
       }
-    } else {
-      setIsDialogOpen(true);
+    } else { // bank tab
+       if (activeSubTab === 'small') {
+        setVisibleSmallBankOptions(prev => prev.filter(o => o.id !== option.id));
+      } else {
+        setVisibleHighBankOptions(prev => prev.filter(o => o.id !== option.id));
+      }
     }
+    
+    // Set amount and open dialog
+    setSelectedAmount(option.amount);
+    setIsDialogOpen(true);
   };
 
   const handleUpiSelect = async (methodName: string) => {
@@ -140,6 +131,7 @@ export default function BuyPage() {
     setIsDialogOpen(false);
     
     const orderId = `LGPAY${Date.now()}`;
+    const paymentType = activeTab === 'bank' ? 'bank' : 'upi';
 
     try {
       const ordersRef = collection(firestore, 'users', user.uid, 'orders');
@@ -149,10 +141,10 @@ export default function BuyPage() {
         orderId,
         status: 'pending_payment',
         createdAt: serverTimestamp(),
-        paymentType: 'upi',
+        paymentType: paymentType,
         paymentProvider: methodName,
       });
-      router.push(`/buy/confirm/${newOrderRef.id}?type=upi&provider=${methodName}`);
+      router.push(`/buy/confirm/${newOrderRef.id}?type=${paymentType}&provider=${methodName}`);
     } catch (error) {
       console.error('Error creating order: ', error);
       toast({ variant: 'destructive', title: 'Could not create order.' });
@@ -189,30 +181,30 @@ export default function BuyPage() {
           </TabsList>
 
           <TabsContent value="otp-upi">
-            <Tabs defaultValue="small" className="w-full mt-4">
+            <Tabs defaultValue="small" className="w-full mt-4" onValueChange={setActiveSubTab}>
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="small">Small Amount</TabsTrigger>
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={visibleSmallUpiOptions} />
                 </TabsContent>
                 <TabsContent value="high">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={visibleHighUpiOptions} />
                 </TabsContent>
             </Tabs>
           </TabsContent>
           <TabsContent value="bank">
-            <Tabs defaultValue="small" className="w-full mt-4">
+            <Tabs defaultValue="small" className="w-full mt-4" onValueChange={setActiveSubTab}>
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="small">Small Amount</TabsTrigger>
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={visibleSmallBankOptions} />
                 </TabsContent>
                 <TabsContent value="high">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={visibleHighBankOptions} />
                 </TabsContent>
             </Tabs>
           </TabsContent>
