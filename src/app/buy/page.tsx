@@ -131,7 +131,7 @@ export default function BuyPage() {
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
   
   const [smallOptions, setSmallOptions] = useState(() => [...smallPurchaseOptions].sort((a,b) => a.amount - b.amount));
-  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => a.amount - b.amount));
+  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => b.amount - a.amount));
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
 
 
@@ -160,15 +160,16 @@ export default function BuyPage() {
         }
         
         const availableToAdd = initialOpts.filter(o => !newOpts.find(opt => opt.id === o.id));
-        
+        let newItem;
         if (availableToAdd.length > 0) {
-          const newItem = availableToAdd[Math.floor(Math.random() * availableToAdd.length)];
-          newOpts.unshift(newItem);
+          newItem = availableToAdd[Math.floor(Math.random() * availableToAdd.length)];
         } else {
+            // Fallback if all options are already shown
             const newId = Math.max(...initialOpts.map(o => o.id)) + 1 + Math.random();
             const randomExistingOption = initialOpts[Math.floor(Math.random() * initialOpts.length)];
-            newOpts.unshift({ ...randomExistingOption, id: newId });
+            newItem = { ...randomExistingOption, id: newId };
         }
+        newOpts.unshift(newItem);
         
         newOpts.sort((a, b) => sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount);
         
@@ -176,7 +177,7 @@ export default function BuyPage() {
       });
     };
 
-    const interval = setInterval(updateOptions, Math.random() * 1500 + 1500);
+    const interval = setInterval(updateOptions, 2000);
     
     return () => clearInterval(interval);
   }, [activeSubTab]);
