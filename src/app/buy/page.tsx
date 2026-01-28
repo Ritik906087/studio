@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -34,17 +35,17 @@ import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const smallPurchaseOptions = [
-  { id: 1, amount: 500, bonus: 5 },
-  { id: 2, amount: 1000, bonus: 5 },
-  { id: 3, amount: 3000, bonus: 5 },
-  { id: 4, amount: 5000, bonus: 6 },
+  { id: 1, amount: 500 },
+  { id: 2, amount: 1000 },
+  { id: 3, amount: 3000 },
+  { id: 4, amount: 5000 },
 ];
 
 const highPurchaseOptions = [
-  { id: 5, amount: 10000, bonus: 6 },
-  { id: 6, amount: 20000, bonus: 6 },
-  { id: 7, amount: 50000, bonus: 7 },
-  { id: 8, amount: 100000, bonus: 7 },
+  { id: 5, amount: 10000 },
+  { id: 6, amount: 20000 },
+  { id: 7, amount: 50000 },
+  { id: 8, amount: 100000 },
 ];
 
 const upiMethods = [
@@ -53,49 +54,44 @@ const upiMethods = [
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
 ];
 
-const PurchaseGrid = ({ onBuyClick, options: initialOptions }: { onBuyClick: (option: any) => void; options: any[] }) => {
+const PurchaseGrid = ({ onBuyClick, options: initialOptions, activeTab }: { onBuyClick: (option: any) => void; options: any[]; activeTab: string }) => {
     
-  const [options, setOptions] = useState(() => initialOptions.map(o => ({...o, key: o.id})));
+  const bonusPercentage = activeTab === 'bank' ? 6 : 5;
+  const [options, setOptions] = useState(() => initialOptions.map(o => ({...o, bonus: bonusPercentage, key: o.id})));
 
-  // Interval for updating the list (add/remove/flicker)
+  // Interval for updating the list (add/remove)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const id = setInterval(() => {
       setOptions(prevOptions => {
         if (prevOptions.length === 0) return prevOptions;
 
-        const action = Math.random();
         let newOptions = [...prevOptions];
-
-        if (action < 0.2 && newOptions.length > 3) { // 20% chance to remove
-            const indexToRemove = Math.floor(Math.random() * newOptions.length);
-            newOptions.splice(indexToRemove, 1);
-        } else if (action < 0.7) { // 50% chance to add (0.7-0.2)
-            const newId = Date.now();
-            const baseAmount = initialOptions[Math.floor(Math.random() * initialOptions.length)].amount;
-            const newAmount = baseAmount + (Math.floor(Math.random() * 10) - 5) * 100;
-            if (newAmount > 0) {
-                newOptions.unshift({
-                    id: newId, key: newId,
-                    amount: newAmount,
-                    bonus: initialOptions[0].bonus + (Math.random() > 0.8 ? 1 : 0)
-                });
+        
+        // 50% chance to do something
+        if (Math.random() < 0.5) {
+            // Remove a random item (if more than 3)
+            if (newOptions.length > 3) {
+                 const indexToRemove = Math.floor(Math.random() * newOptions.length);
+                 newOptions.splice(indexToRemove, 1);
             }
-        } else { // 30% chance to flicker
-            const indexToFlicker = Math.floor(Math.random() * newOptions.length);
-            const originalBonus = newOptions[indexToFlicker].bonus;
-            newOptions[indexToFlicker].bonus = originalBonus + 1;
-            setTimeout(() => {
-                setOptions(currentOpts => currentOpts.map(opt => 
-                    opt.key === newOptions[indexToFlicker].key ? {...opt, bonus: originalBonus} : opt
-                ));
-            }, 400);
+
+            // Add a new random item from initialOptions
+            const baseOption = initialOptions[Math.floor(Math.random() * initialOptions.length)];
+            const newId = Date.now();
+            newOptions.unshift({
+                ...baseOption,
+                id: newId,
+                key: newId,
+                bonus: bonusPercentage,
+            });
         }
-        return newOptions;
+        
+        return newOptions.slice(0, 8); // Keep list size reasonable
       });
-    }, 4500); // every 4.5 seconds
+    }, 3500); // every 3.5 seconds
     return () => clearInterval(id);
-  }, [initialOptions]);
+  }, [initialOptions, bonusPercentage]);
 
   if (options.length === 0) {
     return (
@@ -270,10 +266,10 @@ export default function BuyPage() {
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} activeTab={activeTab} />
                 </TabsContent>
                 <TabsContent value="high">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} activeTab={activeTab} />
                 </TabsContent>
             </Tabs>
           </TabsContent>
@@ -284,10 +280,10 @@ export default function BuyPage() {
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={smallPurchaseOptions} activeTab={activeTab} />
                 </TabsContent>
                 <TabsContent value="high">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={highPurchaseOptions} activeTab={activeTab} />
                 </TabsContent>
             </Tabs>
           </TabsContent>
@@ -335,3 +331,5 @@ export default function BuyPage() {
     </div>
   );
 }
+
+    
