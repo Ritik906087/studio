@@ -37,8 +37,8 @@ import { cn } from '@/lib/utils';
 
 
 const purchaseConfig = {
-  100: 2, 200: 3, 300: 3, 400: 2, 500: 3, 600: 4, 700: 2, 800: 1, 1000: 2,
-  2000: 1, 3000: 1, 4000: 3, 5000: 2, 6000: 1, 7000: 1, 8000: 1, 10000: 1
+  100: 5, 200: 6, 300: 7, 400: 5, 500: 6, 600: 5, 700: 4, 800: 3, 1000: 4,
+  2000: 3, 3000: 3, 4000: 5, 5000: 4, 6000: 3, 7000: 2, 8000: 3, 10000: 2
 };
 
 
@@ -130,8 +130,11 @@ export default function BuyPage() {
   const [isInProgressDialogOpen, setIsInProgressDialogOpen] = useState(false);
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
   
-  const [smallOptions, setSmallOptions] = useState(() => [...smallPurchaseOptions].sort((a,b) => a.amount - b.amount));
-  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => b.amount - a.amount));
+  const memoizedSmallPurchaseOptions = useMemo(() => smallPurchaseOptions, []);
+  const memoizedHighPurchaseOptions = useMemo(() => highPurchaseOptions, []);
+
+  const [smallOptions, setSmallOptions] = useState(() => [...memoizedSmallPurchaseOptions].sort((a,b) => a.amount - b.amount));
+  const [highOptions, setHighOptions] = useState(() => [...memoizedHighPurchaseOptions].sort((a,b) => b.amount - a.amount));
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
 
 
@@ -145,42 +148,46 @@ export default function BuyPage() {
 
   const { data: inProgressBuyOrders } = useCollection(inProgressBuyOrdersQuery);
   
-  useEffect(() => {
-    const updateOptions = () => {
-      const isSmallTab = activeSubTab === 'small';
-      const setter = isSmallTab ? setSmallOptions : setHighOptions;
-      const initialOpts = isSmallTab ? smallPurchaseOptions : highPurchaseOptions;
-      const sortOrder = isSmallTab ? 'asc' : 'desc';
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const isSmallTab = activeSubTab === 'small';
+            const setter = isSmallTab ? setSmallOptions : setHighOptions;
+            const initialOpts = isSmallTab ? memoizedSmallPurchaseOptions : memoizedHighPurchaseOptions;
+            const sortFn = isSmallTab 
+                ? (a: {amount: number}, b: {amount: number}) => a.amount - b.amount 
+                : (a: {amount: number}, b: {amount: number}) => b.amount - a.amount;
 
-      setter(currentOpts => {
-        let newOpts = [...currentOpts];
-        if (newOpts.length > 1) {
-          const indexToRemove = Math.floor(Math.random() * newOpts.length);
-          newOpts.splice(indexToRemove, 1);
-        }
-        
-        const availableToAdd = initialOpts.filter(o => !newOpts.find(opt => opt.id === o.id));
-        let newItem;
-        if (availableToAdd.length > 0) {
-          newItem = availableToAdd[Math.floor(Math.random() * availableToAdd.length)];
-        } else {
-            // Fallback if all options are already shown
-            const newId = Math.max(...initialOpts.map(o => o.id)) + 1 + Math.random();
-            const randomExistingOption = initialOpts[Math.floor(Math.random() * initialOpts.length)];
-            newItem = { ...randomExistingOption, id: newId };
-        }
-        newOpts.unshift(newItem);
-        
-        newOpts.sort((a, b) => sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount);
-        
-        return newOpts;
-      });
-    };
+            setter(currentOpts => {
+                let newOpts = [...currentOpts];
+                
+                const itemsToChange = Math.floor(Math.random() * 3) + 1; // 1 to 3 items
+                
+                const indicesToRemove = new Set<number>();
+                while (indicesToRemove.size < itemsToChange && newOpts.length > indicesToRemove.size) {
+                    indicesToRemove.add(Math.floor(Math.random() * newOpts.length));
+                }
 
-    const interval = setInterval(updateOptions, 2000);
-    
-    return () => clearInterval(interval);
-  }, [activeSubTab]);
+                newOpts = newOpts.filter((_, index) => !indicesToRemove.has(index));
+
+                const availableToAdd = initialOpts.filter(o => !newOpts.find(opt => opt.id === o.id));
+                
+                for (let i = 0; i < indicesToRemove.size && availableToAdd.length > 0; i++) {
+                    const newItemIndex = Math.floor(Math.random() * availableToAdd.length);
+                    const newItem = availableToAdd.splice(newItemIndex, 1)[0];
+                    if (newItem) {
+                        newOpts.push(newItem);
+                    }
+                }
+                
+                newOpts.sort(sortFn);
+                
+                return newOpts;
+            });
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [activeSubTab, memoizedSmallPurchaseOptions, memoizedHighPurchaseOptions]);
+
 
   useEffect(() => {
     const highlightInterval = setInterval(() => {
