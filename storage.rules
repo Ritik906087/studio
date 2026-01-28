@@ -3,24 +3,22 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Default rule: By default, nobody can write. 
-    // Public read is allowed for app assets like logos and user avatars.
+    // डिफ़ॉल्ट नियम: सुरक्षा के लिए सभी रीड और राइट को डिफ़ॉल्ट रूप से ब्लॉक करें।
     match /{allPaths=**} {
-      allow read;
-      allow write: if false;
+      allow read, write: if false;
     }
 
-    // AVATARS
-    // Users can only write to their own avatar folder.
-    // Reading is public (covered by the rule above).
+    // Avatars: कोई भी देख सकता है, लेकिन सिर्फ़ मालिक ही लिख सकता है।
+    // इससे कोई भी प्रोफ़ाइल फ़ोटो देख सकता है, लेकिन केवल यूज़र ही अपनी फ़ोटो बदल सकता है।
     match /avatars/{userId}/{allPaths=**} {
+      allow read;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // SCREENSHOTS
-    // Users can only write payment screenshots to their own order folder.
-    // Reading is public so admins can review them.
+    // Screenshots: एडमिन की समीक्षा के लिए कोई भी पढ़ सकता है, लेकिन केवल मालिक ही लिख सकता है।
+    // इससे एडमिन पैनल सबमिट किए गए स्क्रीनशॉट देख सकता है।
     match /screenshots/{userId}/{orderId}/{allPaths=**} {
+      allow read;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
   }
