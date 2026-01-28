@@ -792,11 +792,17 @@ function ChatHistoryDialog({ request }: { request: ChatRequest }) {
     };
 
     const expiryTimestamp = new Timestamp(request.createdAt.seconds + 10 * 60, request.createdAt.nanoseconds);
+    const isPending = request.status === 'pending';
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button className="w-full bg-green-500 hover:bg-green-600 text-white font-bold">CHAT</Button>
+                <Button className={cn(
+                    "w-full font-bold",
+                    isPending ? "bg-green-500 hover:bg-green-600 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
+                )}>
+                    {isPending ? "CHAT" : "VIEW ACTIVE CHAT"}
+                </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg p-0">
                 <DialogHeader className="p-4 border-b">
@@ -852,12 +858,16 @@ function ChatHistoryDialog({ request }: { request: ChatRequest }) {
 
 function LiveChatTabContent() {
     const firestore = useFirestore();
-    const chatRequestsQuery = useMemo(() => firestore ? query(collection(firestore, 'chatRequests'), where('status', '==', 'pending')) : null, [firestore]);
+    const chatRequestsQuery = useMemo(() => firestore ? query(collection(firestore, 'chatRequests'), where('status', 'in', ['pending', 'active'])) : null, [firestore]);
     const { data: unsortedChatRequests, loading, error } = useCollection<ChatRequest>(chatRequestsQuery);
 
     const chatRequests = useMemo(() => {
         if (!unsortedChatRequests) return [];
-        return [...unsortedChatRequests].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+        return [...unsortedChatRequests].sort((a, b) => {
+            if (a.status === 'pending' && b.status !== 'pending') return -1;
+            if (a.status !== 'pending' && b.status === 'pending') return 1;
+            return b.createdAt.seconds - a.createdAt.seconds;
+        });
     }, [unsortedChatRequests]);
 
     if (loading) {
@@ -890,7 +900,7 @@ function LiveChatTabContent() {
         return (
             <Card>
                 <CardContent className="p-8 text-center text-muted-foreground">
-                    No pending live chat requests.
+                    No pending or active live chat requests.
                 </CardContent>
             </Card>
         );
@@ -898,28 +908,31 @@ function LiveChatTabContent() {
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {chatRequests.map(request => (
-                <Card key={request.id} className="flex flex-col">
-                    <CardHeader>
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <CardTitle className="text-base">New Chat Request</CardTitle>
-                                <CardDescription>
-                                    {new Date(request.createdAt.toDate()).toLocaleString()}
-                                </CardDescription>
+            {chatRequests.map(request => {
+                 const isPending = request.status === 'pending';
+                 return (
+                    <Card key={request.id} className={cn("flex flex-col", !isPending && "bg-blue-50 border-blue-200")}>
+                        <CardHeader>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <CardTitle className="text-base">{isPending ? "New Chat Request" : "Active Chat"}</CardTitle>
+                                    <CardDescription>
+                                        {new Date(request.createdAt.toDate()).toLocaleString()}
+                                    </CardDescription>
+                                </div>
+                                {isPending && <CountdownTimer expiryTimestamp={new Timestamp(request.createdAt.seconds + 10 * 60, request.createdAt.nanoseconds)} />}
                             </div>
-                            <CountdownTimer expiryTimestamp={new Timestamp(request.createdAt.seconds + 10 * 60, request.createdAt.nanoseconds)} />
-                        </div>
-                    </CardHeader>
-                    <CardContent className="flex-grow space-y-2 text-sm">
-                        <p><strong>User UID:</strong> {request.userNumericId || 'N/A'}</p>
-                        <p><strong>Identifier:</strong> {request.enteredIdentifier}</p>
-                    </CardContent>
-                    <CardFooter>
-                        <ChatHistoryDialog request={request} />
-                    </CardFooter>
-                </Card>
-            ))}
+                        </CardHeader>
+                        <CardContent className="flex-grow space-y-2 text-sm">
+                            <p><strong>User UID:</strong> {request.userNumericId || 'N/A'}</p>
+                            <p><strong>Identifier:</strong> {request.enteredIdentifier}</p>
+                        </CardContent>
+                        <CardFooter>
+                            <ChatHistoryDialog request={request} />
+                        </CardFooter>
+                    </Card>
+                 )
+            })}
         </div>
     );
 }
@@ -1102,5 +1115,3 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
-    
