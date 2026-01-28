@@ -195,6 +195,7 @@ function PaymentDetailsContent() {
     }, [allPaymentMethods, type]);
 
     const copyToClipboard = (text: string) => {
+        if (!text) return;
         navigator.clipboard.writeText(text).then(() => {
             toast({ title: 'Copied to clipboard!' });
         });
@@ -414,7 +415,18 @@ function PaymentDetailsContent() {
                         <div className="border-t border-dashed -mx-4 my-4"></div>
                         <div className="flex justify-between items-center pt-0">
                             <span className="text-muted-foreground text-base">Amount to be paid</span>
-                            <span className="font-bold text-2xl text-primary">₹{order?.amount}</span>
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold text-2xl text-primary">₹{order?.amount}</span>
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8" 
+                                    onClick={() => copyToClipboard(order?.amount?.toString() ?? '')}
+                                    disabled={isConfirming || isUpdatingProvider}
+                                >
+                                    <Copy className="h-5 w-5 text-muted-foreground" />
+                                </Button>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
@@ -487,5 +499,7 @@ export default function ConfirmPage() {
     </Suspense>
   )
 }
+
+    
 
     
