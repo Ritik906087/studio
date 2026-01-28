@@ -84,7 +84,7 @@ const PurchaseGrid = ({ onBuyClick, options, bonusPercentage }: { onBuyClick: (o
               layout
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+              exit={{ opacity: 0, y: -20, transition: { duration: 0.3 } }}
               transition={{ type: 'spring', stiffness: 200, damping: 25 }}
             >
               <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
@@ -131,7 +131,7 @@ export default function BuyPage() {
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
   
   const [smallOptions, setSmallOptions] = useState(() => [...smallPurchaseOptions].sort((a,b) => a.amount - b.amount));
-  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => b.amount - a.amount));
+  const [highOptions, setHighOptions] = useState(() => [...highPurchaseOptions].sort((a,b) => a.amount - b.amount).reverse());
 
   const inProgressBuyOrdersQuery = useMemo(() => {
     if (!user || !firestore) return null;
@@ -145,31 +145,49 @@ export default function BuyPage() {
   
   useEffect(() => {
     const interval = setInterval(() => {
-      const setter = activeSubTab === 'small' ? setSmallOptions : setHighOptions;
-      const initialOpts = activeSubTab === 'small' ? smallPurchaseOptions : highPurchaseOptions;
+        if (activeSubTab === 'small') {
+            setSmallOptions(prevOptions => {
+                let newOpts = [...prevOptions];
+                const itemsToRemove = Math.floor(Math.random() * 2) + 2; // 2 or 3
 
-      setter(prevOptions => {
-        let newOpts = [...prevOptions];
+                for (let i = 0; i < itemsToRemove && newOpts.length > 0; i++) {
+                    const removeIndex = Math.floor(Math.random() * newOpts.length);
+                    newOpts.splice(removeIndex, 1);
+                }
 
-        // Remove 2-3 items from anywhere
-        const itemsToRemove = Math.floor(Math.random() * 2) + 2;
-        for (let i = 0; i < itemsToRemove && newOpts.length > 0; i++) {
-            const removeIndex = Math.floor(Math.random() * newOpts.length);
-            newOpts.splice(removeIndex, 1);
+                const availableToAdd = smallPurchaseOptions.filter(o => !newOpts.some(opt => opt.id === o.id));
+
+                for (let i = 0; i < itemsToRemove && availableToAdd.length > 0; i++) {
+                    const newItemIndex = Math.floor(Math.random() * availableToAdd.length);
+                    const newItem = availableToAdd.splice(newItemIndex, 1)[0];
+                    if (newItem) {
+                        newOpts.push(newItem);
+                    }
+                }
+                return newOpts.sort((a, b) => a.amount - b.amount);
+            });
+        } else { // high
+            setHighOptions(prevOptions => {
+                let newOpts = [...prevOptions];
+                const itemsToRemove = Math.floor(Math.random() * 2) + 2; // 2 or 3
+
+                for (let i = 0; i < itemsToRemove && newOpts.length > 0; i++) {
+                    const removeIndex = Math.floor(Math.random() * newOpts.length);
+                    newOpts.splice(removeIndex, 1);
+                }
+
+                const availableToAdd = highPurchaseOptions.filter(o => !newOpts.some(opt => opt.id === o.id));
+
+                for (let i = 0; i < itemsToRemove && availableToAdd.length > 0; i++) {
+                    const newItemIndex = Math.floor(Math.random() * availableToAdd.length);
+                    const newItem = availableToAdd.splice(newItemIndex, 1)[0];
+                    if (newItem) {
+                        newOpts.push(newItem);
+                    }
+                }
+                return newOpts.sort((a,b) => b.amount - a.amount);
+            });
         }
-        
-        // Add new items to the bottom
-        const availableToAdd = initialOpts.filter(o => !newOpts.some(opt => opt.id === o.id));
-        for (let i = 0; i < itemsToRemove && availableToAdd.length > 0; i++) {
-            const newItemIndex = Math.floor(Math.random() * availableToAdd.length);
-            const newItem = availableToAdd.splice(newItemIndex, 1)[0];
-            if (newItem) {
-                newOpts.push(newItem);
-            }
-        }
-        
-        return newOpts;
-      });
     }, 2000);
 
     return () => clearInterval(interval);
