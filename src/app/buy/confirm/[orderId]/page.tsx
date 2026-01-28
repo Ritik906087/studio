@@ -552,8 +552,8 @@ function PaymentDetailsContent() {
             <AlertDialog open={isVerificationDialogOpen} onOpenChange={setIsVerificationDialogOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Verification Required</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogTitle className="font-bold text-orange-500">Verification Required</AlertDialogTitle>
+                        <AlertDialogDescription className="text-red-500">
                             To use {methodToVerify}, you need to link it to your account first. Please complete the verification.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
