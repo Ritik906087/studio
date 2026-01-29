@@ -32,7 +32,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
@@ -317,8 +316,8 @@ function PaymentDetailsContent() {
     
     const handleConfirm = async () => {
         if (isUSDT) {
-            if (!utr || utr.length < 64) {
-                toast({ variant: 'destructive', title: 'Invalid Transaction Hash', description: 'Please provide a valid 64-character TxID.' });
+            if (!utr || utr.length < 50) { // A loose validation for TxHash
+                toast({ variant: 'destructive', title: 'Invalid Transaction Hash', description: 'Please provide a valid TxID.' });
                 return;
             }
         } else {
@@ -326,10 +325,11 @@ function PaymentDetailsContent() {
                 toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please provide a valid 12-digit UTR.' });
                 return;
             }
-            if (!screenshotDataUrl) {
-                toast({ variant: 'destructive', title: 'Missing Screenshot', description: 'Please upload your payment proof screenshot.' });
-                return;
-            }
+        }
+        
+        if (!screenshotDataUrl) {
+            toast({ variant: 'destructive', title: 'Missing Screenshot', description: 'Please upload your payment proof screenshot.' });
+            return;
         }
         
         if (!orderRef || !user) {
@@ -343,12 +343,9 @@ function PaymentDetailsContent() {
             const updateData: any = {
                 utr,
                 status: 'pending_confirmation',
-                submittedAt: serverTimestamp()
+                submittedAt: serverTimestamp(),
+                screenshotURL: screenshotDataUrl
             };
-
-            if (!isUSDT) {
-                updateData.screenshotURL = screenshotDataUrl;
-            }
 
             await updateDoc(orderRef, updateData);
             toast({ title: 'Payment Submitted!', description: 'Your proof is under review.' });
@@ -362,6 +359,14 @@ function PaymentDetailsContent() {
 
     const loading = allPaymentMethodsLoading || orderLoading || profileLoading;
     const currentProviderDetails = provider ? paymentMethodDetails[provider] : null;
+    
+    const usdtAmount = useMemo(() => {
+        if (order && type === 'usdt') {
+            return order.amount / 110;
+        }
+        return 0;
+    }, [order, type]);
+
 
     if (loading) {
         return (
@@ -414,6 +419,170 @@ function PaymentDetailsContent() {
                         </CardContent>
                     </Card>
                  </main>
+            </div>
+        )
+    }
+
+    if (isUSDT) {
+        return (
+            <div className="flex flex-col min-h-screen">
+                <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
+                    <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8" disabled={isConfirming}>
+                        <ChevronLeft className="h-6 w-6 text-muted-foreground" />
+                    </Button>
+                    <h1 className="text-xl font-bold">USDT Buy</h1>
+                    <div className="w-8"></div>
+                </header>
+
+                <main className="flex-grow p-4 space-y-4">
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center gap-2">
+                             <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/usdt-logo.png?alt=media&token=16c8f93a-832a-43c2-8419-2479e394f451" width={48} height={48} alt="USDT Logo" />
+                             <p className="text-3xl font-bold">{usdtAmount.toFixed(2)} USDT</p>
+                             <p className="text-sm text-destructive text-center">The amount received is subject to the actual transfer amount. No less than 5.00 USDT</p>
+                        </CardContent>
+                        <CardFooter className="flex-col items-stretch bg-secondary/30 p-4 space-y-3">
+                             <div className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">Countdown</span>
+                                {timeLeft !== null && timeLeft > 0 && <span className="font-mono font-bold text-destructive">{formatTime(timeLeft)}</span>}
+                             </div>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">Order Number</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono">{order?.orderId}</span>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(order?.orderId ?? '')}><Copy className="h-4 w-4" /></Button>
+                                </div>
+                             </div>
+                        </CardFooter>
+                    </Card>
+
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center gap-4">
+                            <Image
+                                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(details['USDT Address (TRC20)']!)}&size=200x200&qzone=2`}
+                                width={200}
+                                height={200}
+                                alt="Payment QR Code"
+                                className="rounded-lg border p-1 bg-white"
+                            />
+                            <div className="text-center w-full space-y-2">
+                                <p className="text-sm text-muted-foreground">Wallet Address</p>
+                                <div className="flex items-center gap-2 bg-secondary p-2 rounded-lg">
+                                    <p className="font-mono text-xs break-all flex-1">{details['USDT Address (TRC20)']}</p>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => copyToClipboard(details['USDT Address (TRC20)']!)}><Copy className="h-4 w-4" /></Button>
+                                </div>
+                                 <p className="text-sm text-muted-foreground pt-2">Network</p>
+                                <p className="font-semibold">USDT-TRC20</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card>
+                        <CardContent className="p-4 space-y-2 text-xs text-muted-foreground">
+                            <p>• Minimum deposit amount: 5 USDT. Deposits less than the minimum amount will not be credited to the account.</p>
+                            <p>• Please do not deposit any non-currency assets to the above address, otherwise the assets will be irrecoverable.</p>
+                            <p>• Please make sure that the operating environment is safe to prevent the information from being tampered with or leaked.</p>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4 space-y-4">
+                          <div className="space-y-2">
+                              <Label htmlFor="utr">Transaction Hash (TxID)</Label>
+                              <Input id="utr" placeholder={'Enter 64-character TxID'} value={utr} onChange={(e) => setUtr(e.target.value)} disabled={isConfirming} />
+                          </div>
+                          <div className="space-y-2">
+                               <Label>Upload Screenshot</Label>
+                               <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isConfirming} accept="image/*" />
+                               <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming}>
+                                  {screenshotDataUrl ? (
+                                      <Image src={screenshotDataUrl} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
+                                  ) : (
+                                      <>
+                                          <Upload className="h-4 w-4"/>
+                                          Click to upload screenshot
+                                      </>
+                                  )}
+                              </Button>
+                          </div>
+                      </CardContent>
+                    </Card>
+                </main>
+                
+                <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button 
+                                variant="destructive" 
+                                className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" 
+                                disabled={isConfirming}
+                            >CANCEL</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure to cancel?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This action cannot be undone. This will permanently cancel your order.
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => setIsCancelDialogOpen(true)}
+                                className='bg-red-500 hover:bg-red-600'
+                                >Continue</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+
+                    <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || !utr || !screenshotDataUrl}>
+                        {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
+                    </Button>
+                </footer>
+
+                 <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Cancel Order</DialogTitle>
+                            <DialogDescription>Please select a reason for cancellation.</DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4 space-y-4">
+                            <RadioGroup value={cancelReason} onValueChange={setCancelReason} className="space-y-2">
+                                {cancellationReasons.map(reason => (
+                                    <div key={reason} className="flex items-center space-x-3">
+                                        <RadioGroupItem value={reason} id={reason} />
+                                        <Label htmlFor={reason} className="font-normal">{reason}</Label>
+                                    </div>
+                                ))}
+                            </RadioGroup>
+                            {cancelReason === 'Other reasons' && (
+                                <Textarea 
+                                    placeholder="Please fill in other reasons" 
+                                    value={otherReason} 
+                                    onChange={(e) => setOtherReason(e.target.value)} 
+                                    className="mt-2"
+                                />
+                            )}
+                            <div className="flex items-start gap-3 rounded-lg bg-yellow-100 p-3 text-yellow-900 text-xs mt-4">
+                                <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                                <p>
+                                    If you have already transferred money to the other party's collection account, please do not cancel the order to avoid causing losses to you.
+                                </p>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="ghost" onClick={() => setIsCancelDialogOpen(false)} disabled={isCancelling}>Back</Button>
+                            <Button 
+                                variant="destructive" 
+                                onClick={handleConfirmCancellation}
+                                disabled={isCancelling || !cancelReason || (cancelReason === 'Other reasons' && !otherReason.trim())}
+                            >
+                                {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Confirm Cancellation
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
         )
     }
@@ -501,7 +670,7 @@ function PaymentDetailsContent() {
                     </CardContent>
                 </Card>
 
-                {(type === 'upi' || type === 'usdt') && details && order && (
+                {type === 'upi' && details && order && (
                     <Card>
                         <CardHeader>
                             <CardTitle>Scan QR to Pay</CardTitle>
@@ -509,9 +678,7 @@ function PaymentDetailsContent() {
                         <CardContent className="flex flex-col items-center gap-2">
                              <Image
                                 src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
-                                    type === 'upi' 
-                                    ? `upi://pay?pa=${details['UPI ID']}&pn=${encodeURIComponent(details['Recipient Name'])}&am=${order.amount}&tn=${order.orderId}`
-                                    : details['USDT Address (TRC20)']!
+                                    `upi://pay?pa=${details['UPI ID']}&pn=${encodeURIComponent(details['Recipient Name'])}&am=${order.amount}&tn=${order.orderId}`
                                 )}&size=200x200&qzone=2`}
                                 width={200}
                                 height={200}
@@ -519,13 +686,8 @@ function PaymentDetailsContent() {
                                 className="rounded-lg border p-1 bg-white"
                             />
                             <p className="text-sm text-muted-foreground text-center">
-                                Scan with any {type === 'upi' ? 'UPI app' : 'TRC20 compatible wallet'} to pay.
+                                Scan with any UPI app to pay.
                             </p>
-                             {type === 'usdt' && (
-                                <p className="text-xs text-destructive text-center mt-2">
-                                    Warning: Only send USDT on the TRC20 (Tron) network. Sending from other networks will result in loss of funds.
-                                </p>
-                            )}
                         </CardContent>
                     </Card>
                 )}
@@ -536,22 +698,20 @@ function PaymentDetailsContent() {
                             <Label htmlFor="utr">{isUSDT ? 'Transaction Hash (TxID)' : 'UTR / Reference Number'}</Label>
                             <Input id="utr" placeholder={isUSDT ? 'Enter 64-character TxID' : 'Enter 12-digit UTR number'} value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={isUSDT ? 64 : 12} disabled={isConfirming || isUpdatingProvider} />
                         </div>
-                        {!isUSDT && (
-                            <div className="space-y-2">
-                                 <Label>Upload Screenshot</Label>
-                                 <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isConfirming || isUpdatingProvider} accept="image/*" />
-                                 <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming || isUpdatingProvider}>
-                                    {screenshotDataUrl ? (
-                                        <Image src={screenshotDataUrl} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
-                                    ) : (
-                                        <>
-                                            <Upload className="h-4 w-4"/>
-                                            Click to upload screenshot
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                        )}
+                        <div className="space-y-2">
+                             <Label>Upload Screenshot</Label>
+                             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isConfirming || isUpdatingProvider} accept="image/*" />
+                             <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming || isUpdatingProvider}>
+                                {screenshotDataUrl ? (
+                                    <Image src={screenshotDataUrl} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
+                                ) : (
+                                    <>
+                                        <Upload className="h-4 w-4"/>
+                                        Click to upload screenshot
+                                    </>
+                                )}
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             </main>
@@ -583,7 +743,7 @@ function PaymentDetailsContent() {
                 </AlertDialog>
 
 
-                <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isUpdatingProvider || !utr || (!screenshotDataUrl && !isUSDT)}>
+                <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isUpdatingProvider || !utr || !screenshotDataUrl}>
                     {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
                 </Button>
             </footer>

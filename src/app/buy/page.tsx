@@ -190,8 +190,8 @@ const UsdtPurchaseForm = ({ onBuyClick, bonusPercentage }: { onBuyClick: (option
                 </CardContent>
             </Card>
 
-            <Button onClick={handleRecharge} disabled={isProcessing} className="w-full h-12 text-lg font-bold bg-yellow-400 hover:bg-yellow-500 text-yellow-900 rounded-full shadow-lg shadow-yellow-500/20">
-                {isProcessing ? <Loader2 className="animate-spin" /> : "Recharge"}
+            <Button onClick={handleRecharge} disabled={isProcessing} className="w-full h-12 text-lg font-bold btn-gradient rounded-full">
+                {isProcessing ? <Loader2 className="animate-spin" /> : "Buy"}
             </Button>
             
             <Card className="bg-secondary/50 shadow-none">
@@ -295,7 +295,7 @@ export default function BuyPage() {
     if (!user || !firestore || !selectedAmount) return;
 
     const orderId = `LGPAY${Date.now()}`;
-    const paymentType = activeTab;
+    const paymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
 
     try {
         const ordersRef = collection(firestore, 'users', user.uid, 'orders');
