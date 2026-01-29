@@ -11,7 +11,7 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { LifeBuoy, UserPlus, AlertTriangle, Send, ChevronLeft, Loader2, Paperclip, Image as ImageIcon, X, Clock, Volume2, VolumeX, Sparkles } from 'lucide-react';
+import { LifeBuoy, UserPlus, AlertTriangle, Send, ChevronLeft, Loader2, Paperclip, Image as ImageIcon, X, Clock, Volume2, VolumeX, Sparkles, History } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
 import { doc, collection, query, where, orderBy, limit, Timestamp, updateDoc, arrayUnion } from 'firebase/firestore';
@@ -492,11 +492,19 @@ export default function HelpPage() {
                     <p className="text-xs text-muted-foreground font-semibold">Online</p>
                 </div>
             </div>
-            <div className="flex justify-end items-center">
-                 {(isWaitingForAgent || isAgentActive) && (
+            <div className="flex justify-end items-center gap-1">
+                <Button asChild variant="ghost" size="icon" className="h-9 w-9">
+                    <Link href="/order">
+                        <History className="h-5 w-5 text-muted-foreground" />
+                    </Link>
+                </Button>
+
+                {(isWaitingForAgent || isAgentActive) && (
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                           <Button variant="destructive" size="sm" className="h-7 rounded-full text-xs mr-2">Close</Button>
+                           <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                               <X className="h-5 w-5" />
+                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                             <AlertDialogHeader>
@@ -509,7 +517,8 @@ export default function HelpPage() {
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
-                 )}
+                )}
+                
                 <Button onClick={handleSoundToggle} variant="ghost" size="icon" className="h-9 w-9">
                     {isSoundOn ? <Volume2 className="h-5 w-5 text-muted-foreground" /> : <VolumeX className="h-5 w-5 text-muted-foreground" />}
                 </Button>
