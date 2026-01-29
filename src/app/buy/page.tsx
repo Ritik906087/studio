@@ -285,14 +285,14 @@ export default function BuyPage() {
     setSelectedAmount(option.amount);
 
     if (activeTab === 'usdt') {
-        createOrder('TRC20');
+        createOrder('TRC20', option.amount);
     } else {
         setIsDialogOpen(true);
     }
   };
   
-  const createOrder = async (provider: string) => {
-    if (!user || !firestore || !selectedAmount) return;
+  const createOrder = async (provider: string, orderAmount: number) => {
+    if (!user || !firestore || !orderAmount) return;
 
     const orderId = `LGPAY${Date.now()}`;
     const paymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
@@ -301,7 +301,7 @@ export default function BuyPage() {
         const ordersRef = collection(firestore, 'users', user.uid, 'orders');
         const newOrderRef = await addDoc(ordersRef, {
             userId: user.uid,
-            amount: selectedAmount,
+            amount: orderAmount,
             orderId,
             status: 'pending_payment',
             createdAt: serverTimestamp(),
@@ -317,7 +317,9 @@ export default function BuyPage() {
 
   const handleProviderSelect = async (methodName: string) => {
     setIsDialogOpen(false);
-    await createOrder(methodName);
+    if (selectedAmount) {
+      await createOrder(methodName, selectedAmount);
+    }
   };
   
   const handleGoToOrder = () => {
@@ -370,7 +372,7 @@ export default function BuyPage() {
             </TabsTrigger>
              <TabsTrigger value="usdt" className="flex flex-col items-center justify-center p-3 h-auto rounded-xl border-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all space-y-1">
                 <span className="font-bold text-base text-foreground">USDT</span>
-                <span className="text-xs text-green-600 font-semibold">1$ = 110₹</span>
+                <span className="text-xs text-primary font-semibold">1$ = 110₹</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -434,3 +436,5 @@ export default function BuyPage() {
     </div>
   );
 }
+
+    
