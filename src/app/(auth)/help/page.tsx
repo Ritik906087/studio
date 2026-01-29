@@ -89,8 +89,56 @@ export default function HelpPage() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
   const [isSoundOn, setIsSoundOn] = useState(true);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const previousMessagesLength = useRef(0);
+
+  // Audio Context Refs
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const unlockedRef = useRef(false);
+
+  // Audio Functions
+  const autoUnlockAudio = async () => {
+    if (unlockedRef.current || audioCtxRef.current) return;
+    try {
+        const context = new (window.AudioContext || (window as any).webkitAudioContext)();
+        if (context.state === "suspended") {
+            await context.resume();
+        }
+        audioCtxRef.current = context;
+        unlockedRef.current = true;
+    } catch (e) {
+        console.error("Could not initialize AudioContext", e);
+    }
+  };
+  
+  const playBeep = ({frequency=800, duration=0.12, volume=0.12, type="sine"}: {frequency?: number, duration?: number, volume?: number, type?: OscillatorType} = {}) => {
+      if (!unlockedRef.current || !audioCtxRef.current || !isSoundOn) return;
+
+      const o = audioCtxRef.current.createOscillator();
+      const g = audioCtxRef.current.createGain();
+
+      o.type = type;
+      o.frequency.value = frequency;
+
+      const now = audioCtxRef.current.currentTime;
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+      o.connect(g);
+      g.connect(audioCtxRef.current.destination);
+
+      o.start(now);
+      o.stop(now + duration);
+  };
+
+  const playSendSound = () => {
+      playBeep({frequency: 900, duration: 0.08, volume: 0.08, type: "square"});
+  };
+  
+  const playReceiveSound = () => {
+      playBeep({frequency: 600, duration: 0.10, volume: 0.10, type: "sine"});
+      setTimeout(() => playBeep({frequency: 750, duration: 0.12, volume: 0.10, type: "sine"}), 120);
+  };
+
 
   const userProfileRef = useMemo(() => {
     if (!user || !firestore) return null;
@@ -129,6 +177,7 @@ export default function HelpPage() {
   const isAgentActive = liveChat?.status === 'active';
 
   const displayedMessages = isAgentActive ? liveChat?.chatHistory || messages : messages;
+  const prevMessagesCount = useRef(displayedMessages?.length ?? 0);
 
   // Load chat and sound preference from localStorage
   useEffect(() => {
@@ -139,7 +188,6 @@ export default function HelpPage() {
             if(parsedMessages.length > 0) {
               setMessages(parsedMessages);
               setChatStarted(true);
-              previousMessagesLength.current = parsedMessages.length;
             }
         }
         const savedSoundPref = localStorage.getItem(SOUND_PREF_KEY);
@@ -199,15 +247,17 @@ export default function HelpPage() {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
     
-    if (displayedMessages) {
+    if (displayedMessages && displayedMessages.length > prevMessagesCount.current) {
         const lastMessage = displayedMessages[displayedMessages.length - 1];
-        if (displayedMessages.length > previousMessagesLength.current && lastMessage && !lastMessage.isUser && isSoundOn) {
-            audioRef.current?.play().catch(() => {}); // Suppress autoplay error
+        if (lastMessage && !lastMessage.isUser) {
+            playReceiveSound();
         }
-        previousMessagesLength.current = displayedMessages.length;
     }
-
-  }, [displayedMessages, isSoundOn]);
+    
+    if (displayedMessages) {
+        prevMessagesCount.current = displayedMessages.length;
+    }
+  }, [displayedMessages]);
 
 
   const handleSoundToggle = () => {
@@ -240,6 +290,7 @@ export default function HelpPage() {
 
     setEnteredIdentifier(identifier);
     setIsVerifying(true);
+    autoUnlockAudio(); // Unlock audio on first user interaction
     setTimeout(() => {
       setIsVerifying(false);
       setChatStarted(true);
@@ -252,6 +303,8 @@ export default function HelpPage() {
     const handleSendMessage = async () => {
         if ((!currentMessage.trim() && !attachment) || isWaitingForAgent) return;
         
+        playSendSound(); // Play sound on send action
+
         if (isAgentActive) {
             // Logic for sending message to human agent
             if (!firestore || !activeRequest) {
@@ -376,7 +429,6 @@ export default function HelpPage() {
   if (chatStarted || isAgentActive || isWaitingForAgent) {
     return (
       <div className="flex flex-col h-screen bg-secondary">
-        <audio ref={audioRef} src="https://firebasestorage.googleapis.com/v0/b/prototyper-test-28ea3.appspot.com/o/message-sound.mp3?alt=media&token=c1a3b544-5dfb-4680-9286-638f20a67272" preload="auto"></audio>
         <header className="grid grid-cols-3 items-center p-3 bg-white sticky top-0 z-10 border-b shadow-sm">
             <div className="flex items-center gap-2">
                  <Button asChild variant="ghost" size="icon" className="h-9 w-9 -ml-2">
