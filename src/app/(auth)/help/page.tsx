@@ -11,13 +11,13 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { LifeBuoy, UserPlus, AlertTriangle, Send, ChevronLeft, Loader2, Paperclip, Image as ImageIcon, X, Clock, Volume2, VolumeX } from 'lucide-react';
+import { LifeBuoy, UserPlus, AlertTriangle, Send, ChevronLeft, Loader2, Paperclip, Image as ImageIcon, X, Clock, Volume2, VolumeX, Sparkles } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
 import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
 import { doc, collection, query, where, orderBy, limit, Timestamp, updateDoc, arrayUnion } from 'firebase/firestore';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
-import { helpChat, type HelpChatInput } from '@/ai/flows/help-chat-flow';
+import { helpChat, type HelpChatInput, escalateToHuman } from '@/ai/flows/help-chat-flow';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -58,6 +58,15 @@ type ChatRequest = {
     chatHistory: Message[];
 };
 
+type ChatStep = 'welcome' | 'language' | 'problem' | 'escalating' | 'chatting';
+
+const problemCategories = [
+    { key: "payment", label: "Payment Issue", icon: "💳" },
+    { key: "withdrawal", label: "Withdrawal Problem", icon: "💸" },
+    { key: "account", label: "Account Access", icon: "👤" },
+    { key: "other", label: "Other", icon: "❓" },
+]
+
 const formatTime = (seconds: number) => {
     if (seconds < 0) return '00:00';
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -93,6 +102,8 @@ export default function HelpPage() {
   // Audio Context Refs
   const audioCtxRef = useRef<AudioContext | null>(null);
   const unlockedRef = useRef(false);
+
+  const [chatStep, setChatStep] = useState<ChatStep>('welcome');
 
   // Audio Functions
   const autoUnlockAudio = async () => {
@@ -201,14 +212,14 @@ export default function HelpPage() {
 
   // Save chat to localStorage, but only if not in an active agent chat
   useEffect(() => {
-    if (messages.length > 0 && chatStarted && !isAgentActive) {
+    if (messages.length > 0 && chatStarted && !isAgentActive && chatStep !== 'escalating') {
         try {
             localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
         } catch (error) {
             console.error("Failed to save chat to storage:", error);
         }
     }
-  }, [messages, chatStarted, isAgentActive]);
+  }, [messages, chatStarted, isAgentActive, chatStep]);
 
    // Countdown Timer Logic
   useEffect(() => {
@@ -263,6 +274,9 @@ export default function HelpPage() {
   const handleSoundToggle = () => {
     const newSoundState = !isSoundOn;
     setIsSoundOn(newSoundState);
+    if (newSoundState) {
+        playBeep({frequency: 800, duration: 0.1, volume: 0.1});
+    }
     try {
         localStorage.setItem(SOUND_PREF_KEY, JSON.stringify(newSoundState));
     } catch (error) {
@@ -295,13 +309,40 @@ export default function HelpPage() {
       setIsVerifying(false);
       setChatStarted(true);
       if (messages.length === 0 && !isAgentActive) {
-        setMessages([{ text: "Hello! How can I help you today?", isUser: false, timestamp: Date.now(), userName: 'AI HELP' }]);
+        setChatStep('language');
+        setMessages([{ text: "Please select your preferred language.", isUser: false, timestamp: Date.now(), userName: 'AI HELP' }]);
       }
     }, 1500);
   };
+
+  const handleLanguageSelect = (language: string) => {
+    const userMsg: Message = { text: language, isUser: true, timestamp: Date.now(), userName: userProfile?.displayName || 'You' };
+    const botMsg: Message = { text: "How can I help you today? Please choose an option below.", isUser: false, timestamp: Date.now(), userName: 'AI HELP' };
+    setMessages(prev => [...prev, userMsg, botMsg]);
+    setChatStep('problem');
+  }
+
+  const handleProblemSelect = async (problem: string) => {
+    const userMsg: Message = { text: problem, isUser: true, timestamp: Date.now(), userName: userProfile?.displayName || 'You' };
+    const botMsg: Message = { text: "Thank you. I am connecting you to a support agent shortly.", isUser: false, timestamp: Date.now(), userName: 'AI HELP' };
+    const newMessages = [...messages, userMsg, botMsg];
+    setMessages(newMessages);
+    setChatStep('escalating');
+
+    await escalateToHuman({
+        uid: user?.uid,
+        enteredIdentifier: enteredIdentifier,
+        chatHistory: newMessages,
+    });
+    localStorage.removeItem(CHAT_STORAGE_KEY);
+  }
+
+  const handleOkAfterEscalation = () => {
+    setChatStep('chatting');
+  }
   
     const handleSendMessage = async () => {
-        if ((!currentMessage.trim() && !attachment) || isWaitingForAgent) return;
+        if ((!currentMessage.trim() && !attachment) || isWaitingForAgent || chatStep !== 'chatting') return;
         
         playSendSound(); // Play sound on send action
 
@@ -335,7 +376,7 @@ export default function HelpPage() {
             return;
         }
 
-        // Logic for sending message to AI
+        // Logic for sending message to AI (before agent joins)
         setIsSending(true);
         const textForPrompt = currentMessage.trim();
         const messagePayload: Message = {
@@ -371,7 +412,6 @@ export default function HelpPage() {
             const aiResponse: Message = { text: response, isUser: false, timestamp: Date.now(), userName: 'AI HELP' };
             setMessages(prev => [...prev, aiResponse]);
         } catch (error) {
-            // The flow now handles the error and escalates to a human agent, returning a friendly message.
             const response = "Thank you. Your request has been submitted. A support agent will review your case and connect with you shortly.";
             const aiResponse: Message = { text: response, isUser: false, timestamp: Date.now(), userName: 'AI HELP' };
             setMessages(prev => [...prev, aiResponse]);
@@ -388,6 +428,7 @@ export default function HelpPage() {
             toast({ title: 'Chat Closed' });
             setChatStarted(false);
             setMessages([]);
+            setChatStep('welcome');
             localStorage.removeItem(CHAT_STORAGE_KEY);
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Could not close chat', description: error.message });
@@ -427,6 +468,7 @@ export default function HelpPage() {
   }
 
   if (chatStarted || isAgentActive || isWaitingForAgent) {
+    const inputDisabled = (chatStep !== 'chatting' && !isAgentActive) || isSending || isWaitingForAgent;
     return (
       <div className="flex flex-col h-screen bg-secondary">
         <header className="grid grid-cols-3 items-center p-3 bg-white sticky top-0 z-10 border-b shadow-sm">
@@ -473,7 +515,7 @@ export default function HelpPage() {
                 </Button>
             </div>
         </header>
-         {isWaitingForAgent && !isAgentActive && (
+         {isWaitingForAgent && !isAgentActive && chatStep === 'chatting' && (
             <div className="p-3 bg-blue-100 border-b border-blue-200 text-center text-sm text-blue-800 font-semibold flex items-center justify-center gap-2 sticky top-[69px] z-10">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Connecting you to an agent... Please wait.
@@ -484,7 +526,7 @@ export default function HelpPage() {
               <div key={index} className={cn("flex items-end gap-2", msg.isUser ? "justify-end" : "justify-start")}>
                 {!msg.isUser && (
                     <Avatar className="h-8 w-8">
-                         <AvatarFallback className="bg-primary text-primary-foreground font-bold text-sm">{msg.userName === 'JONNY' ? 'J' : 'LG'}</AvatarFallback>
+                         <AvatarFallback className="bg-primary text-primary-foreground font-bold text-sm">{msg.userName === 'JONNY' ? 'J' : 'AI'}</AvatarFallback>
                     </Avatar>
                 )}
                 <div className="flex flex-col max-w-[75%]">
@@ -517,12 +559,36 @@ export default function HelpPage() {
             {isSending && !isAgentActive && (
                 <div className="flex items-end gap-2 justify-start">
                     <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-primary text-primary-foreground font-bold text-sm">LG</AvatarFallback>
+                        <AvatarFallback className="bg-primary text-primary-foreground font-bold text-sm">AI</AvatarFallback>
                     </Avatar>
                     <div className="bg-white rounded-2xl px-4 py-2 rounded-bl-none shadow-sm">
                        <p className="text-sm">Typing...</p>
                     </div>
                 </div>
+            )}
+             {!isAgentActive && (
+                <>
+                    {chatStep === 'language' && (
+                        <div className="flex justify-center gap-2 p-2">
+                            <Button onClick={() => handleLanguageSelect('English')} variant="outline" className="bg-white">English</Button>
+                            <Button onClick={() => handleLanguageSelect('Hindi')} variant="outline" className="bg-white">Hindi</Button>
+                        </div>
+                    )}
+                    {chatStep === 'problem' && (
+                        <div className="grid grid-cols-2 gap-3 p-2">
+                            {problemCategories.map(p => 
+                                <Button key={p.key} onClick={() => handleProblemSelect(p.label)} variant="outline" className="bg-white h-auto justify-start py-3">
+                                    <span className="mr-2 text-lg">{p.icon}</span> {p.label}
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                    {chatStep === 'escalating' && (
+                        <div className="flex justify-center gap-2 p-2">
+                            <Button onClick={handleOkAfterEscalation} className="btn-gradient">OK</Button>
+                        </div>
+                    )}
+                </>
             )}
         </main>
         <footer className="bg-white border-t p-2 space-y-2">
@@ -550,7 +616,7 @@ export default function HelpPage() {
             )}
             <div className="flex w-full items-center gap-2">
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-                <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isSending || isWaitingForAgent}>
+                <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={inputDisabled}>
                     <Paperclip className="h-5 w-5 text-muted-foreground" />
                 </Button>
                 <Input 
@@ -559,9 +625,9 @@ export default function HelpPage() {
                     value={currentMessage}
                     onChange={(e) => setCurrentMessage(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                    disabled={isSending || isWaitingForAgent}
+                    disabled={inputDisabled}
                 />
-                <Button onClick={handleSendMessage} disabled={isSending || isWaitingForAgent || (!currentMessage.trim() && !attachment)} className="btn-gradient rounded-full w-12 h-12">
+                <Button onClick={handleSendMessage} disabled={inputDisabled || (!currentMessage.trim() && !attachment)} className="btn-gradient rounded-full w-12 h-12">
                     {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                 </Button>
             </div>
@@ -579,7 +645,12 @@ export default function HelpPage() {
                   <ChevronLeft className="h-6 w-6 text-muted-foreground" />
               </Link>
           </Button>
-          <CardTitle className="text-xl font-bold pt-10">Welcome to LG Pay Customer Service!</CardTitle>
+          <div className="flex justify-center pt-10">
+            <div className="grid h-16 w-16 place-items-center rounded-full bg-primary/10">
+                <Sparkles className="h-8 w-8 text-primary" />
+            </div>
+          </div>
+          <CardTitle className="text-xl font-bold pt-4">Welcome to LG Pay Customer Service!</CardTitle>
           <CardDescription>
             For your account security, please do not trust strangers or share your OTP.
           </CardDescription>

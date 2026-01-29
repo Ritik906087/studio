@@ -68,18 +68,12 @@ const getUserProfile = ai.defineTool(
   }
 );
 
-const requestHumanAgent = ai.defineTool(
-  {
-    name: 'requestHumanAgent',
-    description: "Use this tool to create a request for a user to speak with a human support agent. This should be used when the user explicitly asks for a human, or if you are unable to resolve their issue.",
-    inputSchema: z.object({
-        uid: z.string().optional(),
-        enteredIdentifier: z.string(),
-        chatHistory: z.array(ChatMessageSchema),
-    }),
-    outputSchema: z.object({ success: z.boolean() }),
-  },
-  async (input) => {
+
+async function createHumanAgentRequest(input: {
+    uid?: string;
+    enteredIdentifier: string;
+    chatHistory: z.infer<typeof ChatMessageSchema>[];
+}) {
     let userNumericId: string | undefined;
     if (input.uid) {
         try {
@@ -104,8 +98,31 @@ const requestHumanAgent = ai.defineTool(
         console.error("Failed to create chat request:", e);
         return { success: false };
     }
+}
+
+const requestHumanAgent = ai.defineTool(
+  {
+    name: 'requestHumanAgent',
+    description: "Use this tool to create a request for a user to speak with a human support agent. This should be used when the user explicitly asks for a human, or if you are unable to resolve their issue.",
+    inputSchema: z.object({
+        uid: z.string().optional(),
+        enteredIdentifier: z.string(),
+        chatHistory: z.array(ChatMessageSchema),
+    }),
+    outputSchema: z.object({ success: z.boolean() }),
+  },
+  async (input) => {
+     return await createHumanAgentRequest(input);
   }
 );
+
+export async function escalateToHuman(input: {
+    uid?: string;
+    enteredIdentifier: string;
+    chatHistory: any[];
+}): Promise<{ success: boolean }> {
+    return await createHumanAgentRequest(input);
+}
 
 
 export async function helpChat(input: HelpChatInput): Promise<string> {
