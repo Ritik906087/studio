@@ -50,15 +50,21 @@ export default function ChatHistoryPage() {
 
     const chatHistoryQuery = useMemo(() => {
         if (!user || !firestore) return null;
+        // The composite query with orderBy requires a custom index.
+        // To avoid this, we fetch based on filters and sort on the client.
         return query(
             collection(firestore, 'chatRequests'),
             where('userId', '==', user.uid),
-            where('status', '==', 'closed'),
-            orderBy('createdAt', 'desc')
+            where('status', '==', 'closed')
         );
     }, [user, firestore]);
 
-    const { data: closedChats, loading: historyLoading } = useCollection<ChatRequest>(chatHistoryQuery);
+    const { data: unsortedClosedChats, loading: historyLoading } = useCollection<ChatRequest>(chatHistoryQuery);
+
+    const closedChats = useMemo(() => {
+        if (!unsortedClosedChats) return [];
+        return [...unsortedClosedChats].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+    }, [unsortedClosedChats]);
 
     const loading = authLoading || historyLoading;
 
