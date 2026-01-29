@@ -727,20 +727,28 @@ function BuyConfirmationsTabContent() {
         setLoading(true);
         setError(null);
         try {
-            const q = query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation'));
+            // Fetch all orders and filter client-side to avoid index requirement.
+            const q = query(collectionGroup(firestore, 'orders'));
             const querySnapshot = await getDocs(q);
+
+            const pendingDocs = querySnapshot.docs.filter(doc => doc.data().status === 'pending_confirmation');
             
             const fetchedOrders: Order[] = [];
-            for (const doc of querySnapshot.docs) {
+            
+            // Pre-fetch all users to avoid multiple reads inside a loop
+            const usersSnapshot = await getDocs(collection(firestore, 'users'));
+            const usersData = new Map<string, UserProfile>();
+            usersSnapshot.forEach(doc => {
+                usersData.set(doc.id, { id: doc.id, ...doc.data() } as UserProfile);
+            });
+
+            for (const doc of pendingDocs) {
                 const orderData = doc.data() as Order;
                 orderData.id = doc.id;
                 
                 const userRef = doc.ref.parent.parent;
-                if(userRef) {
-                    const userSnap = await getDocs(query(collection(firestore, 'users'), where('__name__', '==', userRef.id)));
-                    if (!userSnap.empty) {
-                        orderData.user = userSnap.docs[0].data() as UserProfile;
-                    }
+                if (userRef && usersData.has(userRef.id)) {
+                    orderData.user = usersData.get(userRef.id);
                 }
                 fetchedOrders.push(orderData);
             }
@@ -1326,4 +1334,6 @@ export default function AdminDashboardPage() {
 
     return <AdminDashboard />;
 }
+    
+
     
