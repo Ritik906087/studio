@@ -72,7 +72,7 @@ export default function ChatHistoryPage() {
         <div className="flex min-h-screen flex-col bg-secondary">
             <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
                 <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                <Link href="/my">
+                <Link href="/help">
                     <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Link>
                 </Button>
