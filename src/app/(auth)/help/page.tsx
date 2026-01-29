@@ -123,22 +123,26 @@ export default function HelpPage() {
   const playBeep = ({frequency=800, duration=0.12, volume=0.12, type="sine"}: {frequency?: number, duration?: number, volume?: number, type?: OscillatorType} = {}) => {
       if (!unlockedRef.current || !audioCtxRef.current || !isSoundOn) return;
 
-      const o = audioCtxRef.current.createOscillator();
-      const g = audioCtxRef.current.createGain();
-
-      o.type = type;
-      o.frequency.value = frequency;
-
-      const now = audioCtxRef.current.currentTime;
-      g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(volume, now + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-      o.connect(g);
-      g.connect(audioCtxRef.current.destination);
-
-      o.start(now);
-      o.stop(now + duration);
+      try {
+        const o = audioCtxRef.current.createOscillator();
+        const g = audioCtxRef.current.createGain();
+    
+        o.type = type;
+        o.frequency.value = frequency;
+    
+        const now = audioCtxRef.current.currentTime;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    
+        o.connect(g);
+        g.connect(audioCtxRef.current.destination);
+    
+        o.start(now);
+        o.stop(now + duration);
+      } catch (e) {
+        // Silently catch errors if play() fails due to user not interacting
+      }
   };
 
   const playSendSound = () => {
@@ -358,6 +362,13 @@ export default function HelpPage() {
         
         playSendSound(); // Play sound on send action
 
+        const messagePayload: Message = {
+            text: currentMessage.trim(),
+            isUser: true,
+            timestamp: Date.now(),
+            userName: userProfile?.displayName || 'You',
+        };
+
         if (isAgentActive) {
             // Logic for sending message to human agent
             if (!firestore || !activeRequest) {
@@ -366,12 +377,6 @@ export default function HelpPage() {
             }
             setIsSending(true);
             const requestRef = doc(firestore, 'chatRequests', activeRequest.id);
-            const messagePayload: Message = {
-                text: currentMessage.trim(),
-                isUser: true,
-                timestamp: Date.now(),
-                userName: userProfile?.displayName || 'You',
-            };
             if (attachment) {
                 messagePayload.attachment = attachment;
             }
@@ -391,13 +396,7 @@ export default function HelpPage() {
         // Logic for sending message to AI (before agent joins)
         setIsSending(true);
         const textForPrompt = currentMessage.trim();
-        const messagePayload: Message = {
-            text: textForPrompt,
-            isUser: true,
-            timestamp: Date.now(),
-            userName: userProfile?.displayName || 'You',
-        };
-
+        
         if (attachment) {
             messagePayload.attachment = attachment;
         }
@@ -506,7 +505,7 @@ export default function HelpPage() {
             </div>
             <div className="flex justify-end items-center gap-1">
                 <Button asChild variant="ghost" size="icon" className="h-9 w-9">
-                    <Link href="/order">
+                    <Link href="/my/chat-history">
                         <History className="h-5 w-5 text-muted-foreground" />
                     </Link>
                 </Button>
