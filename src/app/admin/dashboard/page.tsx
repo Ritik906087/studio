@@ -989,7 +989,9 @@ function ProcessConfirmationDialog({ order, onProcessed }: { order: Order, onPro
                                    <Button variant="link" size="sm" className="h-auto p-0">View Image</Button>
                                 </DialogTrigger>
                                 <DialogContent>
-                                    <DialogHeader><DialogTitle>Payment Screenshot</DialogTitle></DialogHeader>
+                                    <DialogHeader>
+                                        <DialogTitle>Payment Screenshot</DialogTitle>
+                                    </DialogHeader>
                                     <img src={order.screenshotURL} alt="Payment Screenshot" className="rounded-md max-h-[70vh] object-contain" />
                                 </DialogContent>
                             </Dialog>
@@ -1049,14 +1051,16 @@ function ConfirmationsTabContent() {
             setAllUsers(usersData);
             setUsersLoading(false);
 
-            // Then fetch all pending orders
-            const q = query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation'));
+            // Then fetch all orders and filter for pending confirmation ones
+            const q = query(collectionGroup(firestore, 'orders'));
             const querySnapshot = await getDocs(q);
-            const fetchedOrders = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                path: doc.ref.path
-            } as Order));
+            const fetchedOrders = querySnapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    path: doc.ref.path,
+                } as Order))
+                .filter(order => order.status === 'pending_confirmation');
             setAllOrders(fetchedOrders);
         } catch (error) {
             console.error("Error fetching confirmations:", error);
@@ -1349,3 +1353,4 @@ export default function AdminDashboardPage() {
 
 
     
+
