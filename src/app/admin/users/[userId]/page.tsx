@@ -280,22 +280,26 @@ export default function UserDetailsPage() {
     const stats = React.useMemo(() => {
         const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
+    
         const completedBuyOrders = orders?.filter(o => o.status === 'completed') || [];
         const completedSellOrders = sellOrders?.filter(o => o.status === 'completed') || [];
-
-        const totalBuy = completedBuyOrders.reduce((acc, order) => acc + order.amount, 0);
-        const totalSell = completedSellOrders.reduce((acc, order) => acc + order.amount, 0);
-
-        const todayBuy = completedBuyOrders
-            .filter(o => o.createdAt && o.createdAt.toDate() >= startOfToday)
-            .reduce((acc, order) => acc + order.amount, 0);
-        
-        const todaySell = completedSellOrders
-            .filter(o => o.completedAt && o.completedAt.toDate() >= startOfToday)
-            .reduce((acc, order) => acc + order.amount, 0);
-
-        return { totalBuy, totalSell, todayBuy, todaySell };
+    
+        // Total stats
+        const totalBuyAmount = completedBuyOrders.reduce((acc, order) => acc + order.amount, 0);
+        const totalBuyCount = completedBuyOrders.length;
+        const totalSellAmount = completedSellOrders.reduce((acc, order) => acc + order.amount, 0);
+        const totalSellCount = completedSellOrders.length;
+    
+        // Today's stats
+        const todayBuyOrders = completedBuyOrders.filter(o => o.createdAt && o.createdAt.toDate() >= startOfToday);
+        const todayBuyAmount = todayBuyOrders.reduce((acc, order) => acc + order.amount, 0);
+        const todayBuyCount = todayBuyOrders.length;
+    
+        const todaySellOrders = completedSellOrders.filter(o => o.completedAt && o.completedAt.toDate() >= startOfToday);
+        const todaySellAmount = todaySellOrders.reduce((acc, order) => acc + order.amount, 0);
+        const todaySellCount = todaySellOrders.length;
+    
+        return { totalBuyAmount, totalBuyCount, totalSellAmount, totalSellCount, todayBuyAmount, todayBuyCount, todaySellAmount, todaySellCount };
     }, [orders, sellOrders]);
 
     const copyToClipboard = (text: string) => {
@@ -467,19 +471,23 @@ export default function UserDetailsPage() {
                 <CardContent className="grid grid-cols-2 gap-4 text-center md:grid-cols-4">
                     <div className="rounded-lg bg-blue-100 p-3">
                         <p className="text-sm font-medium text-blue-800">Total Buy</p>
-                        <p className="text-2xl font-bold text-blue-900">₹{stats.totalBuy.toFixed(2)}</p>
+                        <p className="text-2xl font-bold text-blue-900">₹{stats.totalBuyAmount.toFixed(2)}</p>
+                        <p className="text-xs text-blue-800">{stats.totalBuyCount} orders</p>
                     </div>
                     <div className="rounded-lg bg-green-100 p-3">
                         <p className="text-sm font-medium text-green-800">Total Sell</p>
-                        <p className="text-2xl font-bold text-green-900">₹{stats.totalSell.toFixed(2)}</p>
+                        <p className="text-2xl font-bold text-green-900">₹{stats.totalSellAmount.toFixed(2)}</p>
+                        <p className="text-xs text-green-800">{stats.totalSellCount} orders</p>
                     </div>
                     <div className="rounded-lg bg-blue-100 p-3">
                         <p className="text-sm font-medium text-blue-800">Today's Buy</p>
-                        <p className="text-2xl font-bold text-blue-900">₹{stats.todayBuy.toFixed(2)}</p>
+                        <p className="text-2xl font-bold text-blue-900">₹{stats.todayBuyAmount.toFixed(2)}</p>
+                        <p className="text-xs text-blue-800">{stats.todayBuyCount} orders</p>
                     </div>
                     <div className="rounded-lg bg-green-100 p-3">
                         <p className="text-sm font-medium text-green-800">Today's Sell</p>
-                        <p className="text-2xl font-bold text-green-900">₹{stats.todaySell.toFixed(2)}</p>
+                        <p className="text-2xl font-bold text-green-900">₹{stats.todaySellAmount.toFixed(2)}</p>
+                        <p className="text-xs text-green-800">{stats.todaySellCount} orders</p>
                     </div>
                 </CardContent>
             </Card>
