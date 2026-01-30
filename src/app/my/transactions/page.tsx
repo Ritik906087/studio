@@ -230,7 +230,6 @@ export default function AllTransactionsPage() {
         return query(
             collection(firestore, 'users', user.uid, 'transactions'),
             where('type', '==', 'team_bonus'),
-            orderBy('createdAt', 'desc'),
             limit(100)
         );
     }, [user, firestore]);
