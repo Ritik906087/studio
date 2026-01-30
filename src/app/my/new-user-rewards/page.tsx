@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -40,7 +39,7 @@ export default function NewUserRewardsPage() {
     const [dataLoading, setDataLoading] = useState(true);
 
     const newuserTasks = [
-        { id: 'nu1', title: 'Registration reward', reward: 20 },
+        { id: 'nu1', title: 'Registration reward', reward: 20, action: 'claim' },
         { id: 'nu2', title: 'Join Telegram', reward: 20, action: "join" },
         { id: 'nu3', title: 'Connect PhonePe', reward: 10, action: "connect" },
         { id: 'nu4', title: 'Connect Paytm', reward: 10, action: "connect" },
@@ -138,12 +137,13 @@ export default function NewUserRewardsPage() {
                             
                             let buttonContent: string;
                             let buttonAction = () => {};
-                            let buttonDisabled = true;
+                            let buttonDisabled = false;
                             let useLink = false;
                             let isClaimable = false;
 
                             if (isClaimed) {
                                 buttonContent = 'Claimed';
+                                buttonDisabled = true;
                             } else if (task.action === 'connect') {
                                 if(isUpiConnected) {
                                     buttonContent = 'Claim';
@@ -152,22 +152,23 @@ export default function NewUserRewardsPage() {
                                     isClaimable = true;
                                 } else {
                                     buttonContent = 'Connect';
-                                    buttonDisabled = false;
                                     useLink = true;
                                 }
-                            } else { // Join or Registration
-                                buttonContent = task.action === 'join' ? 'Join' : 'Claim';
+                            } else if (task.action === 'join') {
+                                buttonContent = 'Join';
+                                buttonAction = () => {
+                                    window.open('https://t.me/LGB_PAY', '_blank');
+                                    handleClaimNewUserReward(task.id, task.reward, task.title);
+                                };
+                                buttonDisabled = claiming === task.id;
+                                isClaimable = true;
+                            } else { // 'claim' for registration
+                                buttonContent = 'Claim';
                                 buttonAction = () => handleClaimNewUserReward(task.id, task.reward, task.title);
                                 buttonDisabled = claiming === task.id;
                                 isClaimable = true;
                             }
                             
-                            if (task.id === 'nu1' && isClaimed) {
-                                 buttonDisabled = true;
-                            } else if (task.id === 'nu1' && !isClaimed) {
-                                 buttonDisabled = claiming === task.id;
-                            }
-
                             const finalButton = (
                                 <Button 
                                     size="sm" 
