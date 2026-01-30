@@ -4,6 +4,8 @@
 import {
   Card,
   CardContent,
+  CardHeader,
+  CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +27,7 @@ import {
   Globe,
   ChevronDown,
   Award,
+  Gift,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -32,11 +35,12 @@ import { useUser, useFirestore, useDoc } from '@/firebase';
 import { getAuth, signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { doc } from 'firebase/firestore';
-import React, { useState } from 'react';
+import { doc, runTransaction, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Loader } from '@/components/ui/loader';
 
 
 const GlassCard = ({
@@ -57,7 +61,7 @@ const GlassCard = ({
 );
 
 const actionItems = [
-    { icon: Star, label: "Collection", href: "/my/collection" },
+    { icon: Award, label: "Rewards", href: "/rewards" },
     { icon: Lock, label: "Payment Password" },
     { icon: ScrollText, label: "Transaction", href: "/order" },
     { icon: Settings, label: "Settings", href: "/my/settings" },
@@ -67,6 +71,165 @@ const listItems = [
     { icon: HelpCircle, label: "Help Center", href: "/help" },
     { icon: Globe, label: "Language" },
 ]
+
+const NewUserTasksSection = () => {
+    const { user, loading: userLoading } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const [claimedUserRewards, setClaimedUserRewards] = useState<string[]>([]);
+    const [claiming, setClaiming] = useState<string | null>(null);
+    const [dataLoading, setDataLoading] = useState(true);
+
+    const newuserTasks = [
+        { id: 'nu1', title: 'Registration reward', reward: 20 },
+        { id: 'nu2', title: 'Join Telegram', reward: 20, action: "join" },
+        { id: 'nu3', title: 'Connect PhonePe', reward: 10, action: "connect" },
+        { id: 'nu4', title: 'Connect Paytm', reward: 10, action: "connect" },
+        { id: 'nu5', title: 'Connect MobiKwik', reward: 10, action: "connect" },
+    ];
+
+    const userProfileRef = useMemo(() => {
+        if (!user || !firestore) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [user, firestore]);
+
+    const { data: userProfile, loading: profileLoading } = useDoc<{ balance: number, paymentMethods?: { name: string }[], claimedUserRewards?: string[] }>(userProfileRef);
+
+    const fetchClaimedRewards = useCallback(() => {
+        if (userProfile) {
+            setClaimedUserRewards(userProfile.claimedUserRewards || []);
+        }
+        setDataLoading(false);
+    }, [userProfile]);
+
+    useEffect(() => {
+        fetchClaimedRewards();
+    }, [fetchClaimedRewards]);
+
+    const handleClaimNewUserReward = async (taskId: string, reward: number, taskTitle: string) => {
+        if (!user || !firestore || !userProfileRef) return;
+        setClaiming(taskId);
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const userDoc = await transaction.get(userProfileRef);
+                if (!userDoc.exists()) throw new Error("User not found");
+                const userData = userDoc.data();
+                
+                const alreadyClaimed = (userData.claimedUserRewards || []).includes(taskId);
+                if (alreadyClaimed) throw new Error("Reward already claimed.");
+
+                const newBalance = (userData.balance || 0) + reward;
+                const newClaimedRewards = [...(userData.claimedUserRewards || []), taskId];
+                
+                transaction.update(userProfileRef, { 
+                    balance: newBalance,
+                    claimedUserRewards: newClaimedRewards 
+                });
+            });
+
+             await addDoc(collection(firestore, 'users', user.uid, 'transactions'), {
+                userId: user.uid,
+                amount: reward,
+                description: `New User: ${taskTitle}`,
+                createdAt: serverTimestamp()
+            });
+
+            toast({ title: "Reward Claimed!", description: `₹${reward} has been added to your balance.` });
+        } catch (error: any) {
+             toast({ variant: 'destructive', title: error.message || 'Failed to claim reward.' });
+        } finally {
+            setClaiming(null);
+        }
+    }
+
+    const loading = userLoading || profileLoading || dataLoading;
+
+     if (loading) {
+        return (
+            <GlassCard>
+                 <CardContent className="p-4 flex items-center justify-center min-h-[120px]">
+                    <Loader size="sm" />
+                </CardContent>
+            </GlassCard>
+        )
+    }
+
+    return (
+        <GlassCard>
+            <CardHeader>
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <Gift className="h-5 w-5 text-primary"/>
+                    New User Rewards
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 p-3 pt-0">
+                {newuserTasks.map(task => {
+                    const isClaimed = claimedUserRewards.includes(task.id);
+                    const upiName = task.action === 'connect' ? task.title.split(' ')[1] : '';
+                    const isUpiConnected = !!upiName && userProfile?.paymentMethods?.some(pm => pm.name === upiName);
+                    
+                    let buttonContent: string;
+                    let buttonAction = () => {};
+                    let buttonDisabled = true;
+                    let useLink = false;
+                    let isClaimable = false;
+
+                    if (isClaimed) {
+                        buttonContent = 'Claimed';
+                    } else if (task.action === 'connect') {
+                        if(isUpiConnected) {
+                            buttonContent = 'Claim';
+                            buttonAction = () => handleClaimNewUserReward(task.id, task.reward, task.title);
+                            buttonDisabled = claiming === task.id;
+                            isClaimable = true;
+                        } else {
+                            buttonContent = 'Connect';
+                            buttonDisabled = false;
+                            useLink = true;
+                        }
+                    } else { // Join or Registration
+                        buttonContent = task.action === 'join' ? 'Join' : 'Claim';
+                        buttonAction = () => handleClaimNewUserReward(task.id, task.reward, task.title);
+                        buttonDisabled = claiming === task.id;
+                        isClaimable = true;
+                    }
+                    
+                    // The registration reward is a special case. It is claimed automatically on registration.
+                    // For the UI, we'll assume it's claimable if not in the claimed list yet.
+                    if (task.id === 'nu1' && isClaimed) {
+                         buttonDisabled = true;
+                    } else if (task.id === 'nu1' && !isClaimed) {
+                         buttonDisabled = claiming === task.id;
+                    }
+
+                    const finalButton = (
+                        <Button 
+                            size="sm" 
+                            className={cn("font-semibold h-7 text-xs px-4", isClaimable && !isClaimed && "btn-gradient")}
+                            disabled={buttonDisabled}
+                            onClick={buttonAction}
+                        >
+                            {claiming === task.id ? <Loader size="xs"/> : buttonContent}
+                        </Button>
+                    );
+
+                    return (
+                        <div key={task.id} className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+                            <p className="flex-1 font-medium text-sm">{task.title}</p>
+                            <p className="font-bold text-base text-green-600 mr-2">₹ {task.reward}</p>
+                            {useLink ? (
+                                <Link href={'/my/collection'} passHref>
+                                   {finalButton}
+                                </Link>
+                            ) : finalButton}
+                        </div>
+                    )
+                })}
+            </CardContent>
+        </GlassCard>
+    );
+};
 
 
 export default function MyPage() {
@@ -121,7 +284,7 @@ export default function MyPage() {
                 </Avatar>
                 <div>
                   <h2 className="text-lg font-bold">{profileLoading ? <Skeleton className="h-5 w-24" /> : (userProfile?.displayName || '...')}</h2>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer" onClick={() => copyToClipboard(userProfile?.numericId)}>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer" onClick={() => userProfile && copyToClipboard(userProfile.numericId)}>
                     {profileLoading ? <Skeleton className="h-4 w-20 mt-1" /> : <><span>UID:{userProfile?.numericId || '...'}</span><Copy className="h-3 w-3" /></>}
                   </div>
                 </div>
@@ -171,7 +334,7 @@ export default function MyPage() {
               <GlassCard>
                   <CardContent className="flex items-center justify-center gap-2 p-3">
                       <Award className="h-5 w-5 text-yellow-400"/>
-                      <span className="font-semibold">Reward</span>
+                      <span className="font-semibold">Rewards</span>
                   </CardContent>
               </GlassCard>
             </Link>
@@ -204,6 +367,8 @@ export default function MyPage() {
                 })}
             </CardContent>
         </GlassCard>
+
+        <NewUserTasksSection />
 
         {/* List Items */}
         <GlassCard>
