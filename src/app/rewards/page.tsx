@@ -132,7 +132,7 @@ export default function RewardsPage() {
 
 
   return (
-    <div className="min-h-screen text-foreground pb-24">
+    <div className="min-h-screen text-foreground pb-32">
       {/* Header */}
       <header className="flex items-center justify-between bg-white p-4 sticky top-0 z-10 border-b">
         <Button
