@@ -26,6 +26,7 @@ import {
   ChevronDown,
   Award,
   Gift,
+  Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -58,7 +59,7 @@ const GlassCard = ({
 );
 
 const actionItems = [
-    { icon: Award, label: "Rewards", href: "/rewards" },
+    { icon: Wallet, label: "Collection", href: "/my/collection" },
     { icon: Lock, label: "Payment Password" },
     { icon: ScrollText, label: "Transaction", href: "/order" },
     { icon: Settings, label: "Settings", href: "/my/settings" },
@@ -83,6 +84,12 @@ export default function MyPage() {
   }, [user, firestore]);
 
   const { data: userProfile, loading: profileLoading } = useDoc<{ displayName: string; photoURL?: string; balance: number; holdBalance: number; numericId: string; claimedUserRewards?: string[] }>(userProfileRef);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast({ title: 'UID Copied!' });
+    });
+  };
 
   const handleLogout = async () => {
     const auth = getAuth();
@@ -125,7 +132,7 @@ export default function MyPage() {
                 </Avatar>
                 <div>
                   <h2 className="text-lg font-bold">{profileLoading ? <Skeleton className="h-5 w-24" /> : (userProfile?.displayName || '...')}</h2>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer" onClick={() => userProfile && copyToClipboard(userProfile.numericId)}>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer" onClick={(e) => {e.preventDefault(); userProfile && copyToClipboard(userProfile.numericId)}}>
                     {profileLoading ? <Skeleton className="h-4 w-20 mt-1" /> : <><span>UID:{userProfile?.numericId || '...'}</span><Copy className="h-3 w-3" /></>}
                   </div>
                 </div>
