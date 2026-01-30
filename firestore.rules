@@ -9,23 +9,17 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if true;
-      allow create: if request.auth.uid == userId;
-      allow update: if true; // Allows admin to update user balance
-      allow delete: if false;
+      allow write: if true; // More permissive for admin actions
     }
     
     match /users/{userId}/orders/{orderId} {
        allow read: if true;
-       allow create: if request.auth.uid == userId;
-       allow update: if true; // Allows user to cancel and admin to update status
-       allow delete: if false;
+       allow write: if true; // More permissive for admin actions
     }
     
     match /users/{userId}/sellOrders/{orderId} {
        allow read: if true;
-       allow create: if request.auth.uid == userId;
-       allow update: if true; // Allows admin to process/reject withdrawals
-       allow delete: if false;
+       allow write: if true; // More permissive for admin actions
     }
 
     match /users/{userId}/transactions/{transactionId} {
