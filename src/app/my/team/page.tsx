@@ -1,12 +1,10 @@
-
-
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { ChevronLeft, RefreshCw, X, Users as UsersIcon, Wallet, UserPlus } from 'lucide-react';
+import { ChevronLeft, Users as UsersIcon, Wallet, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -56,7 +54,6 @@ const StatCard = ({ title, value, icon: Icon, colorClass }: { title: string, val
 export default function TeamPage() {
     const { user } = useUser();
     const firestore = useFirestore();
-    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const l1Query = useMemo(() => {
         if (!user || !firestore) return null;
@@ -79,13 +76,6 @@ export default function TeamPage() {
     }, [firestore, l1AgentUids]);
 
     const { data: l2Agents, loading: l2Loading } = useCollection<UserProfile>(l2Query);
-
-    const handleRefresh = () => {
-        setIsRefreshing(true);
-        // Here you would typically re-fetch data.
-        // useCollection does this automatically on data change, but for a manual refresh button:
-        setTimeout(() => setIsRefreshing(false), 1000);
-    }
     
     const loading = l1Loading || (l1AgentUids.length > 0 && l2Loading);
 
@@ -98,16 +88,7 @@ export default function TeamPage() {
           </Link>
         </Button>
         <h1 className="text-xl font-bold">Team</h1>
-        <div className="flex items-center gap-2">
-            <Button onClick={handleRefresh} variant="ghost" size="icon" className="h-8 w-8" disabled={isRefreshing}>
-                <RefreshCw className={`h-5 w-5 text-muted-foreground ${isRefreshing || loading ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                <Link href="/my">
-                    <X className="h-6 w-6 text-muted-foreground" />
-                </Link>
-            </Button>
-        </div>
+        <div className="w-8"></div>
       </header>
 
       <main className="flex-grow p-4 space-y-4">
