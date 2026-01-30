@@ -1,6 +1,7 @@
 
 "use client";
 
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -23,6 +24,11 @@ import { Progress } from '@/components/ui/progress';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { useUser, useFirestore } from '@/firebase';
+import { useToast } from '@/hooks/use-toast';
+import { Loader } from '@/components/ui/loader';
+import { doc, collection, query, where, Timestamp, runTransaction, getDocs, arrayUnion, getDoc } from 'firebase/firestore';
+
 
 const GlassCard = ({
   children,
@@ -84,7 +90,7 @@ const EmptyState = ({ message }: { message: string }) => (
 )
 
 
-const TaskItem = ({ title, reward, progress, goal, buttonState = 'default' }: { title: string, reward: number, progress: number, goal: number, buttonState?: 'default' | 'claimed' | 'claimable' }) => (
+const TaskItem = ({ title, reward, progress, goal, buttonState = 'default', onClaim, isClaiming }: { title: string, reward: number, progress: number, goal: number, buttonState?: 'default' | 'claimed' | 'claimable', onClaim: () => void, isClaiming: boolean }) => (
     <div className="flex items-start gap-3 p-3 bg-secondary/50 rounded-lg">
         <div className="shrink-0 p-2 bg-primary/10 rounded-full mt-0.5">
             <Gift className="h-5 w-5 text-primary" />
@@ -92,43 +98,194 @@ const TaskItem = ({ title, reward, progress, goal, buttonState = 'default' }: { 
         <div className="flex-1 min-w-0">
             <p className="font-semibold text-sm leading-tight">{title}</p>
             <div className="flex items-center gap-2 mt-1">
-                <Progress value={(progress / goal) * 100} className="h-1.5 w-20" />
-                <p className="text-xs text-muted-foreground font-mono">{progress}/{goal}</p>
+                <Progress value={Math.min((progress / goal) * 100, 100)} className="h-1.5 w-20" />
+                <p className="text-xs text-muted-foreground font-mono">{Math.min(progress, goal)}/{goal}</p>
             </div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
              <p className="font-bold text-base text-green-600 whitespace-nowrap">₹ {reward}</p>
-             {buttonState === 'claimable' ? (
-                 <Button size="sm" className="btn-gradient font-bold h-7 text-xs px-4">Claim</Button>
-             ) : buttonState === 'claimed' ? (
-                <Button size="sm" variant="outline" className="h-7 text-xs px-4" disabled>Claimed</Button>
-             ) : (
-                <Button size="sm" variant="outline" className="h-7 text-xs px-4">Go</Button>
-             )}
+              <Button
+                size="sm"
+                className={cn("font-bold h-7 text-xs px-4", buttonState === 'claimable' && 'btn-gradient')}
+                disabled={buttonState !== 'claimable' || isClaiming}
+                onClick={onClaim}
+            >
+                {isClaiming ? <Loader size="xs" /> : (buttonState === 'claimed' ? 'Claimed' : (buttonState === 'claimable' ? 'Claim' : 'Go'))}
+            </Button>
         </div>
     </div>
 );
 
+const orderCountTasks = [
+    { id: 'oc1', title: 'Complete 1 order', reward: 2, goal: 1 },
+    { id: 'oc2', title: 'Complete 5 orders', reward: 10, goal: 5 },
+    { id: 'oc3', title: 'Complete 10 orders', reward: 20, goal: 10 },
+    { id: 'oc4', title: 'Complete 20 orders', reward: 60, goal: 20 },
+];
+  
+const orderAmountTasks = [
+    { id: 'oa1', title: 'Single order: ₹500', reward: 10, goal: 500 },
+    { id: 'oa2', title: 'Single order: ₹1,000', reward: 25, goal: 1000 },
+    { id: 'oa3', title: 'Single order: ₹2,000', reward: 50, goal: 2000 },
+    { id: 'oa4', title: 'Single order: ₹3,000', reward: 70, goal: 3000 },
+    { id: 'oa5', title: 'Single order: ₹5,000', reward: 100, goal: 5000 },
+    { id: 'oa6', title: 'Single order: ₹10,000', reward: 200, goal: 10000 },
+];
+
+
+const DailyTasksSection = () => {
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState({ count: 0, maxAmount: 0 });
+    const [claimedTaskIds, setClaimedTaskIds] = useState<string[]>([]);
+    const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null);
+
+    const getTodayDateString = useCallback(() => new Date().toISOString().split('T')[0], []);
+
+    const fetchData = useCallback(async () => {
+        if (!user || !firestore) {
+            setLoading(false);
+            return;
+        };
+        setLoading(true);
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayTimestamp = Timestamp.fromDate(today);
+
+        try {
+            // Fetch today's completed orders
+            const ordersQuery = query(
+                collection(firestore, 'users', user.uid, 'orders'),
+                where('status', '==', 'completed'),
+                where('createdAt', '>=', todayTimestamp)
+            );
+            const ordersSnapshot = await getDocs(ordersQuery);
+            let orderCount = 0;
+            let maxAmount = 0;
+            ordersSnapshot.forEach(doc => {
+                const order = doc.data();
+                orderCount++;
+                if (order.amount > maxAmount) {
+                    maxAmount = order.amount;
+                }
+            });
+            setStats({ count: orderCount, maxAmount });
+
+            // Fetch today's claimed rewards
+            const rewardDocRef = doc(firestore, 'users', user.uid, 'dailyRewards', getTodayDateString());
+            const rewardDoc = await getDoc(rewardDocRef);
+            if (rewardDoc.exists()) {
+                setClaimedTaskIds(rewardDoc.data().claimedTaskIds || []);
+            } else {
+                setClaimedTaskIds([]);
+            }
+        } catch (error) {
+            console.error("Error fetching daily tasks data:", error);
+            toast({ variant: 'destructive', title: "Could not load tasks" });
+        } finally {
+            setLoading(false);
+        }
+    }, [user, firestore, getTodayDateString, toast]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    const handleClaim = async (taskId: string, reward: number) => {
+        if (!user || !firestore) return;
+        setClaimingTaskId(taskId);
+
+        const userRef = doc(firestore, 'users', user.uid);
+        const rewardDocRef = doc(firestore, 'users', user.uid, 'dailyRewards', getTodayDateString());
+
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const userDoc = await transaction.get(userRef);
+                if (!userDoc.exists()) throw new Error("User not found");
+
+                const rewardDoc = await getDoc(rewardDocRef); // Use getDoc inside transaction for consistency
+                const alreadyClaimed = rewardDoc.exists() && (rewardDoc.data().claimedTaskIds || []).includes(taskId);
+                if (alreadyClaimed) {
+                    throw new Error("Reward already claimed.");
+                }
+
+                const newBalance = (userDoc.data().balance || 0) + reward;
+                transaction.update(userRef, { balance: newBalance });
+
+                if (rewardDoc.exists()) {
+                    transaction.update(rewardDocRef, { claimedTaskIds: arrayUnion(taskId) });
+                } else {
+                    transaction.set(rewardDocRef, { claimedTaskIds: [taskId], date: getTodayDateString() });
+                }
+            });
+
+            toast({ title: "Reward Claimed!", description: `₹${reward} has been added to your balance.` });
+            await fetchData(); // Refetch data to update UI
+        } catch (error: any) {
+            console.error("Claim reward error:", error);
+            toast({ variant: 'destructive', title: error.message || 'Failed to claim reward.' });
+        } finally {
+            setClaimingTaskId(null);
+        }
+    };
+
+    const renderTasks = (tasks: typeof orderCountTasks, progress: number) => (
+        tasks.map(task => {
+            const isClaimed = claimedTaskIds.includes(task.id);
+            const isCompleted = progress >= task.goal;
+            const buttonState = isClaimed ? 'claimed' : (isCompleted ? 'claimable' : 'default');
+            
+            return (
+                <TaskItem
+                    key={task.id}
+                    {...task}
+                    progress={progress}
+                    buttonState={buttonState}
+                    onClaim={() => handleClaim(task.id, task.reward)}
+                    isClaiming={claimingTaskId === task.id}
+                />
+            );
+        })
+    );
+    
+    if (loading) {
+        return (
+             <div className="flex items-center justify-center p-8">
+                <Loader size="md" />
+            </div>
+        )
+    }
+
+    return (
+        <>
+            <GlassCard>
+                <CardHeader>
+                    <CardTitle className="text-lg font-bold">Daily Tasks</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div>
+                        <h3 className="font-semibold text-muted-foreground mb-2 text-sm">Based on number of orders</h3>
+                        <div className="space-y-2">
+                           {renderTasks(orderCountTasks, stats.count)}
+                        </div>
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-muted-foreground mb-2 text-sm">Based on order amount</h3>
+                        <div className="space-y-2">
+                           {renderTasks(orderAmountTasks, stats.maxAmount)}
+                        </div>
+                    </div>
+                </CardContent>
+            </GlassCard>
+        </>
+    );
+}
 
 export default function RewardsPage() {
-
-  const orderCountTasks = [
-    { id: 'oc1', title: 'Complete 1 order', reward: 2, goal: 1, progress: 1, buttonState: 'claimable' },
-    { id: 'oc2', title: 'Complete 5 orders', reward: 10, goal: 5, progress: 3, buttonState: 'default' },
-    { id: 'oc3', title: 'Complete 10 orders', reward: 20, goal: 10, progress: 3, buttonState: 'default' },
-    { id: 'oc4', title: 'Complete 20 orders', reward: 60, goal: 20, progress: 3, buttonState: 'default' },
-  ];
-  
-  const orderAmountTasks = [
-    { id: 'oa1', title: 'Single order: ₹500', reward: 10, goal: 500, progress: 500, buttonState: 'claimed' },
-    { id: 'oa2', title: 'Single order: ₹1,000', reward: 25, goal: 1000, progress: 600, buttonState: 'claimable' },
-    { id: 'oa3', title: 'Single order: ₹2,000', reward: 50, goal: 2000, progress: 600, buttonState: 'default' },
-    { id: 'oa4', title: 'Single order: ₹3,000', reward: 70, goal: 3000, progress: 600, buttonState: 'default' },
-    { id: 'oa5', title: 'Single order: ₹5,000', reward: 100, goal: 5000, progress: 600, buttonState: 'default' },
-    { id: 'oa6', title: 'Single order: ₹10,000', reward: 200, goal: 10000, progress: 600, buttonState: 'default' },
-  ];
-
-
   return (
     <div className="min-h-screen text-foreground pb-32">
       {/* Header */}
@@ -229,25 +386,7 @@ export default function RewardsPage() {
                     <EmptyState message="No VIP tasks available right now." />
                 </CardContent>
             </GlassCard>
-            <GlassCard>
-                <CardHeader>
-                    <CardTitle className="text-lg font-bold">Daily Tasks</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div>
-                        <h3 className="font-semibold text-muted-foreground mb-2 text-sm">Based on number of orders</h3>
-                        <div className="space-y-2">
-                            {orderCountTasks.map(task => <TaskItem key={task.id} {...task} />)}
-                        </div>
-                    </div>
-                    <div>
-                        <h3 className="font-semibold text-muted-foreground mb-2 text-sm">Based on order amount</h3>
-                        <div className="space-y-2">
-                            {orderAmountTasks.map(task => <TaskItem key={task.id} {...task} />)}
-                        </div>
-                    </div>
-                </CardContent>
-            </GlassCard>
+            <DailyTasksSection />
              <GlassCard>
                 <CardHeader>
                     <CardTitle className="text-lg font-bold">Reward getting member</CardTitle>

@@ -315,6 +315,26 @@
         }
       },
       "required": ["enteredIdentifier", "status", "createdAt", "chatHistory"]
+    },
+    "DailyReward": {
+      "title": "Daily Reward",
+      "description": "Tracks rewards claimed by a user on a specific day. The document ID should be in YYYY-MM-DD format.",
+      "type": "object",
+      "properties": {
+        "claimedTaskIds": {
+          "type": "array",
+          "description": "A list of task IDs that have been claimed for the day.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "The date for which the rewards were claimed."
+        }
+      },
+      "required": ["claimedTaskIds", "date"]
     }
   },
   "auth": {
@@ -350,6 +370,12 @@
         "$ref": "#/entities/ChatRequest"
       },
       "description": "Stores user requests to chat with a human agent."
+    },
+    "/users/{userId}/dailyRewards/{date}": {
+      "schema": {
+        "$ref": "#/entities/DailyReward"
+      },
+      "description": "Stores daily claimed rewards for a user. {date} is YYYY-MM-DD."
     }
   }
 }
