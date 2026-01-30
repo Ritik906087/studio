@@ -14,13 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Copy, ChevronLeft, ClipboardList, Loader2 } from 'lucide-react';
+import { Copy, ChevronLeft, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useCollection } from '@/firebase';
 import { collection, query, where, Timestamp, orderBy, limit } from 'firebase/firestore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader } from '@/components/ui/loader';
 
 
 type Order = {
@@ -202,7 +203,7 @@ const TransactionList = ({ orders, loading, type }: { orders: any[], loading: bo
   if (loading) {
       return (
         <div className="flex justify-center pt-20">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <Loader size="md" />
         </div>
       );
   }
