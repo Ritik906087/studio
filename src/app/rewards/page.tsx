@@ -85,27 +85,25 @@ const EmptyState = ({ message }: { message: string }) => (
 
 
 const TaskItem = ({ title, reward, progress, goal, buttonState = 'default' }: { title: string, reward: number, progress: number, goal: number, buttonState?: 'default' | 'claimed' | 'claimable' }) => (
-    <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-        <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-full">
-                <Gift className="h-5 w-5 text-primary" />
-            </div>
-            <div className="flex-grow">
-                <p className="font-semibold text-sm">{title}</p>
-                <div className="flex items-center gap-2 mt-1">
-                    <Progress value={(progress / goal) * 100} className="h-1.5 w-20" />
-                    <p className="text-xs text-muted-foreground font-mono">{progress}/{goal}</p>
-                </div>
+    <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+        <div className="shrink-0 p-2 bg-primary/10 rounded-full">
+            <Gift className="h-5 w-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate">{title}</p>
+            <div className="flex items-center gap-2 mt-1">
+                <Progress value={(progress / goal) * 100} className="h-1.5 w-20" />
+                <p className="text-xs text-muted-foreground font-mono">{progress}/{goal}</p>
             </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 shrink-0">
              <p className="font-bold text-lg text-green-600">₹{reward}</p>
              {buttonState === 'claimable' ? (
-                 <Button size="sm" className="btn-gradient font-bold w-20">Claim</Button>
+                 <Button size="sm" className="btn-gradient font-bold w-20 text-xs">Claim</Button>
              ) : buttonState === 'claimed' ? (
-                <Button size="sm" variant="outline" className="w-20" disabled>Claimed</Button>
+                <Button size="sm" variant="outline" className="w-20 text-xs" disabled>Claimed</Button>
              ) : (
-                <Button size="sm" variant="outline" className="w-20">Go</Button>
+                <Button size="sm" variant="outline" className="w-20 text-xs">Go</Button>
              )}
         </div>
     </div>
