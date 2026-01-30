@@ -9,7 +9,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChevronLeft,
   Award,
@@ -148,6 +147,14 @@ const orderAmountTasks = [
     { id: 'oa4', title: 'Single order: ₹3,000', reward: 70, goal: 3000 },
     { id: 'oa5', title: 'Single order: ₹5,000', reward: 100, goal: 5000 },
     { id: 'oa6', title: 'Single order: ₹10,000', reward: 200, goal: 10000 },
+];
+
+const newuserTasks = [
+    { id: 'nu1', title: 'Registration reward', reward: 20, isClaimed: true },
+    { id: 'nu2', title: 'Join Telegram', reward: 20, isClaimed: false, action: "join" },
+    { id: 'nu3', title: 'Connect PhonePe', reward: 10, isClaimed: false, action: "connect" },
+    { id: 'nu4', title: 'Connect Paytm', reward: 10, isClaimed: false, action: "connect" },
+    { id: 'nu5', title: 'Connect MobiKwik', reward: 10, isClaimed: false, action: "connect" },
 ];
 
 
@@ -310,6 +317,144 @@ const DailyTasksSection = () => {
     );
 }
 
+const NewUserTasksSection = () => {
+    const { user, loading: userLoading } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const [claimedUserRewards, setClaimedUserRewards] = useState<string[]>([]);
+    const [claiming, setClaiming] = useState<string | null>(null);
+    const [dataLoading, setDataLoading] = useState(true);
+
+    const userProfileRef = useMemo(() => {
+        if (!user || !firestore) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [user, firestore]);
+
+    const { data: userProfile, loading: profileLoading } = useDoc<{ paymentMethods?: { name: string }[], claimedUserRewards?: string[] }>(userProfileRef);
+
+    const fetchClaimedRewards = useCallback(() => {
+        if (userProfile) {
+            setClaimedUserRewards(userProfile.claimedUserRewards || []);
+        }
+        setDataLoading(false);
+    }, [userProfile]);
+
+    useEffect(() => {
+        fetchClaimedRewards();
+    }, [fetchClaimedRewards]);
+
+    const handleClaimNewUserReward = async (taskId: string, reward: number, taskTitle: string) => {
+        if (!user || !firestore || !userProfileRef) return;
+        setClaiming(taskId);
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const userDoc = await transaction.get(userProfileRef);
+                if (!userDoc.exists()) throw new Error("User not found");
+                const userData = userDoc.data();
+                
+                const alreadyClaimed = (userData.claimedUserRewards || []).includes(taskId);
+                if (alreadyClaimed) throw new Error("Reward already claimed.");
+
+                const newBalance = (userData.balance || 0) + reward;
+                const newClaimedRewards = [...(userData.claimedUserRewards || []), taskId];
+                
+                transaction.update(userProfileRef, { 
+                    balance: newBalance,
+                    claimedUserRewards: newClaimedRewards 
+                });
+            });
+
+             await addDoc(collection(firestore, 'users', user.uid, 'transactions'), {
+                userId: user.uid,
+                amount: reward,
+                description: `New User: ${taskTitle}`,
+                createdAt: serverTimestamp()
+            });
+
+            toast({ title: "Reward Claimed!", description: `₹${reward} has been added to your balance.` });
+        } catch (error: any) {
+             toast({ variant: 'destructive', title: error.message || 'Failed to claim reward.' });
+        } finally {
+            setClaiming(null);
+        }
+    }
+
+    const loading = userLoading || profileLoading || dataLoading;
+
+     if (loading) {
+        return (
+             <div className="flex items-center justify-center p-8">
+                <Loader size="md" />
+            </div>
+        )
+    }
+
+    return (
+        <GlassCard>
+            <CardHeader>
+                <CardTitle className="text-lg font-bold">New User Reward</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+                {newuserTasks.map(task => {
+                    const isClaimed = claimedUserRewards.includes(task.id);
+                    const isUpiConnected = task.action === 'connect' && userProfile?.paymentMethods?.some(pm => pm.name === task.title.split(' ')[1]);
+                    const isClaimable = !isClaimed && (task.action !== 'connect' || isUpiConnected);
+
+                    let buttonContent;
+                    let buttonAction = () => {};
+                    let buttonDisabled = true;
+                    
+                    if (isClaimed) {
+                        buttonContent = 'Claimed';
+                    } else if (task.action === 'connect') {
+                        buttonContent = isUpiConnected ? 'Claim' : 'Connect';
+                        buttonAction = isUpiConnected ? () => handleClaimNewUserReward(task.id, task.reward, task.title) : () => {};
+                        buttonDisabled = claiming === task.id;
+                    } else if (task.action === 'join') {
+                        buttonContent = 'Join';
+                        buttonAction = () => handleClaimNewUserReward(task.id, task.reward, task.title); // Placeholder for joining
+                        buttonDisabled = claiming === task.id;
+                    } else {
+                        // Registration reward
+                        buttonContent = 'Claim';
+                        buttonAction = () => handleClaimNewUserReward(task.id, task.reward, task.title);
+                        buttonDisabled = claiming === task.id || isClaimed;
+                    }
+
+                    const finalButton = (
+                        <Button 
+                            size="sm" 
+                            className={cn("font-bold h-7 text-xs px-4", isClaimable && !isClaimed && "btn-gradient")}
+                            disabled={buttonDisabled}
+                            onClick={buttonAction}
+                        >
+                            {claiming === task.id ? <Loader size="xs"/> : buttonContent}
+                        </Button>
+                    );
+
+                    const finalLinkButton = (
+                        <Link href={task.action === 'connect' && !isUpiConnected ? '/my/collection' : '#'} passHref>
+                           {finalButton}
+                        </Link>
+                    );
+
+                    return (
+                        <div key={task.id} className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+                            <div className="shrink-0 p-2 bg-primary/10 rounded-full">
+                                <Gift className="h-5 w-5 text-primary" />
+                            </div>
+                            <p className="flex-1 font-semibold text-sm">{task.title}</p>
+                            <p className="font-bold text-base text-green-600 mr-2">₹ {task.reward}</p>
+                            {(task.action === 'connect' && !isUpiConnected) ? finalLinkButton : finalButton}
+                        </div>
+                    )
+                })}
+            </CardContent>
+        </GlassCard>
+    );
+};
+
 export default function RewardsPage() {
   return (
     <div className="min-h-screen text-foreground pb-32">
@@ -397,12 +542,8 @@ export default function RewardsPage() {
           <LevelIcon level="LV4" isLocked />
         </div>
         
-        <Tabs defaultValue="task" className="w-full">
-           <TabsList className="grid w-full grid-cols-2 bg-secondary h-12 rounded-xl p-1">
-            <TabsTrigger value="task" className="text-base data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-lg">Task</TabsTrigger>
-            <TabsTrigger value="invite" className="text-base data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-lg">Invite</TabsTrigger>
-          </TabsList>
-          <TabsContent value="task" className="space-y-4">
+        <div className="space-y-4">
+            <NewUserTasksSection />
             <GlassCard>
                 <CardHeader>
                     <CardTitle className="text-lg font-bold">VIP Tasks</CardTitle>
@@ -420,35 +561,7 @@ export default function RewardsPage() {
                     <EmptyState message="No recent rewards." />
                 </CardContent>
             </GlassCard>
-          </TabsContent>
-          <TabsContent value="invite">
-            <GlassCard>
-                <CardContent className="p-4 space-y-4">
-                    <div className="rounded-lg overflow-hidden">
-                        <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6" width={400} height={150} alt="Invite friends" className="w-full" />
-                    </div>
-                    <h3 className="font-bold text-center">Invite friends to join LG Pay, rewards credited instantly</h3>
-                    <ul className="space-y-3 text-sm text-muted-foreground">
-                        <li className="flex items-start gap-3">
-                            <Clipboard className="h-4 w-4 mt-0.5 shrink-0 text-yellow-500" />
-                            <span>Click "Invite Now" to share your exclusive link or poster.</span>
-                        </li>
-                        <li className="flex items-start gap-3">
-                            <Users className="h-4 w-4 mt-0.5 shrink-0 text-yellow-500" />
-                            <span>Friends register via the link or QR code and complete their first trade.</span>
-                        </li>
-                         <li className="flex items-start gap-3">
-                            <Gift className="h-4 w-4 mt-0.5 shrink-0 text-yellow-500" />
-                            <span>Invited users can unlock exclusive tasks and get extra rewards.</span>
-                        </li>
-                    </ul>
-                    <p className="text-xs text-center text-yellow-700 bg-yellow-100 p-2 rounded-md">Note: Reach LV3 (VIP) to unlock extra rewards and rebates.</p>
-                    <Button className="w-full btn-gradient rounded-full font-semibold">Invite Now</Button>
-                    <Button variant="ghost" className="w-full text-muted-foreground">View Invitation Data</Button>
-                </CardContent>
-            </GlassCard>
-          </TabsContent>
-        </Tabs>
+          </div>
       </main>
     </div>
   );
