@@ -157,10 +157,9 @@ const DailyTasksSection = () => {
         const todayTimestamp = Timestamp.fromDate(today);
 
         try {
-            // Fetch today's completed orders
+            // Fetch today's orders and filter for completed ones on the client
             const ordersQuery = query(
                 collection(firestore, 'users', user.uid, 'orders'),
-                where('status', '==', 'completed'),
                 where('createdAt', '>=', todayTimestamp)
             );
             const ordersSnapshot = await getDocs(ordersQuery);
@@ -168,9 +167,11 @@ const DailyTasksSection = () => {
             let maxAmount = 0;
             ordersSnapshot.forEach(doc => {
                 const order = doc.data();
-                orderCount++;
-                if (order.amount > maxAmount) {
-                    maxAmount = order.amount;
+                if (order.status === 'completed') {
+                    orderCount++;
+                    if (order.amount > maxAmount) {
+                        maxAmount = order.amount;
+                    }
                 }
             });
             setStats({ count: orderCount, maxAmount });
