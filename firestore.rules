@@ -4,27 +4,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // User can update their own profile. Any authenticated user (admin) can read.
+    // WARNING: The following rules grant public read access on several collections.
+    // This is required for the admin panel to function without a proper backend.
+    // For a production app, use a secure backend and tighten these rules.
+
     match /users/{userId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow create, update: if request.auth != null && request.auth.uid == userId;
       allow delete: if false;
     }
 
-    // A user can write to their own orders. Any authenticated user (admin) can read.
     match /users/{userId}/orders/{orderId} {
-       allow read: if request.auth != null;
+       allow read: if true;
        allow write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // A user can write to their own sell orders. Any authenticated user (admin) can read.
     match /users/{userId}/sellOrders/{orderId} {
-       allow read: if request.auth != null;
+       allow read: if true;
        allow write: if request.auth != null && request.auth.uid == userId;
     }
 
     match /users/{userId}/transactions/{transactionId} {
-       allow read: if request.auth != null;
+       allow read: if true;
        allow write: if request.auth != null && request.auth.uid == userId;
     }
     
@@ -32,27 +33,14 @@ service cloud.firestore {
        allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Admin-configured payment methods are read-only for all authenticated users.
-    // For the admin panel to add/delete methods, a secure backend with admin privileges is required.
     match /paymentMethods/{methodId} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if false; 
     }
     
     match /chatRequests/{requestId} {
-      // Any authenticated user can create a request to talk to an agent.
       allow create: if request.auth != null;
-      // Unsafe: allows any authenticated user to read/update.
-      // Needed for the admin panel to function without a proper admin backend.
       allow read, update: if true;
     }
-
-    // The admin panel reads all user documents and all sell orders across all users.
-    // The secure rules above will break this functionality.
-    // To maintain admin functionality, you would need insecure rules like:
-    // match /users/{userId} { allow read: if true; }
-    // This is not recommended for production. A proper solution involves a dedicated backend
-    // with service account credentials to perform admin tasks.
-    // These rules prioritize user data security over admin panel functionality.
   }
 }
