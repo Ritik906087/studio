@@ -4,31 +4,36 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // WARNING: The following rules grant public read access on several collections.
-    // This is required for the admin panel to function without a proper backend.
+    // WARNING: The following rules are simplified for prototyping and grant some public write access.
     // For a production app, you MUST use a secure backend and tighten these rules.
 
     match /users/{userId} {
       allow read: if true;
-      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth.uid == userId;
+      allow update: if true; // Allows admin to update user balance
       allow delete: if false;
     }
     
-    // Rules for user-specific subcollections write access
     match /users/{userId}/orders/{orderId} {
-       allow write: if request.auth != null && request.auth.uid == userId;
+       allow read: if true;
+       allow create: if request.auth.uid == userId;
+       allow update: if true; // Allows user to cancel and admin to update status
+       allow delete: if false;
     }
     
     match /users/{userId}/sellOrders/{orderId} {
-       allow write: if request.auth != null && request.auth.uid == userId;
+       allow read: if true;
+       allow create: if request.auth.uid == userId;
+       allow update: if true; // Allows admin to process/reject withdrawals
+       allow delete: if false;
     }
 
     match /users/{userId}/transactions/{transactionId} {
-       allow read, write: if request.auth != null && request.auth.uid == userId;
+       allow read, write: if request.auth.uid == userId;
     }
     
     match /users/{userId}/dailyRewards/{date} {
-       allow read, write: if request.auth != null && request.auth.uid == userId;
+       allow read, write: if request.auth.uid == userId;
     }
 
     // Rules for top-level collections needed by admin panel

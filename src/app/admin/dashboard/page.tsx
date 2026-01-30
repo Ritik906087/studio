@@ -68,6 +68,7 @@ type Order = {
     orderId: string;
     amount: number;
     status: 'pending_confirmation';
+    submittedAt?: Timestamp;
     utr?: string;
     screenshotURL?: string;
     verificationResult?: string;
@@ -1020,7 +1021,7 @@ function ProcessConfirmationDialog({ order, onProcessed }: { order: Order, onPro
     return (
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setShowRejectionUI(false); }}>
             <DialogTrigger asChild>
-                <Button size="sm" variant="outline">Review</Button>
+                <Button size="sm" variant="outline" className="w-full">Review</Button>
             </DialogTrigger>
             <DialogContent>
                 <DialogHeader>
@@ -1182,12 +1183,22 @@ function ConfirmationsTabContent() {
          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {ordersWithUserData.map(order => (
                 <Card key={order.id}>
-                    <CardContent className="p-4 space-y-2 text-sm">
-                        <p><strong>Amount:</strong> <span className="font-bold text-lg text-primary">₹{order.amount.toFixed(2)}</span></p>
+                    <CardHeader className="flex flex-row items-start justify-between p-4 pb-2">
+                        <div>
+                            <p className="text-sm text-muted-foreground">Amount</p>
+                            <p className="font-bold text-lg text-primary">₹{order.amount.toFixed(2)}</p>
+                        </div>
+                         {order.submittedAt && (
+                            <CountdownTimer 
+                                expiryTimestamp={new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds)} 
+                            />
+                        )}
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0 space-y-2 text-sm">
                         <p><strong>User:</strong> {order.user?.displayName || 'N/A'} ({order.user?.numericId})</p>
                         <p className="flex items-start gap-2"><strong>UTR/TxHash:</strong> <span className="text-right break-all">{order.utr}</span></p>
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className="p-4 pt-0">
                         <ProcessConfirmationDialog order={order} onProcessed={fetchData} />
                     </CardFooter>
                 </Card>
@@ -1417,6 +1428,7 @@ export default function AdminDashboardPage() {
 
 
     
+
 
 
 
