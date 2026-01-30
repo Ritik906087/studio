@@ -61,7 +61,7 @@ const GlassCard = ({
 const actionItems = [
     { icon: Wallet, label: "Collection", href: "/my/collection" },
     { icon: Lock, label: "Payment Password" },
-    { icon: ScrollText, label: "Transaction", href: "/order" },
+    { icon: ScrollText, label: "Transaction", href: "/my/transactions" },
     { icon: Settings, label: "Settings", href: "/my/settings" },
 ]
 

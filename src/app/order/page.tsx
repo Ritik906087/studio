@@ -7,7 +7,6 @@ import {
   Card,
   CardContent,
 } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -44,15 +43,6 @@ type SellOrder = {
   createdAt: Timestamp;
   failureReason?: string;
 };
-
-type RewardTransaction = {
-    id: string;
-    orderId: string;
-    amount: number;
-    description: string;
-    type: 'team_bonus' | 'daily_task' | 'new_user_reward';
-    createdAt: Timestamp;
-}
 
 const BuyTransactionCard = React.memo(({ transaction }: { transaction: Order }) => {
   const { toast } = useToast();
@@ -208,56 +198,8 @@ const SellTransactionCard = React.memo(({ transaction }: { transaction: SellOrde
 });
 SellTransactionCard.displayName = 'SellTransactionCard';
 
-const InviteTransactionCard = React.memo(({ transaction }: { transaction: RewardTransaction }) => {
-  const { toast } = useToast();
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast({ title: 'Copied!' });
-    });
-  };
-
-  return (
-    <Card className="mb-4 bg-white text-foreground shadow-sm">
-      <CardContent className="p-4 space-y-3">
-         <div className="flex justify-between items-center">
-            <span
-              className={cn(
-                "rounded px-2 py-0.5 text-xs font-bold bg-purple-100 text-purple-800"
-              )}
-            >
-              Invite
-            </span>
-             <span className={cn("font-semibold text-sm capitalize", "bg-green-100 text-green-800", "px-2 py-1 rounded-md")}>Completed</span>
-        </div>
-        <div className="space-y-2 text-sm">
-           <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Amount</span>
-            <div className="flex items-center gap-2">
-                <span className="font-semibold text-primary">₹{transaction.amount.toFixed(2)}</span>
-                <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.amount.toFixed(2))} />
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Time</span>
-            <span className="font-mono text-muted-foreground text-xs">{transaction.createdAt.toDate().toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Order Number</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-muted-foreground" style={{wordBreak: 'break-all'}}>{transaction.orderId}</span>
-              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderId)} />
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
-InviteTransactionCard.displayName = 'InviteTransactionCard';
-
-
-const TransactionList = ({ orders, loading, type }: { orders: any[], loading: boolean, type: 'buy' | 'sell' | 'invite' }) => {
+const TransactionList = ({ orders, loading, type }: { orders: any[], loading: boolean, type: 'buy' | 'sell' }) => {
   if (loading) {
       return (
         <div className="flex justify-center pt-20">
@@ -283,8 +225,6 @@ const TransactionList = ({ orders, loading, type }: { orders: any[], loading: bo
                 return <BuyTransactionCard key={order.id} transaction={order} />;
             case 'sell':
                 return <SellTransactionCard key={order.id} transaction={order} />;
-            case 'invite':
-                return <InviteTransactionCard key={order.id} transaction={order} />;
             default:
                 return null;
         }
@@ -318,19 +258,8 @@ export default function TransactionPage() {
     );
   }, [user, firestore]);
 
-  const inviteRewardsQuery = useMemo(() => {
-    if (!user || !firestore) return null;
-    return query(
-        collection(firestore, 'users', user.uid, 'transactions'),
-        where('type', '==', 'team_bonus'),
-        orderBy('createdAt', 'desc'),
-        limit(50)
-    );
-  }, [user, firestore]);
-
   const { data: unsortedBuyOrders, loading: buyLoading } = useCollection<Order>(buyOrdersQuery);
   const { data: unsortedSellOrders, loading: sellLoading } = useCollection<SellOrder>(sellOrdersQuery);
-  const { data: inviteRewards, loading: inviteLoading } = useCollection<RewardTransaction>(inviteRewardsQuery);
 
   const buyOrders = useMemo(() => {
     if (!unsortedBuyOrders) return [];
@@ -342,11 +271,6 @@ export default function TransactionPage() {
     return [...unsortedSellOrders].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
   }, [unsortedSellOrders]);
 
-  const inviteTransactions = useMemo(() => {
-    if (!inviteRewards) return [];
-    return [...inviteRewards].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
-  }, [inviteRewards]);
-  
   return (
     <div className="text-foreground min-h-screen">
        {/* Header */}
@@ -356,16 +280,15 @@ export default function TransactionPage() {
                 <ChevronLeft className="h-6 w-6 text-muted-foreground" />
             </Link>
         </Button>
-        <h1 className="text-xl font-bold">Transaction</h1>
+        <h1 className="text-xl font-bold">Order History</h1>
         <div className="w-8"></div>
       </header>
 
       <main className="p-4">
           <Tabs defaultValue="buy" className="w-full" onValueChange={setActiveTab}>
-             <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 h-auto mb-4 border-b">
+             <TabsList className="grid w-full grid-cols-2 bg-transparent p-0 h-auto mb-4 border-b">
                 <TabsTrigger value="buy" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3">My Purchases</TabsTrigger>
                 <TabsTrigger value="sell" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3">My Sales</TabsTrigger>
-                <TabsTrigger value="invite" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3">Invites</TabsTrigger>
              </TabsList>
              
               <div className="my-4 grid grid-cols-2 gap-4">
@@ -399,9 +322,6 @@ export default function TransactionPage() {
              </TabsContent>
              <TabsContent value="sell">
                 <TransactionList orders={sellOrders} loading={sellLoading} type="sell"/>
-             </TabsContent>
-             <TabsContent value="invite">
-                <TransactionList orders={inviteTransactions} loading={inviteLoading} type="invite"/>
              </TabsContent>
           </Tabs>
       </main>
