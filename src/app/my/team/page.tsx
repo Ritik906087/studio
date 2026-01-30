@@ -108,9 +108,9 @@ export default function TeamCenterPage() {
         </Card>
 
         <Tabs defaultValue="lv1" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-white rounded-lg border p-1">
-            <TabsTrigger value="lv1" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md bg-transparent text-muted-foreground p-2.5">Team L1</TabsTrigger>
-            <TabsTrigger value="lv2" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md bg-transparent text-muted-foreground p-2.5">Team L2</TabsTrigger>
+          <TabsList className="flex w-full bg-white rounded-lg border p-1">
+            <TabsTrigger value="lv1" className="flex-1 text-base data-[state=active]:font-bold data-[state=active]:shadow-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md bg-transparent text-muted-foreground p-2.5">Team L1</TabsTrigger>
+            <TabsTrigger value="lv2" className="flex-1 text-base data-[state=active]:font-bold data-[state=active]:shadow-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md bg-transparent text-muted-foreground p-2.5">Team L2</TabsTrigger>
           </TabsList>
           <TabsContent value="lv1" className="bg-white mt-4 rounded-lg border">
             {dummyAgentsLv1.length > 0 ? (
