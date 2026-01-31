@@ -23,7 +23,7 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp, runTransaction, limit, orderBy, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp, runTransaction, limit, orderBy, serverTimestamp, arrayUnion, DocumentData, DocumentReference } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -975,63 +975,73 @@ function ProcessConfirmationDialog({ order, onProcessed }: { order: Order, onPro
 
         try {
             await runTransaction(firestore, async (transaction) => {
+                // --- READ PHASE ---
                 const buyerDoc = await transaction.get(userRef);
                 if (!buyerDoc.exists()) {
                     throw new Error("User not found to update balance.");
                 }
-
+                const buyerData = buyerDoc.data() as UserProfile;
+    
+                let l1InviterDoc: DocumentData | null = null;
+                let l1InviterRef: DocumentReference | null = null;
+                let l2InviterDoc: DocumentData | null = null;
+                let l2InviterRef: DocumentReference | null = null;
+    
+                // Read L1 inviter if exists
+                if (buyerData.inviterUid) {
+                    l1InviterRef = doc(firestore, 'users', buyerData.inviterUid);
+                    l1InviterDoc = await transaction.get(l1InviterRef);
+    
+                    // Read L2 inviter if L1 inviter exists and has an inviter
+                    if (l1InviterDoc.exists()) {
+                        const l1InviterData = l1InviterDoc.data() as UserProfile;
+                        if (l1InviterData.inviterUid) {
+                            l2InviterRef = doc(firestore, 'users', l1InviterData.inviterUid);
+                            l2InviterDoc = await transaction.get(l2InviterRef);
+                        }
+                    }
+                }
+                
+                // --- WRITE PHASE ---
+    
                 // 1. Update buyer's balance and order status
-                const newBalance = (buyerDoc.data().balance || 0) + order.amount;
+                const newBalance = (buyerData.balance || 0) + order.amount;
                 transaction.update(userRef, { balance: newBalance });
                 transaction.update(orderRef, { status: 'completed' });
-
-                const buyerData = buyerDoc.data() as UserProfile;
-
+    
                 // 2. Handle Level 1 Inviter Bonus
-                if (buyerData.inviterUid) {
-                    const l1InviterRef = doc(firestore, 'users', buyerData.inviterUid);
-                    const l1InviterDoc = await transaction.get(l1InviterRef);
-
-                    if (l1InviterDoc.exists()) {
-                        const l1Bonus = order.amount * 0.02;
-                        const l1NewBalance = (l1InviterDoc.data().balance || 0) + l1Bonus;
-                        transaction.update(l1InviterRef, { balance: l1NewBalance });
-
-                        // Create reward transaction for L1 inviter
-                        const l1RewardTxRef = doc(collection(firestore, 'users', buyerData.inviterUid, 'transactions'));
-                        transaction.set(l1RewardTxRef, {
-                            userId: buyerData.inviterUid,
-                            amount: l1Bonus,
-                            description: `Level 1 bonus from user ${order.user?.numericId || order.userId}`,
+                if (l1InviterRef && l1InviterDoc && l1InviterDoc.exists()) {
+                    const l1Bonus = order.amount * 0.02;
+                    const l1NewBalance = (l1InviterDoc.data().balance || 0) + l1Bonus;
+                    transaction.update(l1InviterRef, { balance: l1NewBalance });
+    
+                    // Create reward transaction for L1 inviter
+                    const l1RewardTxRef = doc(collection(firestore, 'users', buyerData.inviterUid!, 'transactions'));
+                    transaction.set(l1RewardTxRef, {
+                        userId: buyerData.inviterUid,
+                        amount: l1Bonus,
+                        description: `Level 1 bonus from user ${order.user?.numericId || order.userId}`,
+                        createdAt: serverTimestamp(),
+                        type: 'team_bonus',
+                        orderId: `LGPAYI${Date.now()}`
+                    });
+    
+                    // 3. Handle Level 2 Inviter Bonus
+                    if (l2InviterRef && l2InviterDoc && l2InviterDoc.exists()) {
+                        const l2Bonus = order.amount * 0.01;
+                        const l2NewBalance = (l2InviterDoc.data().balance || 0) + l2Bonus;
+                        transaction.update(l2InviterRef, { balance: l2NewBalance });
+    
+                        // Create reward transaction for L2 inviter
+                        const l2RewardTxRef = doc(collection(firestore, 'users', l1InviterDoc.data().inviterUid!, 'transactions'));
+                        transaction.set(l2RewardTxRef, {
+                            userId: l1InviterDoc.data().inviterUid,
+                            amount: l2Bonus,
+                            description: `Level 2 bonus from user ${order.user?.numericId || order.userId}`,
                             createdAt: serverTimestamp(),
                             type: 'team_bonus',
-                            orderId: `LGPAYI${Date.now()}`
+                            orderId: `LGPAYI${Date.now() + 1}`
                         });
-
-                        const l1InviterData = l1InviterDoc.data() as UserProfile;
-
-                        // 3. Handle Level 2 Inviter Bonus
-                        if (l1InviterData.inviterUid) {
-                            const l2InviterRef = doc(firestore, 'users', l1InviterData.inviterUid);
-                            const l2InviterDoc = await transaction.get(l2InviterRef);
-                            
-                            if (l2InviterDoc.exists()) {
-                                const l2Bonus = order.amount * 0.01;
-                                const l2NewBalance = (l2InviterDoc.data().balance || 0) + l2Bonus;
-                                transaction.update(l2InviterRef, { balance: l2NewBalance });
-
-                                // Create reward transaction for L2 inviter
-                                const l2RewardTxRef = doc(collection(firestore, 'users', l1InviterData.inviterUid, 'transactions'));
-                                transaction.set(l2RewardTxRef, {
-                                    userId: l1InviterData.inviterUid,
-                                    amount: l2Bonus,
-                                    description: `Level 2 bonus from user ${order.user?.numericId || order.userId}`,
-                                    createdAt: serverTimestamp(),
-                                    type: 'team_bonus',
-                                    orderId: `LGPAYI${Date.now() + 1}`
-                                });
-                            }
-                        }
                     }
                 }
             });
@@ -1489,3 +1499,4 @@ export default function AdminDashboardPage() {
 
 
     
+
