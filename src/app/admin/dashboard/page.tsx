@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useCollection, useDoc, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X, FileClock, AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
@@ -75,6 +76,9 @@ type Order = {
     verificationResult?: string;
     createdAt: Timestamp;
     user?: UserProfile;
+    paymentType?: 'bank' | 'upi' | 'usdt';
+    paymentProvider?: string;
+    adminPaymentMethodId?: string;
 };
 
 type SellOrder = {
@@ -117,6 +121,21 @@ type ChatRequest = {
     agentId?: string;
     agentJoinedAt?: Timestamp;
 }
+
+const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
+  PhonePe: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae",
+    bgColor: "bg-violet-600",
+  },
+  Paytm: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8",
+    bgColor: "bg-sky-500",
+  },
+  MobiKwik: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f",
+    bgColor: "bg-blue-600",
+  },
+};
 
 const CountdownTimer = ({ expiryTimestamp, className }: { expiryTimestamp: Timestamp, className?: string }) => {
     const [timeLeft, setTimeLeft] = useState('');
@@ -958,7 +977,7 @@ function LiveChatTabContent() {
     );
 }
 
-function ProcessConfirmationDialog({ order, onProcessed }: { order: Order, onProcessed: () => void }) {
+function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: { order: Order; onProcessed: () => void; adminPaymentMethods: PaymentMethod[] }) {
     const [open, setOpen] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
     const [isRejecting, setIsRejecting] = useState(false);
@@ -966,6 +985,11 @@ function ProcessConfirmationDialog({ order, onProcessed }: { order: Order, onPro
     const [rejectionReason, setRejectionReason] = useState('');
     const firestore = useFirestore();
     const { toast } = useToast();
+
+    const adminMethod = useMemo(() => {
+        if (!order.adminPaymentMethodId || !adminPaymentMethods) return null;
+        return adminPaymentMethods.find(m => m.id === order.adminPaymentMethodId);
+    }, [order, adminPaymentMethods]);
 
     const handleApprove = async () => {
         if (!firestore || !order.path) return;
@@ -1117,6 +1141,31 @@ function ProcessConfirmationDialog({ order, onProcessed }: { order: Order, onPro
                                 </DialogContent>
                             </Dialog>
                         </div>
+
+                        {adminMethod && (
+                            <div className="space-y-2 rounded-md bg-muted p-3 mt-4">
+                                <h4 className="font-semibold text-muted-foreground text-xs">Paid To:</h4>
+                                <div className="text-sm space-y-1">
+                                    {adminMethod.type === 'bank' && (
+                                        <>
+                                            <p><strong>Bank:</strong> {adminMethod.bankName}</p>
+                                            <p><strong>Holder:</strong> {adminMethod.accountHolderName}</p>
+                                            <p><strong>Account No:</strong> {adminMethod.accountNumber}</p>
+                                        </>
+                                    )}
+                                    {adminMethod.type === 'upi' && (
+                                        <>
+                                            <p><strong>Name:</strong> {adminMethod.upiHolderName}</p>
+                                            <p><strong>UPI ID:</strong> {adminMethod.upiId}</p>
+                                        </>
+                                    )}
+                                    {adminMethod.type === 'usdt' && (
+                                        <p><strong>Wallet:</strong> {adminMethod.usdtWalletAddress}</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {order.verificationResult && (
                              <div className="flex items-start gap-2 rounded-md bg-yellow-50 border border-yellow-200 p-3">
                                 <AlertCircle className="h-5 w-5 text-yellow-500 mt-0.5" />
@@ -1159,11 +1208,15 @@ function ConfirmationsTabContent() {
     const [error, setError] = useState<any>(null);
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     const [usersLoading, setUsersLoading] = useState(true);
+    const [adminPaymentMethods, setAdminPaymentMethods] = useState<PaymentMethod[]>([]);
+    const [methodsLoading, setMethodsLoading] = useState(true);
+
 
     const fetchData = useCallback(async () => {
         if (!firestore) return;
         setLoading(true);
         setUsersLoading(true);
+        setMethodsLoading(true);
         setError(null);
         try {
             // Fetch all users first
@@ -1171,6 +1224,13 @@ function ConfirmationsTabContent() {
             const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
             setAllUsers(usersData);
             setUsersLoading(false);
+
+            // Fetch admin payment methods
+            const methodsSnapshot = await getDocs(collection(firestore, 'paymentMethods'));
+            const methodsData = methodsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentMethod));
+            setAdminPaymentMethods(methodsData);
+            setMethodsLoading(false);
+
 
             // Then fetch all orders and filter for pending confirmation ones
             const q = query(collectionGroup(firestore, 'orders'));
@@ -1206,7 +1266,7 @@ function ConfirmationsTabContent() {
         })).sort((a, b) => a.createdAt.seconds - b.createdAt.seconds);
     }, [allOrders, usersMap]);
     
-    if (loading || usersLoading) {
+    if (loading || usersLoading || methodsLoading) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
@@ -1244,28 +1304,44 @@ function ConfirmationsTabContent() {
 
     return (
          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {ordersWithUserData.map(order => (
-                <Card key={order.id}>
-                    <CardHeader className="flex flex-row items-start justify-between p-4 pb-2">
-                        <div>
-                            <p className="text-sm text-muted-foreground">Amount</p>
-                            <p className="font-bold text-lg text-primary">₹{order.amount.toFixed(2)}</p>
-                        </div>
-                         {order.submittedAt && (
-                            <CountdownTimer 
-                                expiryTimestamp={new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds)} 
-                            />
-                        )}
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0 space-y-2 text-sm">
-                        <p><strong>User:</strong> {order.user?.displayName || 'N/A'} ({order.user?.numericId})</p>
-                        <p className="flex items-start gap-2"><strong>UTR/TxHash:</strong> <span className="text-right break-all">{order.utr}</span></p>
-                    </CardContent>
-                    <CardFooter className="p-4 pt-0">
-                        <ProcessConfirmationDialog order={order} onProcessed={fetchData} />
-                    </CardFooter>
-                </Card>
-            ))}
+            {ordersWithUserData.map(order => {
+                const providerDetails = order.paymentProvider ? paymentMethodDetails[order.paymentProvider] : null;
+                return (
+                    <Card key={order.id}>
+                        <CardHeader className="flex flex-row items-start justify-between p-4 pb-2">
+                            <div>
+                                <p className="text-sm text-muted-foreground">Amount</p>
+                                <p className="font-bold text-lg text-primary">₹{order.amount.toFixed(2)}</p>
+                            </div>
+                            {order.submittedAt && (
+                                <CountdownTimer 
+                                    expiryTimestamp={new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds)} 
+                                />
+                            )}
+                        </CardHeader>
+                        <CardContent className="p-4 pt-0 space-y-2 text-sm">
+                            <p><strong>User:</strong> {order.user?.displayName || 'N/A'} ({order.user?.numericId})</p>
+                            <p className="flex items-start gap-2"><strong>UTR/TxHash:</strong> <span className="font-mono text-right break-all">{order.utr}</span></p>
+                             {order.paymentProvider && (
+                                <p className="flex items-center gap-2">
+                                    <strong>Method:</strong>
+                                    {providerDetails ? (
+                                        <span className="flex items-center gap-1.5">
+                                            <Image src={providerDetails.logo} alt={order.paymentProvider} width={16} height={16} />
+                                            <span>{order.paymentProvider}</span>
+                                        </span>
+                                    ) : (
+                                        <span>{order.paymentProvider}</span>
+                                    )}
+                                </p>
+                            )}
+                        </CardContent>
+                        <CardFooter className="p-4 pt-0">
+                            <ProcessConfirmationDialog order={order} onProcessed={fetchData} adminPaymentMethods={adminPaymentMethods} />
+                        </CardFooter>
+                    </Card>
+                )
+            })}
          </div>
     )
 }
@@ -1500,3 +1576,6 @@ export default function AdminDashboardPage() {
 
     
 
+
+
+    
