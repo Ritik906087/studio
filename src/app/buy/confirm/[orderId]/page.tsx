@@ -322,7 +322,7 @@ function PaymentDetailsContent() {
                 return;
             }
         } else {
-            if (!utr || utr.length !== 12) {
+            if (!utr || utr.length !== 12 || !/^\d+$/.test(utr)) {
                 toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please provide a valid 12-digit UTR.' });
                 return;
             }
@@ -706,7 +706,23 @@ function PaymentDetailsContent() {
                     <CardContent className="p-4 space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="utr">{isUSDT ? 'Transaction Hash (TxID)' : 'UTR / Reference Number'}</Label>
-                            <Input id="utr" placeholder={isUSDT ? 'Enter 64-character TxID' : 'Enter 12-digit UTR number'} value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={isUSDT ? 64 : 12} disabled={isConfirming || isUpdatingProvider} />
+                            <Input 
+                                id="utr"
+                                type={isUSDT ? "text" : "tel"}
+                                inputMode={isUSDT ? "text" : "numeric"}
+                                placeholder={isUSDT ? 'Enter 64-character TxID' : 'Enter 12-digit UTR number'} 
+                                value={utr}
+                                onChange={(e) => {
+                                    if (!isUSDT) {
+                                        const value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+                                        setUtr(value);
+                                    } else {
+                                        setUtr(e.target.value);
+                                    }
+                                }}
+                                maxLength={isUSDT ? 64 : 12} 
+                                disabled={isConfirming || isUpdatingProvider} 
+                            />
                         </div>
                         <div className="space-y-2">
                              <Label>Upload Screenshot</Label>
