@@ -274,26 +274,34 @@ const createOrder = async (provider: string, orderAmount: number) => {
     let finalPaymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
 
     try {
-        // Simplified query to fetch potential sell orders
-        const sellOrdersQuery = query(
-            collectionGroup(firestore, 'sellOrders'),
-            where('status', 'in', ['pending', 'partially_filled']),
-            orderBy('createdAt', 'asc'),
-            limit(30)
-        );
+        // Fetch pending and partially_filled orders separately to avoid composite index
+        const pendingQuery = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'pending'));
+        const partialQuery = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'partially_filled'));
 
-        const candidatesSnapshot = await getDocs(sellOrdersQuery);
-        
-        // Client-side filtering to find the best match
-        const sellOrderCandidateDoc = candidatesSnapshot.docs
-            .map(doc => ({ ref: doc.ref, data: doc.data() }))
+        const [pendingSnapshot, partialSnapshot] = await Promise.all([
+            getDocs(pendingQuery),
+            getDocs(partialQuery)
+        ]);
+
+        const allCandidates = [
+            ...pendingSnapshot.docs.map(doc => ({ ref: doc.ref, data: doc.data() })),
+            ...partialSnapshot.docs.map(doc => ({ ref: doc.ref, data: doc.data() }))
+        ];
+
+        // Client-side filtering and sorting
+        const sellOrderCandidateDoc = allCandidates
             .filter(doc => doc.data.remainingAmount >= orderAmount && doc.data.userId !== user.uid)
             .sort((a, b) => {
-                if (a.data.remainingAmount !== b.data.remainingAmount) {
-                    return a.data.remainingAmount - b.data.remainingAmount;
+                // Prioritize exact match or smallest remainder
+                const remainderA = a.data.remainingAmount - orderAmount;
+                const remainderB = b.data.remainingAmount - orderAmount;
+                if (remainderA >= 0 && remainderB >= 0 && remainderA !== remainderB) {
+                    return remainderA - remainderB;
                 }
+                // Fallback to oldest
                 return a.data.createdAt.seconds - b.data.createdAt.seconds;
             })[0];
+
 
         await runTransaction(firestore, async (transaction) => {
             const newOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
