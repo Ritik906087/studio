@@ -267,79 +267,84 @@ export default function BuyPage() {
     };
   }, []); 
 
-  const createOrder = async (provider: string, orderAmount: number) => {
+const createOrder = async (provider: string, orderAmount: number) => {
     if (!user || !firestore) return;
     setIsCreatingOrder(true);
     let newBuyOrderId: string | null = null;
     let finalPaymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
 
     try {
+        // Find a suitable P2P seller first, outside the transaction
+        const sellOrdersQuery = query(
+            collectionGroup(firestore, 'sellOrders'),
+            where('status', 'in', ['pending', 'partially_filled']),
+            where('remainingAmount', '>=', orderAmount),
+            orderBy('remainingAmount', 'asc'),
+            orderBy('createdAt', 'asc'),
+            limit(10) // Fetch a few candidates
+        );
+
+        const candidateSellOrdersSnapshot = await getDocs(sellOrdersQuery);
+        const sellOrderCandidateDoc = candidateSellOrdersSnapshot.docs.find(doc => doc.data().userId !== user.uid);
+
         await runTransaction(firestore, async (transaction) => {
             const newOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
             newBuyOrderId = newOrderRef.id;
+            let p2pMatchFound = false;
 
-            const buyOrderData: any = {
-                userId: user.uid,
-                amount: orderAmount,
-                orderId: `LGPAY${Date.now()}`,
-                status: 'pending_payment',
-                paymentProvider: provider,
-            };
+            // If we found a candidate, try to lock and use it within the transaction
+            if (sellOrderCandidateDoc) {
+                const sellOrderRef = sellOrderCandidateDoc.ref;
+                const sellOrderDoc = await transaction.get(sellOrderRef);
 
-            const sellOrdersQuery = query(
-                collectionGroup(firestore, 'sellOrders'),
-                where('status', 'in', ['pending', 'partially_filled']),
-                where('remainingAmount', '>=', orderAmount),
-                where('userId', '!=', user.uid),
-                orderBy('remainingAmount', 'asc'),
-                orderBy('createdAt', 'asc'),
-                limit(1)
-            );
-            const sellOrdersSnapshot = await getDocs(sellOrdersQuery);
+                if (sellOrderDoc.exists()) {
+                    const sellOrderData = sellOrderDoc.data();
+                    
+                    const isStatusValid = ['pending', 'partially_filled'].includes(sellOrderData.status);
+                    const isAmountSufficient = sellOrderData.remainingAmount >= orderAmount;
 
-            if (!sellOrdersSnapshot.empty) {
-                const sellOrderDoc = sellOrdersSnapshot.docs[0];
-                const sellOrderData = sellOrderDoc.data();
-                
-                const newRemainingAmount = sellOrderData.remainingAmount - orderAmount;
-                const newSellOrderStatus = newRemainingAmount > 0 ? 'partially_filled' : 'completed';
+                    if (isStatusValid && isAmountSufficient) {
+                        p2pMatchFound = true;
+                        finalPaymentType = 'p2p_upi';
 
-                buyOrderData.sellerUpiDetails = sellOrderData.withdrawalMethod;
-                buyOrderData.sellerId = sellOrderData.userId;
-                buyOrderData.paymentType = 'p2p_upi';
-                finalPaymentType = 'p2p_upi';
-                
-                const nowTimestamp = Timestamp.now();
-                buyOrderData.createdAt = nowTimestamp;
+                        const newRemainingAmount = sellOrderData.remainingAmount - orderAmount;
+                        const newSellOrderStatus = newRemainingAmount > 0 ? 'partially_filled' : 'processing';
 
-                const matchedBuyOrderData = {
-                    buyOrderId: newBuyOrderId,
-                    buyerId: user.uid,
-                    amount: orderAmount,
-                    status: 'pending_payment',
-                    createdAt: nowTimestamp
-                };
+                        const buyOrderData = {
+                            userId: user.uid, amount: orderAmount, orderId: `LGPAY${Date.now()}`,
+                            status: 'pending_payment', paymentProvider: provider,
+                            sellerUpiDetails: sellOrderData.withdrawalMethod, sellerId: sellOrderData.userId,
+                            paymentType: 'p2p_upi', createdAt: serverTimestamp(),
+                        };
+                        transaction.set(newOrderRef, buyOrderData);
 
-                transaction.update(sellOrderDoc.ref, {
-                    remainingAmount: newRemainingAmount,
-                    status: newSellOrderStatus,
-                    matchedBuyOrders: arrayUnion(matchedBuyOrderData)
-                });
+                        const matchedBuyOrderData = {
+                            buyOrderId: newBuyOrderId, buyerId: user.uid, amount: orderAmount,
+                            status: 'pending_payment', createdAt: Timestamp.now()
+                        };
+                        transaction.update(sellOrderRef, {
+                            remainingAmount: newRemainingAmount, status: newSellOrderStatus,
+                            matchedBuyOrders: arrayUnion(matchedBuyOrderData)
+                        });
+                    }
+                }
+            }
 
-            } else {
-                const adminType = activeTab === 'otp-upi' ? 'upi' : activeTab;
-                const adminMethodsQuery = query(collection(firestore, "paymentMethods"), where("type", "==", adminType), limit(1));
+            // Fallback to Admin if no P2P match was found or the candidate was invalid
+            if (!p2pMatchFound) {
+                finalPaymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
+                const adminMethodsQuery = query(collection(firestore, "paymentMethods"), where("type", "==", finalPaymentType), limit(1));
                 const adminMethodsSnapshot = await getDocs(adminMethodsQuery);
 
-                if (adminMethodsSnapshot.empty) {
-                    throw new Error("ADMIN_UNAVAILABLE");
-                }
-                buyOrderData.paymentType = adminType;
-                buyOrderData.adminPaymentMethodId = adminMethodsSnapshot.docs[0].id;
-                buyOrderData.createdAt = serverTimestamp();
+                if (adminMethodsSnapshot.empty) throw new Error("ADMIN_UNAVAILABLE");
+                
+                const buyOrderData = {
+                    userId: user.uid, amount: orderAmount, orderId: `LGPAY${Date.now()}`,
+                    status: 'pending_payment', paymentProvider: provider, paymentType: finalPaymentType,
+                    adminPaymentMethodId: adminMethodsSnapshot.docs[0].id, createdAt: serverTimestamp(),
+                };
+                transaction.set(newOrderRef, buyOrderData);
             }
-            
-            transaction.set(newOrderRef, buyOrderData);
         });
 
         if (newBuyOrderId) {
@@ -504,5 +509,3 @@ export default function BuyPage() {
     </div>
   );
 }
-
-    
