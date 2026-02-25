@@ -274,31 +274,21 @@ const createOrder = async (provider: string, orderAmount: number) => {
     let finalPaymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
 
     try {
-        // Fetch pending and partially_filled orders separately to avoid composite index
-        const pendingQuery = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'pending'));
-        const partialQuery = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'partially_filled'));
+        const allSellOrdersQuery = query(collectionGroup(firestore, 'sellOrders'));
+        const allSellOrdersSnapshot = await getDocs(allSellOrdersQuery);
+        
+        const allCandidates = allSellOrdersSnapshot.docs
+            .map(doc => ({ ref: doc.ref, data: doc.data() }))
+            .filter(doc => ['pending', 'partially_filled'].includes(doc.data.status));
 
-        const [pendingSnapshot, partialSnapshot] = await Promise.all([
-            getDocs(pendingQuery),
-            getDocs(partialQuery)
-        ]);
-
-        const allCandidates = [
-            ...pendingSnapshot.docs.map(doc => ({ ref: doc.ref, data: doc.data() })),
-            ...partialSnapshot.docs.map(doc => ({ ref: doc.ref, data: doc.data() }))
-        ];
-
-        // Client-side filtering and sorting
         const sellOrderCandidateDoc = allCandidates
             .filter(doc => doc.data.remainingAmount >= orderAmount && doc.data.userId !== user.uid)
             .sort((a, b) => {
-                // Prioritize exact match or smallest remainder
                 const remainderA = a.data.remainingAmount - orderAmount;
                 const remainderB = b.data.remainingAmount - orderAmount;
                 if (remainderA >= 0 && remainderB >= 0 && remainderA !== remainderB) {
                     return remainderA - remainderB;
                 }
-                // Fallback to oldest
                 return a.data.createdAt.seconds - b.data.createdAt.seconds;
             })[0];
 
@@ -345,7 +335,6 @@ const createOrder = async (provider: string, orderAmount: number) => {
                 }
             }
 
-            // Fallback to Admin if no P2P match was found
             if (!p2pMatchFound) {
                 finalPaymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
                 const adminMethodsQuery = query(collection(firestore, "paymentMethods"), where("type", "==", finalPaymentType), limit(1));
