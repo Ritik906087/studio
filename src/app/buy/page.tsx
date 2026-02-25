@@ -33,7 +33,7 @@ import { ChevronLeft, ShoppingCart, Wallet, ArrowDownUp, Loader2 } from 'lucide-
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useCollection } from '@/firebase';
-import { addDoc, collection, serverTimestamp, query, where } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, query, where, runTransaction, doc, getDocs, collectionGroup, orderBy, limit } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -70,7 +70,7 @@ const upiMethods = [
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
 ];
 
-const PurchaseGrid = ({ onBuyClick, options, bonusPercentage }: { onBuyClick: (option: any) => void; options: any[]; bonusPercentage: number; }) => {
+const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, isCreatingOrder }: { onBuyClick: (option: any) => void; options: any[]; bonusPercentage: number; isCreatingOrder: boolean; }) => {
   return (
     <div className="grid grid-cols-1 gap-3 mt-4">
       <AnimatePresence>
@@ -99,8 +99,8 @@ const PurchaseGrid = ({ onBuyClick, options, bonusPercentage }: { onBuyClick: (o
                             </p>
                          </div>
                      </div>
-                     <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg">
-                        Buy
+                     <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg" disabled={isCreatingOrder}>
+                        {isCreatingOrder ? <Loader2 className="animate-spin" /> : 'Buy'}
                      </Button>
                   </div>
               </Card>
@@ -112,7 +112,7 @@ const PurchaseGrid = ({ onBuyClick, options, bonusPercentage }: { onBuyClick: (o
   );
 };
 
-const UsdtPurchaseForm = ({ onBuyClick, bonusPercentage }: { onBuyClick: (option: { amount: number }) => void, bonusPercentage: number }) => {
+const UsdtPurchaseForm = ({ onBuyClick, bonusPercentage, isCreatingOrder }: { onBuyClick: (option: { amount: number }) => void, bonusPercentage: number, isCreatingOrder: boolean }) => {
     const { toast } = useToast();
     const [usdtAmount, setUsdtAmount] = useState('5');
     
@@ -125,8 +125,6 @@ const UsdtPurchaseForm = ({ onBuyClick, bonusPercentage }: { onBuyClick: (option
     }, [usdtAmount]);
     
     const finalLgbAmount = lgbAmount + (lgbAmount * (bonusPercentage / 100));
-
-    const [isProcessing, setIsProcessing] = useState(false);
 
     const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -145,7 +143,6 @@ const UsdtPurchaseForm = ({ onBuyClick, bonusPercentage }: { onBuyClick: (option
             });
             return; 
         }
-        setIsProcessing(true);
         onBuyClick({ amount: lgbAmount }); 
     };
 
@@ -190,8 +187,8 @@ const UsdtPurchaseForm = ({ onBuyClick, bonusPercentage }: { onBuyClick: (option
                 </CardContent>
             </Card>
 
-            <Button onClick={handleRecharge} disabled={isProcessing} className="w-full h-12 text-lg font-bold btn-gradient rounded-full">
-                {isProcessing ? <Loader2 className="animate-spin" /> : "Buy"}
+            <Button onClick={handleRecharge} disabled={isCreatingOrder} className="w-full h-12 text-lg font-bold btn-gradient rounded-full">
+                {isCreatingOrder ? <Loader2 className="animate-spin" /> : "Buy"}
             </Button>
             
             <Card className="bg-secondary/50 shadow-none">
@@ -220,6 +217,7 @@ export default function BuyPage() {
 
   const [isInProgressDialogOpen, setIsInProgressDialogOpen] = useState(false);
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
+  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   
   const [allOptions, setAllOptions] = useState(() => [...allPurchaseOptions]);
 
@@ -227,7 +225,7 @@ export default function BuyPage() {
     if (!user || !firestore) return null;
     return query(
         collection(firestore, 'users', user.uid, 'orders'),
-        where('status', 'in', ['pending_payment', 'processing'])
+        where('status', 'in', ['pending_payment', 'pending_confirmation'])
     );
   }, [user, firestore]);
 
@@ -269,6 +267,120 @@ export default function BuyPage() {
     };
   }, []); 
 
+  const createAdminOrder = async (provider: string, orderAmount: number) => {
+    if (!user || !firestore) return;
+
+    // Fallback to admin payment method
+    const adminMethodsQuery = query(collection(firestore, "paymentMethods"), where("type", "==", activeTab), limit(1));
+    const adminMethodsSnapshot = await getDocs(adminMethodsQuery);
+
+    if (adminMethodsSnapshot.empty) {
+        toast({ variant: 'destructive', title: 'Service Unavailable', description: 'No admin payment methods are configured. Please try again later.' });
+        return;
+    }
+    const adminMethodId = adminMethodsSnapshot.docs[0].id;
+    
+    const orderData = {
+        userId: user.uid,
+        amount: orderAmount,
+        orderId: `LGPAY${Date.now()}`,
+        status: 'pending_payment',
+        createdAt: serverTimestamp(),
+        paymentType: activeTab === 'otp-upi' ? 'upi' : activeTab,
+        paymentProvider: provider,
+        adminPaymentMethodId: adminMethodId
+    };
+
+    const newOrderRef = await addDoc(collection(firestore, 'users', user.uid, 'orders'), orderData);
+    router.push(`/buy/confirm/${newOrderRef.id}?type=${orderData.paymentType}&provider=${provider}`);
+  };
+
+
+  const createOrder = async (provider: string, orderAmount: number) => {
+    if (!user || !firestore) return;
+    setIsCreatingOrder(true);
+    let newBuyOrderId: string | null = null;
+    let finalPaymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
+
+    try {
+        await runTransaction(firestore, async (transaction) => {
+            // 1. Try to find a P2P match
+            const sellOrdersQuery = query(
+                collectionGroup(firestore, 'sellOrders'),
+                where('status', 'in', ['pending', 'partially_filled']),
+                where('remainingAmount', '>=', orderAmount),
+                where('userId', '!=', user.uid), // Can't match with yourself
+                orderBy('userId'),
+                orderBy('createdAt', 'asc'),
+                limit(1)
+            );
+            const sellOrdersSnapshot = await getDocs(sellOrdersQuery);
+
+            const buyOrderData: any = {
+                userId: user.uid,
+                amount: orderAmount,
+                orderId: `LGPAY${Date.now()}`,
+                status: 'pending_payment',
+                createdAt: serverTimestamp(),
+                paymentProvider: provider,
+            };
+
+            if (!sellOrdersSnapshot.empty) {
+                // P2P Match Found
+                const sellOrderDoc = sellOrdersSnapshot.docs[0];
+                const sellOrderData = sellOrderDoc.data();
+                
+                const newRemainingAmount = sellOrderData.remainingAmount - orderAmount;
+                const newSellOrderStatus = newRemainingAmount > 0 ? 'partially_filled' : 'completed';
+                
+                transaction.update(sellOrderDoc.ref, {
+                    remainingAmount: newRemainingAmount,
+                    status: newSellOrderStatus,
+                });
+                
+                buyOrderData.paymentType = 'p2p_upi';
+                buyOrderData.sellerId = sellOrderData.userId;
+                buyOrderData.matchedSellOrderId = sellOrderDoc.id;
+                finalPaymentType = 'p2p_upi';
+
+            } else {
+                // No P2P match, fallback to admin
+                const adminType = activeTab === 'otp-upi' ? 'upi' : activeTab;
+                const adminMethodsQuery = query(collection(firestore, "paymentMethods"), where("type", "==", adminType), limit(1));
+                const adminMethodsSnapshot = await getDocs(adminMethodsQuery);
+
+                if (adminMethodsSnapshot.empty) {
+                    throw new Error("ADMIN_UNAVAILABLE");
+                }
+                const adminMethodId = adminMethodsSnapshot.docs[0].id;
+                
+                buyOrderData.paymentType = adminType;
+                buyOrderData.adminPaymentMethodId = adminMethodId;
+            }
+            
+            const newOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
+            transaction.set(newOrderRef, buyOrderData);
+            newBuyOrderId = newOrderRef.id;
+        });
+
+        if (newBuyOrderId) {
+            router.push(`/buy/confirm/${newBuyOrderId}?type=${finalPaymentType}&provider=${provider}`);
+        } else {
+            throw new Error("Order creation failed unexpectedly.");
+        }
+
+    } catch (error: any) {
+        console.error('Error creating order: ', error);
+        if(error.message === "ADMIN_UNAVAILABLE") {
+            toast({ variant: 'destructive', title: 'Service Unavailable', description: 'Admin payment methods are not configured. Please try again later.' });
+        } else {
+            toast({ variant: 'destructive', title: 'Could not create order.', description: 'Please try again.' });
+        }
+    } finally {
+        setIsCreatingOrder(false);
+    }
+  };
+
 
   const handleBuyClick = (option: { amount: number }) => {
      if (!user || !firestore) {
@@ -290,30 +402,6 @@ export default function BuyPage() {
         setIsDialogOpen(true);
     }
   };
-  
-  const createOrder = async (provider: string, orderAmount: number) => {
-    if (!user || !firestore || !orderAmount) return;
-
-    const orderId = `LGPAY${Date.now()}`;
-    const paymentType = activeTab === 'otp-upi' ? 'upi' : activeTab;
-
-    try {
-        const ordersRef = collection(firestore, 'users', user.uid, 'orders');
-        const newOrderRef = await addDoc(ordersRef, {
-            userId: user.uid,
-            amount: orderAmount,
-            orderId,
-            status: 'pending_payment',
-            createdAt: serverTimestamp(),
-            paymentType: paymentType,
-            paymentProvider: provider,
-        });
-        router.push(`/buy/confirm/${newOrderRef.id}?type=${paymentType}&provider=${provider}`);
-    } catch (error) {
-        console.error('Error creating order: ', error);
-        toast({ variant: 'destructive', title: 'Could not create order.' });
-    }
-  }
 
   const handleProviderSelect = async (methodName: string) => {
     setIsDialogOpen(false);
@@ -327,7 +415,7 @@ export default function BuyPage() {
     let path = '';
     if (inProgressOrder.status === 'pending_payment') {
         path = `/buy/confirm/${inProgressOrder.id}?type=${inProgressOrder.paymentType}&provider=${inProgressOrder.paymentProvider || ''}`;
-    } else if (inProgressOrder.status === 'processing') {
+    } else if (inProgressOrder.status === 'pending_confirmation') {
         path = `/order/${inProgressOrder.id}`;
     }
     if (path) {
@@ -378,7 +466,7 @@ export default function BuyPage() {
         </Tabs>
         
         {activeTab === 'usdt' ? (
-             <UsdtPurchaseForm onBuyClick={handleBuyClick} bonusPercentage={bonusPercentage} />
+             <UsdtPurchaseForm onBuyClick={handleBuyClick} bonusPercentage={bonusPercentage} isCreatingOrder={isCreatingOrder} />
         ) : (
             <Tabs defaultValue="small" className="w-full mt-4" onValueChange={setActiveSubTab}>
                 <TabsList className="grid w-full grid-cols-2">
@@ -386,10 +474,10 @@ export default function BuyPage() {
                     <TabsTrigger value="high">High Amount</TabsTrigger>
                 </TabsList>
                 <TabsContent value="small" className="mt-0">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} isCreatingOrder={isCreatingOrder} />
                 </TabsContent>
                 <TabsContent value="high" className="mt-0">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} />
+                    <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} isCreatingOrder={isCreatingOrder} />
                 </TabsContent>
             </Tabs>
         )}
@@ -406,8 +494,9 @@ export default function BuyPage() {
                     key={method.name}
                     onClick={() => handleProviderSelect(method.name)}
                     className="w-full flex items-center p-3 rounded-lg border hover:bg-secondary transition-colors"
+                    disabled={isCreatingOrder}
                 >
-                    <Image src={method.logo} alt={method.name} width={32} height={32} className="mr-4" />
+                    {isCreatingOrder ? <Loader2 className="h-5 w-5 mr-4 animate-spin" /> : <Image src={method.logo} alt={method.name} width={32} height={32} className="mr-4" />}
                     <span className="font-medium">{method.name}</span>
                 </button>
             ))}
@@ -436,5 +525,3 @@ export default function BuyPage() {
     </div>
   );
 }
-
-    

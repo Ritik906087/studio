@@ -23,13 +23,14 @@ import { collection, query, where, Timestamp, orderBy, limit } from 'firebase/fi
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader } from '@/components/ui/loader';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 
 
 type Order = {
   id: string;
   orderId: string;
   amount: number;
-  status: 'pending_payment' | 'processing' | 'completed' | 'cancelled' | 'failed';
+  status: 'pending_payment' | 'pending_confirmation' | 'completed' | 'cancelled' | 'failed';
   utr?: string;
   createdAt: Timestamp;
   cancellationReason?: string;
@@ -39,7 +40,8 @@ type SellOrder = {
   id: string;
   orderId: string;
   amount: number;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  remainingAmount: number;
+  status: 'pending' | 'partially_filled' | 'completed' | 'failed';
   utr?: string;
   createdAt: Timestamp;
   failureReason?: string;
@@ -57,26 +59,11 @@ const BuyTransactionCard = React.memo(({ transaction }: { transaction: Order }) 
   const isTimeout = transaction.status === 'failed' && transaction.cancellationReason && (transaction.cancellationReason.includes('expired') || transaction.cancellationReason.includes('timed out'));
 
   const statusConfig = {
-      completed: {
-          style: "bg-green-100 text-green-800",
-          text: "Completed"
-      },
-      cancelled: {
-          style: "bg-red-100 text-red-800",
-          text: "Cancelled"
-      },
-      failed: {
-          style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800",
-          text: isTimeout ? "Timeout" : "Failed"
-      },
-      processing: {
-           style: "bg-blue-100 text-blue-800",
-           text: "Processing"
-      },
-      pending_payment: {
-           style: "bg-yellow-100 text-yellow-800",
-           text: "Pending Payment"
-      }
+      completed: { style: "bg-green-100 text-green-800", text: "Completed" },
+      cancelled: { style: "bg-red-100 text-red-800", text: "Cancelled" },
+      failed: { style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800", text: isTimeout ? "Timeout" : "Failed" },
+      pending_confirmation: { style: "bg-blue-100 text-blue-800", text: "Confirming" },
+      pending_payment: { style: "bg-yellow-100 text-yellow-800", text: "Pending Payment" }
   }
   const currentStatus = statusConfig[transaction.status] || { style: "bg-gray-100 text-gray-800", text: transaction.status.replace(/_/g, ' ') };
 
@@ -84,11 +71,7 @@ const BuyTransactionCard = React.memo(({ transaction }: { transaction: Order }) 
     <Card className="mb-4 bg-white text-foreground shadow-sm">
       <CardContent className="p-4 space-y-3">
          <div className="flex justify-between items-center">
-            <span
-              className={cn(
-                "rounded px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-800"
-              )}
-            >
+            <span className="rounded px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-800">
               Buy
             </span>
              <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
@@ -140,61 +123,53 @@ const SellTransactionCard = React.memo(({ transaction }: { transaction: SellOrde
     const isTimeout = transaction.status === 'failed' && transaction.failureReason && (transaction.failureReason.includes('expired') || transaction.failureReason.includes('timed out'));
 
     const statusConfig = {
-      completed: {
-          style: "bg-green-100 text-green-800",
-          text: "Completed"
-      },
-      failed: {
-          style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800",
-          text: isTimeout ? "Timeout" : "Failed"
-      },
-      pending: {
-           style: "bg-yellow-100 text-yellow-800",
-           text: "Pending"
-      },
-      processing: {
-           style: "bg-blue-100 text-blue-800",
-           text: "Processing"
-      },
+      completed: { style: "bg-green-100 text-green-800", text: "Completed" },
+      failed: { style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800", text: isTimeout ? "Timeout" : "Failed" },
+      pending: { style: "bg-yellow-100 text-yellow-800", text: "Pending" },
+      partially_filled: { style: "bg-blue-100 text-blue-800", text: "Partially Filled" },
     }
     const currentStatus = statusConfig[transaction.status] || { style: "bg-gray-100 text-gray-800", text: transaction.status };
+    
+    const progress = transaction.amount > 0 ? ((transaction.amount - transaction.remainingAmount) / transaction.amount) * 100 : 0;
 
     return (
-        <Card className="mb-4 bg-white text-foreground shadow-sm">
-        <CardContent className="p-4 space-y-3">
-            <div className="flex justify-between items-center">
-                <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-0.5 rounded">Sell</span>
-                 <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
-            </div>
-            <div className="space-y-2 text-sm">
-            <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Amount</span>
-                <div className="flex items-center gap-2">
-                    <span className="font-bold text-lg">₹{transaction.amount.toFixed(2)}</span>
-                    <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.amount.toFixed(2))} />
+        <Link href={`/order/sell/${transaction.id}`} passHref>
+            <Card className="mb-4 bg-white text-foreground shadow-sm">
+            <CardContent className="p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                    <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-0.5 rounded">Sell</span>
+                     <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
                 </div>
-            </div>
-             <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">UTR</span>
-                <div className="flex items-center gap-2">
-                    <span className="font-mono text-muted-foreground" style={{wordBreak: 'break-all'}}>{transaction.utr || '---'}</span>
-                    {transaction.utr && <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.utr!)} />}
+                <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Amount</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-lg">₹{transaction.amount.toFixed(2)}</span>
+                        <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={(e) => {e.preventDefault(); copyToClipboard(transaction.amount.toFixed(2))}} />
+                    </div>
                 </div>
-            </div>
-            <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Time</span>
-                <span className="font-mono text-muted-foreground text-xs">{transaction.createdAt.toDate().toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Order Number</span>
-                <div className="flex items-center gap-2">
-                <span className="font-mono text-muted-foreground" style={{wordBreak: 'break-all'}}>{transaction.orderId}</span>
-                <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderId)} />
+                <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Progress</span>
+                    <div className="flex items-center gap-2 w-1/2">
+                         <Progress value={progress} className="h-2" />
+                         <span className="text-xs font-mono">{progress.toFixed(0)}%</span>
+                    </div>
                 </div>
-            </div>
-            </div>
-        </CardContent>
-        </Card>
+                <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Time</span>
+                    <span className="font-mono text-muted-foreground text-xs">{transaction.createdAt.toDate().toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Order Number</span>
+                    <div className="flex items-center gap-2">
+                    <span className="font-mono text-muted-foreground" style={{wordBreak: 'break-all'}}>{transaction.orderId}</span>
+                    <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={(e) => {e.preventDefault(); copyToClipboard(transaction.orderId)}} />
+                    </div>
+                </div>
+                </div>
+            </CardContent>
+            </Card>
+        </Link>
     );
 });
 SellTransactionCard.displayName = 'SellTransactionCard';
@@ -245,7 +220,7 @@ export default function TransactionPage() {
     if (!user || !firestore) return null;
     return query(
       collection(firestore, 'users', user.uid, 'orders'),
-      where('status', 'in', ['completed', 'cancelled', 'failed']),
+      orderBy('createdAt', 'desc'),
       limit(50)
     );
   }, [user, firestore]);
@@ -254,23 +229,13 @@ export default function TransactionPage() {
     if (!user || !firestore) return null;
     return query(
         collection(firestore, 'users', user.uid, 'sellOrders'),
-        where('status', 'in', ['completed', 'failed']),
+        orderBy('createdAt', 'desc'),
         limit(50)
     );
   }, [user, firestore]);
 
-  const { data: unsortedBuyOrders, loading: buyLoading } = useCollection<Order>(buyOrdersQuery);
-  const { data: unsortedSellOrders, loading: sellLoading } = useCollection<SellOrder>(sellOrdersQuery);
-
-  const buyOrders = useMemo(() => {
-    if (!unsortedBuyOrders) return [];
-    return [...unsortedBuyOrders].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
-  }, [unsortedBuyOrders]);
-
-  const sellOrders = useMemo(() => {
-    if (!unsortedSellOrders) return [];
-    return [...unsortedSellOrders].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
-  }, [unsortedSellOrders]);
+  const { data: buyOrders, loading: buyLoading } = useCollection<Order>(buyOrdersQuery);
+  const { data: sellOrders, loading: sellLoading } = useCollection<SellOrder>(sellOrdersQuery);
 
   return (
     <div className="text-foreground min-h-screen">
