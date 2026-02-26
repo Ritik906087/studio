@@ -1,8 +1,9 @@
+
 "use client";
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ListOrdered, UserPlus, User } from 'lucide-react';
+import { Home, History, UserPlus, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { Loader } from '@/components/ui/loader';
@@ -21,7 +22,7 @@ export default function HomeLayout({
 
   const navItems = [
     { href: '/home', icon: Home, label: 'Home' },
-    { href: '/order', icon: ListOrdered, label: 'Order' },
+    { href: '/order', icon: History, label: 'Order History' },
     { href: '/invite', icon: UserPlus, label: 'Invite' },
     { href: '/my', icon: User, label: 'My' },
   ];
