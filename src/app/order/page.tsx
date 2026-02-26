@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Copy, ChevronLeft, ClipboardList } from 'lucide-react';
+import { Copy, ChevronLeft, ClipboardList, History } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader } from '@/components/ui/loader';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-
+import { startOfDay, startOfWeek, startOfMonth, isAfter } from 'date-fns';
 
 type Order = {
   id: string;
@@ -41,7 +41,7 @@ type SellOrder = {
   orderId: string;
   amount: number;
   remainingAmount: number;
-  status: 'pending' | 'partially_filled' | 'completed' | 'failed';
+  status: 'pending' | 'partially_filled' | 'processing' | 'completed' | 'failed';
   utr?: string;
   createdAt: Timestamp;
   failureReason?: string;
@@ -127,6 +127,7 @@ const SellTransactionCard = React.memo(({ transaction }: { transaction: SellOrde
       failed: { style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800", text: isTimeout ? "Timeout" : "Failed" },
       pending: { style: "bg-yellow-100 text-yellow-800", text: "Pending" },
       partially_filled: { style: "bg-blue-100 text-blue-800", text: "Partially Filled" },
+      processing: { style: "bg-blue-100 text-blue-800", text: "Processing" },
     }
     const currentStatus = statusConfig[transaction.status] || { style: "bg-gray-100 text-gray-800", text: transaction.status };
     
@@ -174,7 +175,6 @@ const SellTransactionCard = React.memo(({ transaction }: { transaction: SellOrde
 });
 SellTransactionCard.displayName = 'SellTransactionCard';
 
-
 const TransactionList = ({ orders, loading, type }: { orders: any[], loading: boolean, type: 'buy' | 'sell' }) => {
   if (loading) {
       return (
@@ -188,7 +188,8 @@ const TransactionList = ({ orders, loading, type }: { orders: any[], loading: bo
     return (
       <div className="flex flex-col items-center justify-center pt-20 text-center text-muted-foreground">
         <ClipboardList className="h-16 w-16 opacity-50" />
-        <p className="mt-4 text-lg">No transactions yet</p>
+        <p className="mt-4 text-lg">No transactions found</p>
+        <p className="text-sm">Try adjusting your filters.</p>
       </div>
     );
   }
@@ -210,11 +211,12 @@ const TransactionList = ({ orders, loading, type }: { orders: any[], loading: bo
   );
 };
 
-export default function TransactionPage() {
+export default function OrderHistoryPage() {
   const { user } = useUser();
   const firestore = useFirestore();
   const [activeTab, setActiveTab] = useState('buy');
-
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [timeFilter, setTimeFilter] = useState('all_time');
 
   const buyOrdersQuery = useMemo(() => {
     if (!user || !firestore) return null;
@@ -237,12 +239,79 @@ export default function TransactionPage() {
   const { data: buyOrders, loading: buyLoading } = useCollection<Order>(buyOrdersQuery);
   const { data: sellOrders, loading: sellLoading } = useCollection<SellOrder>(sellOrdersQuery);
 
+  const filteredBuyOrders = useMemo(() => {
+    if (!buyOrders) return [];
+    
+    const now = new Date();
+    let startDate: Date;
+    switch (timeFilter) {
+      case 'today':
+        startDate = startOfDay(now);
+        break;
+      case 'this_week':
+        startDate = startOfWeek(now);
+        break;
+      case 'this_month':
+        startDate = startOfMonth(now);
+        break;
+      default:
+        startDate = new Date(0);
+    }
+
+    return buyOrders.filter(order => {
+      const createdAtDate = order.createdAt.toDate();
+      const isAfterStartDate = timeFilter === 'all_time' || isAfter(createdAtDate, startDate);
+      if (!isAfterStartDate) return false;
+
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'completed') return order.status === 'completed';
+      if (statusFilter === 'pending') return ['pending_payment', 'pending_confirmation'].includes(order.status);
+      if (statusFilter === 'failed') return ['failed', 'cancelled'].includes(order.status);
+      
+      return true;
+    });
+  }, [buyOrders, statusFilter, timeFilter]);
+
+  const filteredSellOrders = useMemo(() => {
+    if (!sellOrders) return [];
+
+    const now = new Date();
+    let startDate: Date;
+    switch (timeFilter) {
+      case 'today':
+        startDate = startOfDay(now);
+        break;
+      case 'this_week':
+        startDate = startOfWeek(now);
+        break;
+      case 'this_month':
+        startDate = startOfMonth(now);
+        break;
+      default:
+        startDate = new Date(0);
+    }
+
+    return sellOrders.filter(order => {
+      const createdAtDate = order.createdAt.toDate();
+      const isAfterStartDate = timeFilter === 'all_time' || isAfter(createdAtDate, startDate);
+      if (!isAfterStartDate) return false;
+
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'completed') return order.status === 'completed';
+      if (statusFilter === 'pending') return ['pending', 'partially_filled', 'processing'].includes(order.status);
+      if (statusFilter === 'failed') return order.status === 'failed';
+      
+      return true;
+    });
+  }, [sellOrders, statusFilter, timeFilter]);
+
+  const loading = buyLoading || sellLoading;
+  
   return (
     <div className="text-foreground min-h-screen">
-       {/* Header */}
       <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-            <Link href="/my">
+            <Link href="/home">
                 <ChevronLeft className="h-6 w-6 text-muted-foreground" />
             </Link>
         </Button>
@@ -251,43 +320,43 @@ export default function TransactionPage() {
       </header>
 
       <main className="p-4">
-          <Tabs defaultValue="buy" className="w-full" onValueChange={setActiveTab}>
+          <Tabs value={activeTab} className="w-full" onValueChange={setActiveTab}>
              <TabsList className="grid w-full grid-cols-2 bg-transparent p-0 h-auto mb-4 border-b">
                 <TabsTrigger value="buy" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3">My Purchases</TabsTrigger>
                 <TabsTrigger value="sell" className="text-base data-[state=active]:font-bold data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none bg-transparent text-muted-foreground p-3">My Sales</TabsTrigger>
              </TabsList>
              
               <div className="my-4 grid grid-cols-2 gap-4">
-                <Select defaultValue="all">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-full bg-white border-border rounded-lg h-11">
-                    <SelectValue placeholder="All" />
+                    <SelectValue placeholder="All Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="failed">Failed/Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
 
-                <Select>
+                <Select value={timeFilter} onValueChange={setTimeFilter}>
                   <SelectTrigger className="w-full bg-white border-border rounded-lg h-11">
-                    <SelectValue placeholder="Choose Time" />
+                    <SelectValue placeholder="All Time" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="all_time">All Time</SelectItem>
                     <SelectItem value="today">Today</SelectItem>
                     <SelectItem value="this_week">This Week</SelectItem>
                     <SelectItem value="this_month">This Month</SelectItem>
-                    <SelectItem value="all_time">All Time</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
              <TabsContent value="buy">
-                <TransactionList orders={buyOrders} loading={buyLoading} type="buy"/>
+                <TransactionList orders={filteredBuyOrders} loading={loading} type="buy"/>
              </TabsContent>
              <TabsContent value="sell">
-                <TransactionList orders={sellOrders} loading={sellLoading} type="sell"/>
+                <TransactionList orders={filteredSellOrders} loading={loading} type="sell"/>
              </TabsContent>
           </Tabs>
       </main>
