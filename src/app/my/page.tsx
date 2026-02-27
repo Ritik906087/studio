@@ -39,6 +39,7 @@ import React, { useState } from 'react';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useLanguage } from '@/context/language-context';
 
 
 const GlassCard = ({
@@ -58,25 +59,13 @@ const GlassCard = ({
   </Card>
 );
 
-const actionItems = [
-    { icon: Wallet, label: "Collection", href: "/my/collection" },
-    { icon: Lock, label: "Payment Password" },
-    { icon: ScrollText, label: "Transaction", href: "/my/transactions" },
-    { icon: Settings, label: "Settings", href: "/my/settings" },
-]
-
-const listItems = [
-    { icon: HelpCircle, label: "Help Center", href: "/help" },
-    { icon: Globe, label: "Language" },
-]
-
-
 export default function MyPage() {
   const { user, loading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
   const firestore = useFirestore();
   const [currency, setCurrency] = useState<'LGB' | 'INR'>('LGB');
+  const { language, setLanguage, translations } = useLanguage();
 
   const userProfileRef = React.useMemo(() => {
     if (!user || !firestore) return null;
@@ -84,6 +73,18 @@ export default function MyPage() {
   }, [user, firestore]);
 
   const { data: userProfile, loading: profileLoading } = useDoc<{ displayName: string; photoURL?: string; balance: number; holdBalance: number; numericId: string; claimedUserRewards?: string[] }>(userProfileRef);
+
+  const actionItems = [
+    { icon: Wallet, label: translations.collection, href: "/my/collection" },
+    { icon: Lock, label: translations.paymentPassword },
+    { icon: ScrollText, label: translations.transaction, href: "/my/transactions" },
+    { icon: Settings, label: translations.settings, href: "/my/settings" },
+  ]
+
+  const listItems = [
+      { icon: HelpCircle, label: translations.helpCenter, href: "/help" },
+      { icon: Globe, label: translations.language },
+  ]
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -148,7 +149,7 @@ export default function MyPage() {
                 <div className="flex items-center justify-end text-xs">
                     <span className="rounded-full bg-yellow-500/30 px-2 py-0.5 text-yellow-300">LV0</span>
                 </div>
-                <p className="text-sm text-white/70">Total Balance</p>
+                <p className="text-sm text-white/70">{translations.totalBalance}</p>
                  {profileLoading ? <Skeleton className="h-8 w-32 bg-slate-700" /> : 
                  <div className="flex items-baseline gap-2">
                     <p className="text-2xl font-bold">{userProfile?.balance?.toFixed(2) || '0.00'}</p>
@@ -168,7 +169,7 @@ export default function MyPage() {
                  }
                 <div className="flex justify-between text-sm text-white/70 items-center">
                     <span className="flex items-baseline gap-1">
-                        <span className="text-xs">hold</span>
+                        <span className="text-xs">{translations.hold}</span>
                         {profileLoading ? <Skeleton className="h-4 w-10 bg-slate-700"/> : <span>≈ {(userProfile?.holdBalance || 0).toFixed(2)}</span>}
                     </span>
                     <span className="text-xs">1LG≈ 1INR</span>
@@ -182,7 +183,7 @@ export default function MyPage() {
               <GlassCard>
                   <CardContent className="flex items-center justify-center gap-2 p-3">
                       <Award className="h-5 w-5 text-yellow-400"/>
-                      <span className="font-semibold">Rewards</span>
+                      <span className="font-semibold">{translations.rewards}</span>
                   </CardContent>
               </GlassCard>
             </Link>
@@ -190,7 +191,7 @@ export default function MyPage() {
               <GlassCard>
                   <CardContent className="flex items-center justify-center gap-2 p-3">
                       <Users className="h-5 w-5 text-primary"/>
-                      <span className="font-semibold">Team</span>
+                      <span className="font-semibold">{translations.team}</span>
                   </CardContent>
               </GlassCard>
             </Link>
@@ -224,13 +225,34 @@ export default function MyPage() {
                     <div className="flex items-center justify-between p-3 rounded-lg hover:bg-secondary cursor-pointer">
                       <div className="flex items-center gap-3">
                         <Gift className="h-5 w-5 text-muted-foreground" />
-                        <span className="font-medium">New User reward</span>
+                        <span className="font-medium">{translations.newUserReward}</span>
                       </div>
                       <ChevronRight className="h-5 w-5 text-gray-400" />
                     </div>
                   </Link>
                 )}
                 {listItems.map(item => {
+                    if (item.label === translations.language) {
+                      return (
+                        <DropdownMenu key={item.label}>
+                          <DropdownMenuTrigger asChild>
+                            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-secondary cursor-pointer">
+                              <div className="flex items-center gap-3">
+                                <item.icon className="h-5 w-5 text-muted-foreground" />
+                                <span className="font-medium">{item.label}</span>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-gray-400" />
+                            </div>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => setLanguage('en')}>English</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setLanguage('hi')}>हिंदी</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setLanguage('ur')}>اردو</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )
+                    }
+
                     const content = (
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-secondary cursor-pointer">
                             <div className="flex items-center gap-3">
@@ -253,7 +275,7 @@ export default function MyPage() {
         {/* Logout Button */}
         <Button onClick={handleLogout} className="w-full h-12 bg-yellow-400 text-yellow-900 font-bold text-base hover:bg-yellow-500 rounded-lg">
             <LogOut className="h-5 w-5 mr-2"/>
-            Logout
+            {translations.logout}
         </Button>
       </main>
     </div>

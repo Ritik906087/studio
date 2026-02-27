@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { Logo } from '@/components/logo';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import Image from 'next/image';
-import { LanguageProvider } from '@/context/language-context';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -25,15 +24,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   }
 
   if (isHelpPage) {
-    return (
-      <LanguageProvider>
-          {children}
-      </LanguageProvider>
-    );
+    return <>{children}</>;
   }
 
   return (
-    <LanguageProvider>
       <div className="md:bg-gray-200">
         <div className={cn("relative mx-auto flex min-h-screen w-full flex-col items-center justify-start bg-secondary md:max-w-md md:shadow-lg", !isHelpPage && "auth-layout p-4 pt-24 pb-12")}>
           {!isHelpPage && (
@@ -54,8 +48,5 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </div>
-    </LanguageProvider>
   );
 }
-
-    

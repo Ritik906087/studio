@@ -7,6 +7,7 @@ import { Home, History, UserPlus, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { Loader } from '@/components/ui/loader';
+import { useLanguage } from '@/context/language-context';
 
 export default function HomeLayout({
   children,
@@ -15,16 +16,17 @@ export default function HomeLayout({
 }) {
   const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
+  const { translations } = useLanguage();
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   const navItems = [
-    { href: '/home', icon: Home, label: 'Home' },
-    { href: '/order', icon: History, label: 'Order History' },
-    { href: '/invite', icon: UserPlus, label: 'Invite' },
-    { href: '/my', icon: User, label: 'My' },
+    { href: '/home', icon: Home, label: translations.navHome },
+    { href: '/order', icon: History, label: translations.navOrderHistory },
+    { href: '/invite', icon: UserPlus, label: translations.navInvite },
+    { href: '/my', icon: User, label: translations.navMy },
   ];
 
   if (!isMounted) {

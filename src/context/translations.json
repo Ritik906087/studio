@@ -1,3 +1,4 @@
+
 {
   "en": {
     "accountLogin": "Account Login",
@@ -57,7 +58,22 @@
     "backToSignInBtn": "Back to Sign In",
     "termsTitle": "User Agreement",
     "termsDesc": "Terms and Conditions for using LG Pay.",
-    "acceptAndContinue": "Accept and Continue"
+    "acceptAndContinue": "Accept and Continue",
+    "totalBalance": "Total Balance",
+    "hold": "hold",
+    "rewards": "Rewards",
+    "team": "Team",
+    "collection": "Collection",
+    "paymentPassword": "Payment Password",
+    "transaction": "Transaction",
+    "settings": "Settings",
+    "newUserReward": "New User reward",
+    "language": "Language",
+    "logout": "Logout",
+    "navHome": "Home",
+    "navOrderHistory": "Order History",
+    "navInvite": "Invite",
+    "navMy": "My"
   },
   "hi": {
     "accountLogin": "अकाउंट लॉगिन",
@@ -117,7 +133,22 @@
     "backToSignInBtn": "साइन इन पर वापस",
     "termsTitle": "उपयोगकर्ता समझौता",
     "termsDesc": "एलजी पे का उपयोग करने के लिए नियम और शर्तें।",
-    "acceptAndContinue": "स्वीकार करें और जारी रखें"
+    "acceptAndContinue": "स्वीकार करें और जारी रखें",
+    "totalBalance": "कुल शेष",
+    "hold": "होल्ड",
+    "rewards": "इनाम",
+    "team": "टीम",
+    "collection": "संग्रह",
+    "paymentPassword": "भुगतान पासवर्ड",
+    "transaction": "लेन-देन",
+    "settings": "सेटिंग्स",
+    "newUserReward": "नए उपयोगकर्ता का इनाम",
+    "language": "भाषा",
+    "logout": "लॉग आउट",
+    "navHome": "होम",
+    "navOrderHistory": "ऑर्डर हिस्ट्री",
+    "navInvite": "आमंत्रित करें",
+    "navMy": "मेरा"
   },
   "ur": {
     "accountLogin": "اکاؤنٹ لاگ ان",
@@ -177,6 +208,21 @@
     "backToSignInBtn": "سائن ان پر واپس",
     "termsTitle": "صارف کا معاہدہ",
     "termsDesc": "LG Pay استعمال کرنے کے لئے شرائط و ضوابط۔",
-    "acceptAndContinue": "قبول کریں اور جاری رکھیں"
+    "acceptAndContinue": "قبول کریں اور جاری رکھیں",
+    "totalBalance": "کل بیلنس",
+    "hold": "ہولڈ",
+    "rewards": "انعامات",
+    "team": "ٹیم",
+    "collection": "مجموعہ",
+    "paymentPassword": "ادائیگی کا پاس ورڈ",
+    "transaction": "لین دین",
+    "settings": "ترتیبات",
+    "newUserReward": "نئے صارف کا انعام",
+    "language": "زبان",
+    "logout": "لاگ آؤٹ",
+    "navHome": "ہوم",
+    "navOrderHistory": "آرڈر ہسٹری",
+    "navInvite": "دعوت دیں",
+    "navMy": "میرا"
   }
 }
