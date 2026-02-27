@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description: "Join LG Pay and experience fast, secure and easy digital payments. Invite friends and earn rewards instantly.",
 
   icons: {
-    icon: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_00000000bd5072068c98a569253739e7.png?alt=media&token=3035c470-4755-4b35-a364-60d55ae22513",
+    icon: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6",
   },
 
   openGraph: {
