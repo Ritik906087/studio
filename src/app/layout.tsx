@@ -6,23 +6,23 @@ import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { LanguageProvider } from '@/context/language-context';
 
 export const metadata: Metadata = {
-  title: "LG Pay",
-  description: "Secure and easy payments with LG Pay",
+  title: "LG Pay – Smart Digital Wallet",
+  description: "Join LG Pay and experience fast, secure and easy digital payments. Invite friends and earn rewards instantly.",
 
   icons: {
-    icon: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6",
+    icon: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_00000000bd5072068c98a569253739e7.png?alt=media&token=3035c470-4755-4b35-a364-60d55ae22513",
   },
 
   openGraph: {
-    title: "LG Pay",
-    description: "Secure and easy payments with LG Pay",
+    title: "LG Pay – Smart Digital Wallet",
+    description: "Join LG Pay and experience fast, secure and easy digital payments. Invite friends and earn rewards instantly.",
     url: "https://lgpayb.online",
     siteName: "LG Pay",
     images: [
       {
-        url: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6",
-        width: 512,
-        height: 512,
+        url: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_00000000bd5072068c98a569253739e7.png?alt=media&token=3035c470-4755-4b35-a364-60d55ae22513",
+        width: 1200,
+        height: 630,
       },
     ],
     type: "website",
@@ -30,10 +30,10 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "LG Pay",
-    description: "Secure and easy payments with LG Pay",
+    title: "LG Pay – Smart Digital Wallet",
+    description: "Join LG Pay and experience fast, secure and easy digital payments. Invite friends and earn rewards instantly.",
     images: [
-      "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6",
+      "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_00000000bd5072068c98a569253739e7.png?alt=media&token=3035c470-4755-4b35-a364-60d55ae22513",
     ],
   },
 };
