@@ -157,7 +157,6 @@ const InProgressOrderCard = ({ order, onExpire }: { order: any, onExpire: (order
          if (['pending', 'partially_filled', 'processing'].includes(order.status)) {
             buttonText = "View Status";
             buttonLink = `/order/sell/${order.id}`;
-            expiryTimestamp = new Timestamp(order.createdAt.seconds + 30 * 60, order.createdAt.nanoseconds);
             
             switch (order.status) {
                 case 'pending':
@@ -254,31 +253,10 @@ export default function HomePage() {
 
             const orderData = orderSnap.data();
             const validBuyStatuses = ['pending_payment', 'pending_confirmation'];
-            const validSellStatuses = ['pending', 'partially_filled', 'processing'];
             
             if (type === 'buy' && !validBuyStatuses.includes(orderData.status)) return;
-            if (type === 'sell' && !validSellStatuses.includes(orderData.status)) return;
-
-            if (type === 'sell') {
-                if (orderData.remainingAmount > 0) {
-                    const userRef = doc(firestore, 'users', user.uid);
-                    const userSnap = await transaction.get(userRef);
-                    if (!userSnap.exists()) throw new Error("User not found");
-
-                    const newBalance = userSnap.data().balance + orderData.remainingAmount;
-                    transaction.update(userRef, { balance: newBalance });
-
-                    transaction.update(orderRef, {
-                        status: 'failed',
-                        failureReason: 'Order expired after 30 minutes with a remaining amount.',
-                        remainingAmount: 0
-                    });
-                } else if (['pending', 'partially_filled', 'processing'].includes(orderData.status)) {
-                    transaction.update(orderRef, { status: 'failed', failureReason: 'Order expired.' });
-                }
-            } else { // Buy order (delegated to confirm page)
-                // This logic is mainly handled on the confirm page itself,
-                // but this is a fallback.
+            
+            if (type === 'buy') {
                 transaction.update(orderRef, {
                     status: 'failed',
                     cancellationReason: 'Order automatically expired.',

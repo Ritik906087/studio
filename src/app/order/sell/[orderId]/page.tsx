@@ -2,10 +2,10 @@
 
 'use client';
 
-import React, { useMemo, Suspense } from 'react';
+import React, { useMemo, Suspense, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useDoc, useUser, useFirestore } from '@/firebase';
-import { doc, Timestamp } from 'firebase/firestore';
+import { doc, Timestamp, runTransaction } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, Copy } from 'lucide-react';
@@ -15,6 +15,17 @@ import { cn } from '@/lib/utils';
 import { Loader } from '@/components/ui/loader';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 
 type SellOrder = {
@@ -108,11 +119,19 @@ function SellOrderStatusContent() {
     const orderId = params.orderId as string;
     const { user } = useUser();
     const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const [isCancelling, setIsCancelling] = useState(false);
 
     const sellOrderRef = useMemo(() => {
         if (!firestore || !user || !orderId) return null;
         return doc(firestore, 'users', user.uid, 'sellOrders', orderId);
     }, [firestore, user, orderId]);
+    
+    const userProfileRef = useMemo(() => {
+        if (!user || !firestore) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [user, firestore]);
 
     const { data: sellOrder, loading: sellOrderLoading } = useDoc<SellOrder>(sellOrderRef);
 
@@ -121,6 +140,57 @@ function SellOrderStatusContent() {
         return [...sellOrder.matchedBuyOrders].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
     }, [sellOrder]);
     
+    const handleCancelRemaining = async () => {
+        if (!sellOrder || !sellOrderRef || !userProfileRef || sellOrder.remainingAmount <= 0) {
+            toast({ variant: 'destructive', title: 'Cannot cancel', description: 'No remaining amount to cancel.' });
+            return;
+        }
+    
+        setIsCancelling(true);
+    
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const userDoc = await transaction.get(userProfileRef);
+                const sellOrderDoc = await transaction.get(sellOrderRef);
+    
+                if (!userDoc.exists() || !sellOrderDoc.exists()) {
+                    throw new Error("Data not found.");
+                }
+    
+                const userData = userDoc.data();
+                const orderData = sellOrderDoc.data();
+                
+                if (orderData.remainingAmount <= 0) {
+                     throw new Error("No remaining amount to cancel.");
+                }
+                
+                const amountToRefund = orderData.remainingAmount;
+                const newBalance = (userData.balance || 0) + amountToRefund;
+    
+                transaction.update(userProfileRef, { balance: newBalance });
+    
+                if (orderData.status === 'pending') {
+                    transaction.update(sellOrderRef, {
+                        status: 'failed',
+                        failureReason: 'Cancelled by user.',
+                        remainingAmount: 0
+                    });
+                } else {
+                     transaction.update(sellOrderRef, {
+                        remainingAmount: 0,
+                     });
+                }
+            });
+    
+            toast({ title: 'Order Updated', description: 'The remaining amount has been cancelled and refunded.' });
+        } catch (error: any) {
+            console.error("Failed to cancel remaining order:", error);
+            toast({ variant: 'destructive', title: 'Cancellation Failed', description: error.message });
+        } finally {
+            setIsCancelling(false);
+        }
+    };
+
     const loading = sellOrderLoading;
     
     const amount = sellOrder?.amount || 0;
@@ -152,11 +222,34 @@ function SellOrderStatusContent() {
 
     return (
         <div className="flex flex-col min-h-screen">
-            <header className="flex items-center p-4 bg-white sticky top-0 z-10 border-b">
+            <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
                 <Button asChild onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8">
                      <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
-                <h1 className="text-xl font-bold mx-auto pr-8">Sell Order Status</h1>
+                <h1 className="text-xl font-bold">Sell Order Status</h1>
+                {sellOrder && sellOrder.remainingAmount > 0 && !['completed', 'failed'].includes(sellOrder.status) ? (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" disabled={isCancelling}>
+                                Cancel
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Cancel Remaining Order?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This will cancel the unfilled part of your sell order (₹{sellOrder.remainingAmount.toFixed(2)}) and refund it to your wallet. Matched orders will not be affected.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Back</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleCancelRemaining} disabled={isCancelling} className="bg-destructive hover:bg-destructive/90">
+                                    {isCancelling ? <Loader size="xs" /> : "Confirm"}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                ) : <div className="w-16"></div>}
             </header>
 
             <main className="flex-grow p-4 space-y-6">
