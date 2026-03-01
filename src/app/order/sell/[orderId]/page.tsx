@@ -8,12 +8,14 @@ import { useDoc, useUser, useFirestore } from '@/firebase';
 import { doc, Timestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Copy } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Loader } from '@/components/ui/loader';
 import { Progress } from '@/components/ui/progress';
+import { useToast } from '@/hooks/use-toast';
+
 
 type SellOrder = {
     id: string;
@@ -31,6 +33,8 @@ type MatchedBuyOrder = {
     amount: number;
     status: 'pending_payment' | 'pending_confirmation' | 'completed' | 'failed' | 'cancelled';
     createdAt: Timestamp;
+    buyerOrderId?: string;
+    utr?: string;
 };
 
 const statusConfig: { [key: string]: { style: string; text: string } } = {
@@ -44,6 +48,59 @@ const statusConfig: { [key: string]: { style: string; text: string } } = {
   pending_confirmation: { style: "bg-blue-100 text-blue-800", text: "Confirming" },
 };
 
+
+const MatchedOrderCard = ({ order }: { order: MatchedBuyOrder }) => {
+  const currentStatus = statusConfig[order.status] || { style: "bg-gray-100 text-gray-800", text: order.status.replace(/_/g, ' ') };
+  const { toast } = useToast();
+  const copyToClipboard = (text: string | undefined) => {
+    if(!text) return;
+    navigator.clipboard.writeText(text).then(() => toast({ title: 'Copied!' }));
+  };
+
+  return (
+    <Card className="bg-white shadow-sm">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex justify-between items-center">
+          <span className="rounded px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-800">
+            Matched
+          </span>
+          <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
+        </div>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Amount</span>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-primary">₹{order.amount.toFixed(2)}</span>
+              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(order.amount.toFixed(2))} />
+            </div>
+          </div>
+          {order.utr && (
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">UTR</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-muted-foreground" style={{ wordBreak: 'break-all' }}>{order.utr}</span>
+                <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(order.utr)} />
+              </div>
+            </div>
+          )}
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Time</span>
+            <span className="font-mono text-muted-foreground text-xs">{order.createdAt.toDate().toLocaleString()}</span>
+          </div>
+          {order.buyerOrderId && (
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Buyer Order ID</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-muted-foreground" style={{ wordBreak: 'break-all' }}>{order.buyerOrderId}</span>
+                <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(order.buyerOrderId)} />
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 function SellOrderStatusContent() {
     const params = useParams();
@@ -132,18 +189,9 @@ function SellOrderStatusContent() {
                     <CardContent>
                         {matchedOrders && matchedOrders.length > 0 ? (
                             <div className="space-y-3">
-                                {matchedOrders.map(buyOrder => {
-                                    const buyStatus = statusConfig[buyOrder.status] || { style: "bg-gray-100 text-gray-800", text: buyOrder.status.replace(/_/g, ' ') };
-                                    return (
-                                        <div key={buyOrder.buyOrderId} className="p-3 rounded-lg bg-secondary/70 flex justify-between items-center text-sm">
-                                            <div>
-                                                <p className="font-bold">₹{buyOrder.amount.toFixed(2)}</p>
-                                                <p className="text-xs text-muted-foreground font-mono">{buyOrder.createdAt.toDate().toLocaleString()}</p>
-                                            </div>
-                                            <span className={cn("font-semibold capitalize text-xs", buyStatus.style, "px-2 py-1 rounded-md")}>{buyStatus.text}</span>
-                                        </div>
-                                    )
-                                })}
+                                {matchedOrders.map(buyOrder => (
+                                    <MatchedOrderCard key={buyOrder.buyOrderId} order={buyOrder} />
+                                ))}
                             </div>
                         ) : (
                              <p className="text-center text-muted-foreground py-4">No buyers matched yet.</p>

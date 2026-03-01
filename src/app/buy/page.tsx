@@ -300,6 +300,7 @@ const createOrder = async (provider: string, orderAmount: number) => {
         await runTransaction(firestore, async (transaction) => {
             const newOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
             newBuyOrderId = newOrderRef.id;
+            const buyOrderDisplayId = `LGPAY${Date.now()}`;
             let p2pMatchFound = false;
 
             if (sellOrderCandidateDoc) {
@@ -323,7 +324,7 @@ const createOrder = async (provider: string, orderAmount: number) => {
                         const buyOrderData = {
                             userId: user.uid,
                             amount: orderAmount,
-                            orderId: `LGPAY${Date.now()}`,
+                            orderId: buyOrderDisplayId,
                             status: 'pending_payment',
                             paymentProvider: provider,
                             sellerUpiDetails: sellOrderData.withdrawalMethod,
@@ -337,6 +338,7 @@ const createOrder = async (provider: string, orderAmount: number) => {
 
                         const matchedBuyOrderData = {
                             buyOrderId: newBuyOrderId,
+                            buyerOrderId: buyOrderDisplayId,
                             buyerId: user.uid,
                             amount: orderAmount,
                             status: 'pending_payment',
@@ -364,7 +366,7 @@ const createOrder = async (provider: string, orderAmount: number) => {
                 const buyOrderData = {
                     userId: user.uid,
                     amount: orderAmount,
-                    orderId: `LGPAY${Date.now()}`,
+                    orderId: buyOrderDisplayId,
                     status: 'pending_payment',
                     paymentProvider: provider,
                     paymentType: finalPaymentType,

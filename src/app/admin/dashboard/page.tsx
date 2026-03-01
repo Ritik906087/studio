@@ -76,9 +76,10 @@ type Order = {
     verificationResult?: string;
     createdAt: Timestamp;
     user?: UserProfile;
-    paymentType?: 'bank' | 'upi' | 'usdt';
+    paymentType?: 'bank' | 'upi' | 'usdt' | 'p2p_upi';
     paymentProvider?: string;
     adminPaymentMethodId?: string;
+    matchedSellOrderPath?: string;
 };
 
 type SellOrder = {
@@ -988,23 +989,32 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
         try {
             await runTransaction(firestore, async (transaction) => {
                 // --- READ PHASE ---
+                const buyerOrderDoc = await transaction.get(orderRef);
+                if (!buyerOrderDoc.exists()) throw new Error("Buy order not found.");
+                const buyerOrderData = buyerOrderDoc.data() as Order;
+
                 const buyerDoc = await transaction.get(userRef);
                 if (!buyerDoc.exists()) {
                     throw new Error("User not found to update balance.");
                 }
                 const buyerData = buyerDoc.data() as UserProfile;
     
+                let sellOrderRef: DocumentReference | null = null;
+                let sellOrderDoc: DocumentData | null = null;
+                if (buyerOrderData.paymentType === 'p2p_upi' && buyerOrderData.matchedSellOrderPath) {
+                    sellOrderRef = doc(firestore, buyerOrderData.matchedSellOrderPath);
+                    sellOrderDoc = await transaction.get(sellOrderRef);
+                }
+
                 let l1InviterDoc: DocumentData | null = null;
                 let l1InviterRef: DocumentReference | null = null;
                 let l2InviterDoc: DocumentData | null = null;
                 let l2InviterRef: DocumentReference | null = null;
     
-                // Read L1 inviter if exists
                 if (buyerData.inviterUid) {
                     l1InviterRef = doc(firestore, 'users', buyerData.inviterUid);
                     l1InviterDoc = await transaction.get(l1InviterRef);
     
-                    // Read L2 inviter if L1 inviter exists and has an inviter
                     if (l1InviterDoc.exists()) {
                         const l1InviterData = l1InviterDoc.data() as UserProfile;
                         if (l1InviterData.inviterUid) {
@@ -1021,13 +1031,42 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
                 transaction.update(userRef, { balance: newBalance });
                 transaction.update(orderRef, { status: 'completed' });
     
-                // 2. Handle Level 1 Inviter Bonus
+                // 2. Handle P2P Seller Order
+                if (sellOrderRef && sellOrderDoc && sellOrderDoc.exists()) {
+                    const sellOrderData = sellOrderDoc.data();
+                    
+                    const updatedMatchedBuyOrders = (sellOrderData.matchedBuyOrders || []).map((bo: any) => {
+                        if (bo.buyOrderId === buyerOrderDoc.id) {
+                            return { 
+                                ...bo, 
+                                status: 'completed', 
+                                utr: buyerOrderData.utr,
+                            };
+                        }
+                        return bo;
+                    });
+                    
+                    const isAllMatchedOrdersDone = updatedMatchedBuyOrders.every(
+                        (bo: any) => bo.status === 'completed' || bo.status === 'failed' || bo.status === 'cancelled'
+                    );
+                    
+                    const newSellOrderStatus = (sellOrderData.remainingAmount === 0 && isAllMatchedOrdersDone)
+                        ? 'completed'
+                        : sellOrderData.status;
+
+                    transaction.update(sellOrderRef, {
+                        matchedBuyOrders: updatedMatchedBuyOrders,
+                        status: newSellOrderStatus,
+                        ...(newSellOrderStatus === 'completed' && { completedAt: serverTimestamp() })
+                    });
+                }
+    
+                // 3. Handle Level 1 Inviter Bonus
                 if (l1InviterRef && l1InviterDoc && l1InviterDoc.exists()) {
                     const l1Bonus = order.amount * 0.02;
                     const l1NewBalance = (l1InviterDoc.data().balance || 0) + l1Bonus;
                     transaction.update(l1InviterRef, { balance: l1NewBalance });
     
-                    // Create reward transaction for L1 inviter
                     const l1RewardTxRef = doc(collection(firestore, 'users', buyerData.inviterUid!, 'transactions'));
                     transaction.set(l1RewardTxRef, {
                         userId: buyerData.inviterUid,
@@ -1038,13 +1077,12 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
                         orderId: `LGPAYI${Date.now()}`
                     });
     
-                    // 3. Handle Level 2 Inviter Bonus
+                    // 4. Handle Level 2 Inviter Bonus
                     if (l2InviterRef && l2InviterDoc && l2InviterDoc.exists()) {
                         const l2Bonus = order.amount * 0.01;
                         const l2NewBalance = (l2InviterDoc.data().balance || 0) + l2Bonus;
                         transaction.update(l2InviterRef, { balance: l2NewBalance });
     
-                        // Create reward transaction for L2 inviter
                         const l2RewardTxRef = doc(collection(firestore, 'users', l1InviterDoc.data().inviterUid!, 'transactions'));
                         transaction.set(l2RewardTxRef, {
                             userId: l1InviterDoc.data().inviterUid,
@@ -1589,6 +1627,7 @@ export default function AdminDashboardPage() {
 
 
     
+
 
 
 

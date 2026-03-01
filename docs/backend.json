@@ -266,10 +266,12 @@
                 "type": "object",
                 "properties": {
                     "buyOrderId": { "type": "string" },
+                    "buyerOrderId": { "type": "string" },
                     "buyerId": { "type": "string" },
                     "amount": { "type": "number" },
                     "status": { "type": "string" },
-                    "createdAt": { "type": "string", "format": "date-time" }
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "utr": { "type": "string" }
                 }
             }
         },
@@ -472,5 +474,3 @@
     }
   }
 }
-
-    
