@@ -65,17 +65,25 @@ export default function InvitePage() {
 
   const { data: userProfile, loading: profileLoading } = useDoc<UserProfile>(userProfileRef);
 
-  const invitationCode = userProfile?.numericId;
-  const inviteUrl = invitationCode ? `${window.location.origin}/register?ref=${invitationCode}` : `${window.location.origin}/register`;
-  const shareText = `Join me on LG Pay and earn rewards! Use my invitation code: ${invitationCode}\n\n${inviteUrl}`;
-  const shareTitle = 'Join LG Pay!';
+  const getShareDetails = () => {
+    if (!userProfile?.numericId) {
+        return null;
+    }
+    const invitationCode = userProfile.numericId;
+    const inviteUrl = `${window.location.origin}/register?ref=${invitationCode}`;
+    const shareText = `Join me on LG Pay and earn rewards! Use my invitation code: ${invitationCode}\n\n${inviteUrl}`;
+    const shareTitle = 'Join LG Pay!';
 
+    return { inviteUrl, shareText, shareTitle, invitationCode };
+  }
 
   const handleInvite = async () => {
-    if (!userProfile) {
+    const details = getShareDetails();
+    if (!details) {
       toast({
         variant: 'destructive',
         title: 'Could not get invitation code',
+        description: 'Please wait a moment and try again.'
       });
       return;
     }
@@ -84,9 +92,9 @@ export default function InvitePage() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: shareTitle,
-          text: shareText,
-          url: inviteUrl,
+          title: details.shareTitle,
+          text: details.shareText,
+          url: details.inviteUrl,
         });
       } catch (error) {
         console.log('Sharing was cancelled or failed.', error);
@@ -98,14 +106,15 @@ export default function InvitePage() {
   };
 
   const handleCopyLink = () => {
-     if (!invitationCode) {
+    const details = getShareDetails();
+    if (!details) {
       toast({
         variant: 'destructive',
         title: 'Could not get invitation code',
       });
       return;
     }
-    navigator.clipboard.writeText(inviteUrl).then(() => {
+    navigator.clipboard.writeText(details.inviteUrl).then(() => {
         toast({
             title: 'Link Copied!',
             description: 'Invitation link copied to clipboard.',
@@ -122,13 +131,17 @@ export default function InvitePage() {
   };
   
   const handleWhatsAppShare = () => {
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+    const details = getShareDetails();
+    if (!details) return;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(details.shareText)}`;
     window.open(whatsappUrl, '_blank');
     setIsShareSheetOpen(false);
   };
 
   const handleTelegramShare = () => {
-    const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteUrl)}&text=${encodeURIComponent(shareText)}`;
+    const details = getShareDetails();
+    if (!details) return;
+    const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(details.inviteUrl)}&text=${encodeURIComponent(details.shareText)}`;
     window.open(telegramUrl, '_blank');
     setIsShareSheetOpen(false);
   };

@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { createUserWithEmailAndPassword, getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult, fetchSignInMethodsForEmail } from "firebase/auth";
 import { useFirestore } from "@/firebase";
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs, limit } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 
 export function RegisterForm() {
@@ -40,6 +40,7 @@ export function RegisterForm() {
   const { translations } = useLanguage();
   const firestore = useFirestore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const auth = getAuth();
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
 
@@ -96,7 +97,7 @@ export function RegisterForm() {
       otp: "",
       password: "",
       confirmPassword: "",
-      invitationCode: "",
+      invitationCode: searchParams.get("ref") || "",
       agreement: false,
     },
   });
