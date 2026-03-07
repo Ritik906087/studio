@@ -1479,12 +1479,31 @@ function ReportsTabContent() {
     const firestore = useFirestore();
     const { toast } = useToast();
 
-    const reportsQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, "reports"), orderBy('createdAt', 'desc'));
+    const [reports, setReports] = useState<Report[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<any>(null);
+
+    const fetchReports = useCallback(async () => {
+        if (!firestore) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const q = query(collection(firestore, "reports"));
+            const snapshot = await getDocs(q);
+            const fetchedReports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
+            // Sort client-side
+            fetchedReports.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+            setReports(fetchedReports);
+        } catch (e) {
+            setError(e);
+        } finally {
+            setLoading(false);
+        }
     }, [firestore]);
 
-    const { data: reports, loading, error } = useCollection<Report>(reportsQuery);
+    useEffect(() => {
+        fetchReports();
+    }, [fetchReports]);
 
     const handleResolve = async (reportId: string) => {
         if (!firestore) return;
@@ -1492,6 +1511,7 @@ function ReportsTabContent() {
         try {
             await updateDoc(reportRef, { status: 'resolved' });
             toast({ title: 'Report Resolved', description: 'The report has been marked as resolved.' });
+            fetchReports(); // Re-fetch to update the UI
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to update report status.' });
         }
@@ -1511,7 +1531,7 @@ function ReportsTabContent() {
                 <CardHeader>
                     <CardTitle className="text-destructive">Error Fetching Reports</CardTitle>
                     <CardDescription className="text-destructive/80">
-                        Could not retrieve report data. This might be due to Firestore security rules.
+                        Could not retrieve report data. This might be due to Firestore security rules or a missing database index.
                     </CardDescription>
                 </CardHeader>
                  <CardContent>
@@ -1808,23 +1828,3 @@ export default function AdminDashboardPage() {
 
     return <AdminDashboard />;
 }
-    
-
-    
-
-
-    
-
-
-
-
-
-
-
-    
-
-
-
-    
-
-```
