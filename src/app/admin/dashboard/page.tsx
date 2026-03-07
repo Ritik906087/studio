@@ -1302,6 +1302,7 @@ function ConfirmationsTabContent() {
     const [usersLoading, setUsersLoading] = useState(true);
     const [adminPaymentMethods, setAdminPaymentMethods] = useState<PaymentMethod[]>([]);
     const [methodsLoading, setMethodsLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
 
 
     const fetchData = useCallback(async () => {
@@ -1357,6 +1358,17 @@ function ConfirmationsTabContent() {
             user: usersMap.get(order.userId)
         })).sort((a, b) => a.createdAt.seconds - b.createdAt.seconds);
     }, [allOrders, usersMap]);
+
+    const filteredOrders = useMemo(() => {
+        if (!ordersWithUserData) return [];
+        if (!searchTerm) return ordersWithUserData;
+        const lowercasedTerm = searchTerm.toLowerCase();
+        return ordersWithUserData.filter(order =>
+            order.orderId.toLowerCase().includes(lowercasedTerm) ||
+            order.user?.numericId?.toLowerCase().includes(lowercasedTerm) ||
+            order.utr?.toLowerCase().includes(lowercasedTerm)
+        );
+    }, [ordersWithUserData, searchTerm]);
     
     if (loading || usersLoading || methodsLoading) {
         return (
@@ -1384,57 +1396,66 @@ function ConfirmationsTabContent() {
         )
     }
 
-    if (ordersWithUserData.length === 0) {
-        return (
-            <Card>
-                <CardContent className="p-8 text-center text-muted-foreground">
-                    No payments are pending confirmation.
-                </CardContent>
-            </Card>
-        )
-    }
-
     return (
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {ordersWithUserData.map(order => {
-                const providerDetails = order.paymentProvider ? paymentMethodDetails[order.paymentProvider] : null;
-                return (
-                    <Card key={order.id}>
-                        <CardHeader className="flex flex-row items-start justify-between p-4 pb-2">
-                            <div>
-                                <p className="text-sm text-muted-foreground">Amount</p>
-                                <p className="font-bold text-lg text-primary">₹{order.amount.toFixed(2)}</p>
-                            </div>
-                            {order.submittedAt && (
-                                <CountdownTimer 
-                                    expiryTimestamp={new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds)} 
-                                />
-                            )}
-                        </CardHeader>
-                        <CardContent className="p-4 pt-0 space-y-2 text-sm">
-                            <p><strong>User:</strong> {order.user?.displayName || 'N/A'} ({order.user?.numericId})</p>
-                            <p className="flex items-start gap-2"><strong>UTR/TxHash:</strong> <span className="font-mono text-right break-all">{order.utr}</span></p>
-                             {order.paymentProvider && (
-                                <p className="flex items-center gap-2">
-                                    <strong>Method:</strong>
-                                    {providerDetails ? (
-                                        <span className="flex items-center gap-1.5">
-                                            <Image src={providerDetails.logo} alt={order.paymentProvider} width={16} height={16} />
-                                            <span>{order.paymentProvider}</span>
-                                        </span>
-                                    ) : (
-                                        <span>{order.paymentProvider}</span>
+        <div className="space-y-4">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                    placeholder="Search by Order ID, UID, or UTR..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 max-w-sm"
+                />
+            </div>
+            {filteredOrders.length === 0 ? (
+                <Card>
+                    <CardContent className="p-8 text-center text-muted-foreground">
+                        No payments are pending confirmation.
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredOrders.map(order => {
+                        const providerDetails = order.paymentProvider ? paymentMethodDetails[order.paymentProvider] : null;
+                        return (
+                            <Card key={order.id}>
+                                <CardHeader className="flex flex-row items-start justify-between p-4 pb-2">
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Amount</p>
+                                        <p className="font-bold text-lg text-primary">₹{order.amount.toFixed(2)}</p>
+                                    </div>
+                                    {order.submittedAt && (
+                                        <CountdownTimer 
+                                            expiryTimestamp={new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds)} 
+                                        />
                                     )}
-                                </p>
-                            )}
-                        </CardContent>
-                        <CardFooter className="p-4 pt-0">
-                            <ProcessConfirmationDialog order={order} onProcessed={fetchData} adminPaymentMethods={adminPaymentMethods} />
-                        </CardFooter>
-                    </Card>
-                )
-            })}
-         </div>
+                                </CardHeader>
+                                <CardContent className="p-4 pt-0 space-y-2 text-sm">
+                                    <p><strong>User:</strong> {order.user?.displayName || 'N/A'} ({order.user?.numericId})</p>
+                                    <p className="flex items-start gap-2"><strong>UTR/TxHash:</strong> <span className="font-mono text-right break-all">{order.utr}</span></p>
+                                     {order.paymentProvider && (
+                                        <p className="flex items-center gap-2">
+                                            <strong>Method:</strong>
+                                            {providerDetails ? (
+                                                <span className="flex items-center gap-1.5">
+                                                    <Image src={providerDetails.logo} alt={order.paymentProvider} width={16} height={16} />
+                                                    <span>{order.paymentProvider}</span>
+                                                </span>
+                                            ) : (
+                                                <span>{order.paymentProvider}</span>
+                                            )}
+                                        </p>
+                                    )}
+                                </CardContent>
+                                <CardFooter className="p-4 pt-0">
+                                    <ProcessConfirmationDialog order={order} onProcessed={fetchData} adminPaymentMethods={adminPaymentMethods} />
+                                </CardFooter>
+                            </Card>
+                        )
+                    })}
+                </div>
+            )}
+        </div>
     )
 }
 
@@ -1671,6 +1692,7 @@ export default function AdminDashboardPage() {
 
 
     
+
 
 
 
