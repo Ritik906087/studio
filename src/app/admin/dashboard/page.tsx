@@ -1,6 +1,5 @@
 
 
-
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -17,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { useCollection, useDoc, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X, FileClock, AlertCircle } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X, FileClock, AlertCircle, FileWarning } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -39,6 +38,8 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from '@/components/ui/textarea';
 import { Loader } from '@/components/ui/loader';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6";
 
@@ -124,6 +125,18 @@ type ChatRequest = {
     chatHistory: Message[];
     agentId?: string;
     agentJoinedAt?: Timestamp;
+}
+
+type Report = {
+    id: string;
+    userId: string;
+    userNumericId: string;
+    orderId: string;
+    displayOrderId: string;
+    orderType: 'buy' | 'sell';
+    message: string;
+    createdAt: Timestamp;
+    status: 'pending' | 'resolved';
 }
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
@@ -1462,6 +1475,115 @@ function ConfirmationsTabContent() {
     )
 }
 
+function ReportsTabContent() {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const reportsQuery = useMemo(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, "reports"), orderBy('createdAt', 'desc'));
+    }, [firestore]);
+
+    const { data: reports, loading, error } = useCollection<Report>(reportsQuery);
+
+    const handleResolve = async (reportId: string) => {
+        if (!firestore) return;
+        const reportRef = doc(firestore, 'reports', reportId);
+        try {
+            await updateDoc(reportRef, { status: 'resolved' });
+            toast({ title: 'Report Resolved', description: 'The report has been marked as resolved.' });
+        } catch (e: any) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to update report status.' });
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex justify-center p-8">
+                <Loader size="md" />
+            </div>
+        );
+    }
+    
+    if (error) {
+        return (
+            <Card className="bg-destructive/10">
+                <CardHeader>
+                    <CardTitle className="text-destructive">Error Fetching Reports</CardTitle>
+                    <CardDescription className="text-destructive/80">
+                        Could not retrieve report data. This might be due to Firestore security rules.
+                    </CardDescription>
+                </CardHeader>
+                 <CardContent>
+                    <p className="text-xs text-destructive/80 font-mono bg-destructive/10 p-2 rounded-md break-all">
+                        {error.message}
+                    </p>
+                 </CardContent>
+            </Card>
+        )
+    }
+
+    if (!reports || reports.length === 0) {
+        return (
+            <Card>
+                <CardContent className="p-8 text-center text-muted-foreground">
+                    No reports found.
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>User Reports</CardTitle>
+                <CardDescription>
+                    Review and resolve issues reported by users.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>User UID</TableHead>
+                            <TableHead>Order ID</TableHead>
+                            <TableHead>Message</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {reports.map(report => (
+                            <TableRow key={report.id}>
+                                <TableCell className="font-mono text-xs">{report.userNumericId}</TableCell>
+                                <TableCell className="font-mono text-xs break-all">{report.displayOrderId}</TableCell>
+                                <TableCell className="max-w-[300px] truncate">{report.message}</TableCell>
+                                <TableCell>{new Date(report.createdAt.toDate()).toLocaleString()}</TableCell>
+                                <TableCell>
+                                    <span className={cn(
+                                        "px-2 py-1 rounded-full text-xs font-semibold",
+                                        report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                                    )}>
+                                        {report.status}
+                                    </span>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    {report.status === 'pending' ? (
+                                        <Button size="sm" onClick={() => handleResolve(report.id)}>Resolve</Button>
+                                    ) : (
+                                        <CheckCircle className="h-5 w-5 text-green-500 ml-auto" />
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+    );
+}
+
 function AdminDashboard() {
     const router = useRouter();
     const firestore = useFirestore();
@@ -1543,6 +1665,10 @@ function AdminDashboard() {
                 <FileClock className="mr-2"/>
                 Confirmations
             </TabsTrigger>
+            <TabsTrigger value="reports" className="justify-start p-3">
+                <FileWarning className="mr-2"/>
+                Reports
+            </TabsTrigger>
             <TabsTrigger value="live-chat" className="justify-start p-3">
                 <MessageSquare className="mr-2"/>
                 Live Chat
@@ -1602,6 +1728,9 @@ function AdminDashboard() {
                 </TabsContent>
                 <TabsContent value="confirmations" className="mt-0">
                     <ConfirmationsTabContent />
+                </TabsContent>
+                <TabsContent value="reports" className="mt-0">
+                    <ReportsTabContent />
                 </TabsContent>
                 <TabsContent value="live-chat" className="mt-0">
                 <LiveChatTabContent />
@@ -1698,3 +1827,4 @@ export default function AdminDashboardPage() {
 
     
 
+```

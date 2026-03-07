@@ -424,6 +424,48 @@
         }
       },
       "required": ["claimedTaskIds", "date"]
+    },
+    "Report": {
+      "title": "Problem Report",
+      "description": "Represents a user-submitted problem report regarding an order.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the user who submitted the report."
+        },
+        "userNumericId": {
+          "type": "string",
+          "description": "The numeric ID of the user."
+        },
+        "orderId": {
+          "type": "string",
+          "description": "The ID of the order being reported (Firestore document ID)."
+        },
+        "displayOrderId": {
+           "type": "string",
+           "description": "The user-facing order ID (e.g., LGPAY...)."
+        },
+        "orderType": {
+          "type": "string",
+          "enum": ["buy", "sell"]
+        },
+        "message": {
+          "type": "string",
+          "description": "The user's description of the problem."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the report was created."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "resolved"],
+          "description": "The current status of the report."
+        }
+      },
+      "required": ["userId", "orderId", "displayOrderId", "orderType", "message", "createdAt", "status"]
     }
   },
   "auth": {
@@ -471,6 +513,12 @@
         "$ref": "#/entities/DailyReward"
       },
       "description": "Stores daily claimed rewards for a user. {date} is YYYY-MM-DD."
+    },
+    "/reports/{reportId}": {
+      "schema": {
+        "$ref": "#/entities/Report"
+      },
+      "description": "Stores user-submitted problem reports for orders."
     }
   }
 }
