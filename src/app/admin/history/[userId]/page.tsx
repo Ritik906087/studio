@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import React, { useMemo, useState, useRef } from 'react';
@@ -37,6 +38,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
+
+const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6";
 
 // Types
 type UserProfile = {
@@ -423,7 +426,7 @@ export default function UserHistoryPage() {
                 </Button>
                 <div className="flex items-center gap-4">
                      <Avatar className="h-12 w-12">
-                        <AvatarImage src={user.photoURL} alt={user.displayName} />
+                        <AvatarImage src={defaultAvatarUrl} alt={user.displayName} />
                         <AvatarFallback className="bg-muted">
                             {user.displayName?.charAt(0).toUpperCase()}
                         </AvatarFallback>

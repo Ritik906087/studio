@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import Link from 'next/link';
@@ -36,6 +37,8 @@ import {
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader } from '@/components/ui/loader';
+
+const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6";
 
 const CHAT_STATE_STORAGE_KEY = 'lg-pay-help-chat-state';
 const SOUND_PREF_KEY = 'lg-pay-help-sound-pref';
@@ -586,7 +589,7 @@ export default function HelpPage() {
                     profileLoading ? 
                     <Skeleton className="h-8 w-8 rounded-full" /> :
                     <Avatar className="h-8 w-8">
-                        <AvatarImage src={userProfile?.photoURL} />
+                        <AvatarImage src={defaultAvatarUrl} />
                         <AvatarFallback>{userProfile?.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
                     </Avatar>
                  )}

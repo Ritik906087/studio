@@ -29,6 +29,8 @@ import { doc, setDoc, serverTimestamp, collection, query, where, getDocs, limit 
 import { useRouter, useSearchParams } from "next/navigation";
 
 
+const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6";
+
 export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isOtpLoading, setIsOtpLoading] = useState(false);
@@ -147,7 +149,8 @@ export function RegisterForm() {
           balance: 0.00, // Initial balance
           holdBalance: 0.00, // Initial hold balance
           createdAt: serverTimestamp(),
-          displayName: `User${values.phone.slice(-4)}`
+          displayName: `User${values.phone.slice(-4)}`,
+          photoURL: defaultAvatarUrl
         };
 
         if (inviterUid) {

@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -38,6 +39,8 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from '@/components/ui/textarea';
 import { Loader } from '@/components/ui/loader';
+
+const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6";
 
 type UserProfile = {
     id: string;
@@ -179,7 +182,7 @@ const UserCard = React.memo(({ user }: { user: UserProfile }) => {
         <Card className="flex flex-col">
             <CardHeader className="flex-row items-center gap-4">
                 <Avatar className="h-12 w-12">
-                    <AvatarImage src={user.photoURL} alt={user.displayName} />
+                    <AvatarImage src={defaultAvatarUrl} alt={user.displayName} />
                     <AvatarFallback>{user.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div>
@@ -1692,11 +1695,3 @@ export default function AdminDashboardPage() {
 
 
     
-
-
-
-
-
-
-
-

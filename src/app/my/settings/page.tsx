@@ -1,13 +1,13 @@
 
+
 "use client";
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Copy, Camera } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import Link from 'next/link';
-import { useUser, useFirestore, useDoc, useStorage } from '@/firebase';
+import { useUser, useFirestore, useDoc } from '@/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, type UploadTaskSnapshot } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -15,16 +15,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader } from '@/components/ui/loader';
 
+const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6";
+
 export default function SettingsPage() {
   const { user, loading: authLoading } = useUser();
   const firestore = useFirestore();
-  const storage = useStorage();
   const { toast } = useToast();
 
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const userProfileRef = useMemo(() => {
     if (!user || !firestore) return null;
@@ -53,62 +53,6 @@ export default function SettingsPage() {
       setIsSaving(false);
     }
   };
-
-  const handleAvatarClick = () => {
-    if (isSaving) return;
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !user || !storage || !userProfileRef) return;
-
-    if (file.size > 2 * 1024 * 1024) { // 2MB limit
-        toast({ variant: 'destructive', title: 'File too large', description: 'Please select an image smaller than 2MB.' });
-        return;
-    }
-
-    setIsSaving(true);
-    
-    const uniqueFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-    const storagePath = `avatars/${user.uid}/${uniqueFileName}`;
-    const fileRef = ref(storage, storagePath);
-
-    const uploadTask = uploadBytesResumable(fileRef, file);
-
-    uploadTask.on('state_changed', 
-      (snapshot: UploadTaskSnapshot) => {
-        // Optional: handle progress
-      }, 
-      (error) => {
-        console.error("Error uploading image: ", error);
-        toast({
-          variant: 'destructive',
-          title: 'Upload Error',
-          description: `Upload failed. Error: ${error.code}`,
-          duration: 9000,
-        });
-        setIsSaving(false);
-      }, 
-      () => {
-        getDownloadURL(uploadTask.snapshot.ref).then(async (downloadURL) => {
-          try {
-            await updateDoc(userProfileRef, { photoURL: downloadURL });
-            toast({ title: 'Success', description: 'Profile picture updated.' });
-          } catch (dbError) {
-             console.error("Error updating firestore: ", dbError);
-             toast({ variant: 'destructive', title: 'Database Error', description: 'Failed to save profile picture URL.' });
-          } finally {
-            setIsSaving(false);
-          }
-        }).catch(urlError => {
-            console.error("Error getting download URL: ", urlError);
-            toast({ variant: 'destructive', title: 'Upload Error', description: 'Could not get the image URL after upload.' });
-            setIsSaving(false);
-        });
-      }
-    );
-  };
   
   return (
     <div className="flex h-screen flex-col bg-secondary">
@@ -125,29 +69,18 @@ export default function SettingsPage() {
       <main className="flex-grow space-y-6 p-4">
         <h2 className="text-sm font-semibold text-muted-foreground">Basic Information</h2>
         <div className="space-y-px overflow-hidden rounded-xl bg-white shadow-sm">
-          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50" onClick={handleAvatarClick}>
+          <div className="flex items-center justify-between p-4">
             <span className="font-medium">Avatar</span>
             <div className="flex items-center gap-2">
                <div className="relative">
                 <Avatar className="h-14 w-14 border-2 border-primary/20">
-                  <AvatarImage src={userProfile?.photoURL} alt={userProfile?.displayName} />
+                  <AvatarImage src={defaultAvatarUrl} alt={userProfile?.displayName} />
                   <AvatarFallback className="bg-yellow-400 text-yellow-900 font-bold text-lg">
                     {userProfile?.displayName?.charAt(0) || 'A'}
                   </AvatarFallback>
                 </Avatar>
-                {isSaving && <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full"><Loader size="sm" /></div> }
-                {!isSaving && <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary"><Camera className="h-3 w-3 text-white"/></div>}
               </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>
-             <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept="image/png, image/jpeg, image/gif"
-              className="hidden"
-              disabled={isSaving}
-            />
           </div>
           <div className="mx-4 border-b"></div>
           <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50" onClick={() => { if (!isSaving) { setNewName(userProfile?.displayName || ''); setIsNameDialogOpen(true); } }}>

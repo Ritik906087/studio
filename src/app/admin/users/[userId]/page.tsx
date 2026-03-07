@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import {
@@ -41,6 +42,8 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Loader } from '@/components/ui/loader';
+
+const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6";
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
   PhonePe: {
@@ -369,7 +372,7 @@ export default function UserDetailsPage() {
                 <Card>
                     <CardHeader className="flex flex-col items-center text-center">
                          <Avatar className="h-24 w-24 border-4 border-primary/20">
-                            <AvatarImage src={user.photoURL} alt={user.displayName} />
+                            <AvatarImage src={defaultAvatarUrl} alt={user.displayName} />
                             <AvatarFallback className="text-3xl bg-muted">
                                 {user.displayName?.charAt(0).toUpperCase()}
                             </AvatarFallback>

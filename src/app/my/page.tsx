@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import {
@@ -42,6 +43,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLanguage } from '@/context/language-context';
 
+
+const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6";
 
 const GlassCard = ({
   children,
@@ -131,7 +134,7 @@ export default function MyPage() {
             <CardContent className="flex items-center justify-between p-4">
               <div className="flex items-center gap-4">
                  <Avatar className="h-12 w-12 border-2 border-yellow-400">
-                  <AvatarImage src={userProfile?.photoURL} />
+                  <AvatarImage src={defaultAvatarUrl} />
                   <AvatarFallback className="bg-yellow-400 text-yellow-900 font-bold">
                      {profileLoading ? <Skeleton className="h-12 w-12 rounded-full" /> : (userProfile?.displayName?.charAt(0) || 'A')}
                   </AvatarFallback>
