@@ -84,6 +84,11 @@ type Order = {
     paymentProvider?: string;
     adminPaymentMethodId?: string;
     matchedSellOrderPath?: string;
+    ocrVerified?: boolean;
+    ocrUtrMatch?: boolean;
+    ocrAmountMatch?: boolean;
+    ocrUpiMatch?: boolean;
+    ocrBankAccountMatch?: boolean;
 };
 
 type SellOrder = {
@@ -997,6 +1002,24 @@ function LiveChatTabContent() {
     );
 }
 
+const VerificationItem = ({ label, isMatch }: { label: string, isMatch?: boolean }) => {
+    if (isMatch === undefined) return null;
+
+    const Icon = isMatch ? CheckCircle : XCircle;
+    const colorClass = isMatch ? "text-green-600" : "text-red-500";
+
+    return (
+        <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{label}</span>
+            <div className={cn("flex items-center gap-1.5 font-semibold", colorClass)}>
+                <Icon className="h-4 w-4" />
+                <span>{isMatch ? 'YES' : 'NO'}</span>
+            </div>
+        </div>
+    );
+};
+
+
 function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: { order: Order; onProcessed: () => void; adminPaymentMethods: PaymentMethod[] }) {
     const [open, setOpen] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
@@ -1243,6 +1266,18 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
                             </Dialog>
                         </div>
 
+                         {order.ocrVerified && (
+                            <div className="mt-4">
+                                <h3 className="font-semibold text-foreground mb-2 text-sm">Automated Verification</h3>
+                                <div className="rounded-lg border bg-secondary/50 p-3 space-y-2 text-sm">
+                                    <VerificationItem label="Amount Match" isMatch={order.ocrAmountMatch} />
+                                    <VerificationItem label="UTR Match" isMatch={order.ocrUtrMatch} />
+                                    {(order.paymentType === 'upi' || order.paymentType === 'p2p_upi') && <VerificationItem label="UPI Match" isMatch={order.ocrUpiMatch} />}
+                                    {order.paymentType === 'bank' && <VerificationItem label="Account Match" isMatch={order.ocrBankAccountMatch} />}
+                                </div>
+                            </div>
+                        )}
+
                         {adminMethod && (
                             <div className="mt-4">
                                 <h3 className="font-semibold text-foreground mb-2 text-sm">Receiver Details</h3>
@@ -1267,7 +1302,7 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
                                             </div>
                                         </>
                                     )}
-                                    {adminMethod.type === 'upi' && (
+                                    {(adminMethod.type === 'upi' || order.paymentType === 'p2p_upi') && (
                                         <>
                                             <div className="flex justify-between">
                                                 <span className="text-muted-foreground">Name:</span>
