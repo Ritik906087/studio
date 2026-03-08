@@ -1,5 +1,7 @@
 'use server';
 
+const tags = '@PRAJAPATI_KING1 @Anandyda89 @Zx_PiYUSH_02 @Satyam_ll @RITIK90608';
+
 type OrderDetails = {
     orderId: string;
     userNumericId?: string;
@@ -9,11 +11,11 @@ type OrderDetails = {
 };
 
 export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatIds = process.env.TELEGRAM_CHAT_IDS?.split(',') || [];
+    const botToken = process.env.TELEGRAM_PAYMENT_BOT_TOKEN;
+    const chatIds = (process.env.TELEGRAM_PAYMENT_CHAT_IDS || '').split(',');
 
-    if (!botToken || chatIds.length === 0) {
-        console.error('Telegram bot token or chat IDs are not configured.');
+    if (!botToken || chatIds.length === 0 || chatIds[0] === '') {
+        console.error('Telegram payment bot token or chat IDs are not configured.');
         return;
     }
 
@@ -33,6 +35,8 @@ export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
 *UTR:* \`${details.utr}\`
 
 *Receiver Details:*${receiverText}
+
+${tags}
     `;
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
@@ -61,11 +65,11 @@ type ChatRequestDetails = {
 };
 
 export async function sendNewChatRequestToTelegram(details: ChatRequestDetails) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatIds = process.env.TELEGRAM_CHAT_IDS?.split(',') || [];
+    const botToken = process.env.TELEGRAM_SUPPORT_BOT_TOKEN;
+    const chatIds = (process.env.TELEGRAM_SUPPORT_CHAT_ID || '').split(',');
 
-    if (!botToken || chatIds.length === 0) {
-        console.error('Telegram bot token or chat IDs are not configured for chat requests.');
+    if (!botToken || chatIds.length === 0 || chatIds[0] === '') {
+        console.error('Telegram support bot token or chat ID are not configured for chat requests.');
         return;
     }
 
@@ -78,6 +82,8 @@ A user needs help.
 *Identifier Entered:* \`${details.enteredIdentifier}\`
 
 Please check the admin panel to join the chat.
+
+${tags}
     `;
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
