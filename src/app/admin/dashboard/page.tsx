@@ -720,12 +720,14 @@ function WithdrawalsTabContent() {
         setLoading(true);
         setError(null);
         try {
-            const q = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'pending'));
+            const q = query(collectionGroup(firestore, 'sellOrders'));
             const sellOrdersSnapshot = await getDocs(q);
-            const pendingWithdrawals = sellOrdersSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-            } as SellOrder));
+            const pendingWithdrawals = sellOrdersSnapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                } as SellOrder))
+                .filter(order => order.status === 'pending');
     
             setAllOrders(pendingWithdrawals.sort((a,b) => a.createdAt.seconds - b.createdAt.seconds));
         } catch (error) {
@@ -1333,7 +1335,7 @@ function ConfirmationsTabContent() {
              // Fetch users, methods, and orders in parallel
             const usersPromise = getDocs(collection(firestore, 'users'));
             const methodsPromise = getDocs(collection(firestore, 'paymentMethods'));
-            const ordersPromise = getDocs(query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation')));
+            const ordersPromise = getDocs(query(collectionGroup(firestore, 'orders')));
 
             const [usersSnapshot, methodsSnapshot, ordersSnapshot] = await Promise.all([
                 usersPromise,
@@ -1349,11 +1351,13 @@ function ConfirmationsTabContent() {
             setAdminPaymentMethods(methodsData);
             setMethodsLoading(false);
 
-            const allPendingOrders: Order[] = ordersSnapshot.docs.map(orderDoc => ({
-                id: orderDoc.id,
-                ...orderDoc.data(),
-                path: orderDoc.ref.path,
-            } as Order));
+            const allPendingOrders: Order[] = ordersSnapshot.docs
+                .map(orderDoc => ({
+                    id: orderDoc.id,
+                    ...orderDoc.data(),
+                    path: orderDoc.ref.path,
+                } as Order))
+                .filter(order => order.status === 'pending_confirmation');
             setAllOrders(allPendingOrders);
 
         } catch (error) {
@@ -1832,3 +1836,5 @@ export default function AdminDashboardPage() {
 
     return <AdminDashboard />;
 }
+
+    
