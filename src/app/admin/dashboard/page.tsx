@@ -168,6 +168,10 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
     logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f",
     bgColor: "bg-blue-600",
   },
+  Freecharge: {
+    logo: "https://cdn-icons-png.flaticon.com/512/3682/3682321.png",
+    bgColor: "bg-orange-500",
+  },
 };
 
 const CountdownTimer = ({ expiryTimestamp, className }: { expiryTimestamp: Timestamp, className?: string }) => {

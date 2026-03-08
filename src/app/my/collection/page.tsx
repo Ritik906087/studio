@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Send } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -49,6 +49,11 @@ const initialPaymentMethods: PaymentMethod[] = [
     name: "MobiKwik",
     logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f",
     bgColor: "bg-blue-600",
+  },
+  {
+    name: "Freecharge",
+    logo: "https://cdn-icons-png.flaticon.com/512/3682/3682321.png",
+    bgColor: "bg-orange-500",
   },
 ];
 
@@ -163,6 +168,7 @@ export default function CollectionPage() {
         "PhonePe": /^[a-zA-Z0-9.\-_]{2,256}@(ybl|ibl|axl)$/,
         "Paytm": /^[a-zA-Z0-9.\-_]{2,256}@(paytm|ptaxis|ptyes|ptsbi|pthdfc)$/,
         "MobiKwik": /^[a-zA-Z0-9.\-_]{2,256}@(ikwik|mbk)$/,
+        "Freecharge": /^[a-zA-Z0-9.\-_]{2,256}@freecharge$/,
     };
 
     const regex = upiRegexMap[methodName];

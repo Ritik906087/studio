@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2, Info } from 'lucide-react';
+import { ChevronLeft, Copy, Upload, Loader2, Info, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection, useDoc, useUser, useFirestore, useStorage } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -85,6 +85,10 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
     logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f",
     bgColor: "bg-blue-600",
   },
+  Freecharge: {
+    logo: "https://cdn-icons-png.flaticon.com/512/3682/3682321.png",
+    bgColor: "bg-orange-500",
+  },
 };
 
 
@@ -137,6 +141,7 @@ function PaymentDetailsContent() {
         { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(1).png?alt=media&token=205260a4-bfcf-46dd-8dc6-5b440852f2ae" },
         { name: "Paytm", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8" },
         { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=ffb28e60-0b26-4802-9b54-bc6bbb02f35f" },
+        { name: "Freecharge", logo: "https://cdn-icons-png.flaticon.com/512/3682/3682321.png" },
     ];
 
     const paymentMethodsQuery = useMemo(() => firestore ? collection(firestore, 'paymentMethods') : null, [firestore]);
