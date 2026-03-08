@@ -14,7 +14,7 @@ import { doc, updateDoc, Timestamp, serverTimestamp, arrayUnion } from 'firebase
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Loader } from '@/components/ui/loader';
 
 type Attachment = {
@@ -237,7 +237,11 @@ export default function AdminChatPage() {
                                             <Image src={msg.attachment.url} alt={msg.attachment.name || 'attachment'} width={200} height={200} className="rounded-lg mb-2 cursor-pointer" />
                                         </DialogTrigger>
                                         <DialogContent>
-                                            <img src={msg.attachment.url} alt={msg.attachment.name || 'attachment'} className="max-h-[80vh] w-auto object-contain rounded-md" />
+                                            <DialogHeader>
+                                                <DialogTitle>Attachment Preview</DialogTitle>
+                                                <DialogDescription>{msg.attachment.name || 'Attached image'}</DialogDescription>
+                                            </DialogHeader>
+                                            <img src={msg.attachment.url} alt={msg.attachment.name || 'attachment'} className="mx-auto max-h-[70vh] w-auto object-contain rounded-md" />
                                         </DialogContent>
                                     </Dialog>
                                 ) : msg.attachment?.url ? (

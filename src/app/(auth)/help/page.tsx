@@ -34,7 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader } from '@/components/ui/loader';
 
@@ -473,7 +473,13 @@ export default function HelpPage() {
                                 <Image src={msg.attachment.url} alt="attachment" width={200} height={200} className="rounded-lg mb-2 cursor-pointer" />
                             </DialogTrigger>
                             <DialogContent>
-                                <img src={msg.attachment.url} alt="attachment" className="max-h-[80vh] w-auto object-contain rounded-md" />
+                                <DialogHeader>
+                                    <DialogTitle>Attachment Preview</DialogTitle>
+                                    <DialogDescription>
+                                        {msg.attachment.name || 'Attached image'}
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <img src={msg.attachment.url} alt="attachment" className="max-h-[70vh] w-auto object-contain rounded-md mx-auto" />
                             </DialogContent>
                         </Dialog>
                       ) : msg.attachment ? (
