@@ -42,8 +42,7 @@ service cloud.firestore {
     }
     
     match /reports/{reportId} {
-      allow create: if request.auth != null;
-      allow read, update: if true; // Permissive for admin panel to read/update status
+      allow read, write: if true;
     }
     
     // Rules for Collection Group queries used in admin panel

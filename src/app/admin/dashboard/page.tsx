@@ -720,20 +720,14 @@ function WithdrawalsTabContent() {
         setLoading(true);
         setError(null);
         try {
-            const usersSnapshot = await getDocs(collection(firestore, 'users'));
-            const pendingWithdrawals: SellOrder[] = [];
-            for (const userDoc of usersSnapshot.docs) {
-                const sellOrdersRef = collection(firestore, 'users', userDoc.id, 'sellOrders');
-                const q = query(sellOrdersRef, where('status', '==', 'pending'));
-                const sellOrdersSnapshot = await getDocs(q);
-                sellOrdersSnapshot.forEach(orderDoc => {
-                    pendingWithdrawals.push({
-                        id: orderDoc.id,
-                        ...orderDoc.data(),
-                    } as SellOrder);
-                });
-            }
-            setAllOrders(pendingWithdrawals);
+            const q = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'pending'));
+            const sellOrdersSnapshot = await getDocs(q);
+            const pendingWithdrawals = sellOrdersSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+            } as SellOrder));
+    
+            setAllOrders(pendingWithdrawals.sort((a,b) => a.createdAt.seconds - b.createdAt.seconds));
         } catch (error) {
             console.error("Error fetching withdrawals:", error);
             setError(error);
@@ -748,8 +742,7 @@ function WithdrawalsTabContent() {
     }, [fetchWithdrawals]);
 
     const filteredOrders = useMemo(() => {
-        const pendingOrders = allOrders
-            .sort((a, b) => a.createdAt.seconds - b.createdAt.seconds);
+        const pendingOrders = allOrders;
 
         if (!searchTerm) return pendingOrders;
         const lowercasedTerm = searchTerm.toLowerCase();
@@ -1337,32 +1330,30 @@ function ConfirmationsTabContent() {
         setMethodsLoading(true);
         setError(null);
         try {
-            // Fetch all users first
-            const usersSnapshot = await getDocs(collection(firestore, 'users'));
+             // Fetch users, methods, and orders in parallel
+            const usersPromise = getDocs(collection(firestore, 'users'));
+            const methodsPromise = getDocs(collection(firestore, 'paymentMethods'));
+            const ordersPromise = getDocs(query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation')));
+
+            const [usersSnapshot, methodsSnapshot, ordersSnapshot] = await Promise.all([
+                usersPromise,
+                methodsPromise,
+                ordersPromise,
+            ]);
+
             const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
             setAllUsers(usersData);
             setUsersLoading(false);
 
-            // Fetch admin payment methods
-            const methodsSnapshot = await getDocs(collection(firestore, 'paymentMethods'));
             const methodsData = methodsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentMethod));
             setAdminPaymentMethods(methodsData);
             setMethodsLoading(false);
 
-            // Fetch pending orders user by user
-            const allPendingOrders: Order[] = [];
-            for (const userDoc of usersSnapshot.docs) {
-                const ordersRef = collection(firestore, 'users', userDoc.id, 'orders');
-                const q = query(ordersRef, where('status', '==', 'pending_confirmation'));
-                const ordersSnapshot = await getDocs(q);
-                ordersSnapshot.forEach(orderDoc => {
-                    allPendingOrders.push({
-                        id: orderDoc.id,
-                        ...orderDoc.data(),
-                        path: orderDoc.ref.path,
-                    } as Order);
-                });
-            }
+            const allPendingOrders: Order[] = ordersSnapshot.docs.map(orderDoc => ({
+                id: orderDoc.id,
+                ...orderDoc.data(),
+                path: orderDoc.ref.path,
+            } as Order));
             setAllOrders(allPendingOrders);
 
         } catch (error) {
@@ -1504,6 +1495,7 @@ function ReportsTabContent() {
             const q = query(collection(firestore, "reports"));
             const snapshot = await getDocs(q);
             const fetchedReports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
+            // Sort client-side to avoid needing an index on createdAt
             fetchedReports.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
             setReports(fetchedReports);
         } catch (e) {
