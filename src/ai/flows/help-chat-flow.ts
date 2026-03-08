@@ -8,6 +8,7 @@
 import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/config';
+import { sendNewChatRequestToTelegram } from '@/lib/telegram';
 
 // Initialize Firebase for server-side usage, safely
 let app: FirebaseApp;
@@ -42,6 +43,13 @@ async function createHumanAgentRequest(input: {
             status: 'pending',
             createdAt: serverTimestamp(),
         });
+        
+        // No need to await this, let it run in the background
+        sendNewChatRequestToTelegram({
+            userNumericId,
+            enteredIdentifier: input.enteredIdentifier,
+        });
+
         return { success: true };
     } catch (e) {
         console.error("Failed to create chat request:", e);

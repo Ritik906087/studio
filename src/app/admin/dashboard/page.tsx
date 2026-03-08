@@ -903,6 +903,7 @@ function HistoryUsersGrid({ users, loading, error }: { users: UserProfile[], loa
 
 function LiveChatTabContent() {
     const firestore = useFirestore();
+    const [searchTerm, setSearchTerm] = useState('');
 
     const chatRequestsQuery = useMemo(() => {
         if (!firestore) return null;
@@ -918,15 +919,25 @@ function LiveChatTabContent() {
         return allChatRequests.filter(req => ['pending', 'active'].includes(req.status));
     }, [allChatRequests]);
 
-    const sortedChatRequests = useMemo(() => {
-        return [...liveChatRequests].sort((a, b) => {
+    const sortedAndFilteredRequests = useMemo(() => {
+        const sorted = [...liveChatRequests].sort((a, b) => {
             // 'pending' should come before 'active'
             if (a.status === 'pending' && b.status !== 'pending') return -1;
             if (a.status !== 'pending' && b.status === 'pending') return 1;
             // For requests with the same status, newer ones first
             return b.createdAt.seconds - a.createdAt.seconds;
         });
-    }, [liveChatRequests]);
+
+        if (!searchTerm.trim()) {
+            return sorted;
+        }
+
+        const lowercasedTerm = searchTerm.toLowerCase();
+        return sorted.filter(req => 
+            (req.userNumericId && req.userNumericId.toLowerCase().includes(lowercasedTerm)) ||
+            (req.enteredIdentifier && req.enteredIdentifier.toLowerCase().includes(lowercasedTerm))
+        );
+    }, [liveChatRequests, searchTerm]);
 
     if (loading) {
         return (
@@ -954,50 +965,60 @@ function LiveChatTabContent() {
         )
     }
 
-    if (sortedChatRequests.length === 0) {
-        return (
-            <Card>
-                <CardContent className="p-8 text-center text-muted-foreground">
-                    No pending or active live chat requests.
-                </CardContent>
-            </Card>
-        );
-    }
-
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sortedChatRequests.map(request => {
-                 const isPending = request.status === 'pending';
-                 return (
-                    <Card key={request.id} className={cn("flex flex-col", !isPending && "bg-blue-50 border-blue-200")}>
-                        <CardHeader>
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <CardTitle className="text-base">{isPending ? "New Chat Request" : "Active Chat"}</CardTitle>
-                                    <CardDescription>
-                                        {new Date(request.createdAt.toDate()).toLocaleString()}
-                                    </CardDescription>
-                                </div>
-                                {isPending && <CountdownTimer expiryTimestamp={new Timestamp(request.createdAt.seconds + 10 * 60, request.createdAt.nanoseconds)} />}
-                            </div>
-                        </CardHeader>
-                        <CardContent className="flex-grow space-y-2 text-sm">
-                            <p><strong>User UID:</strong> {request.userNumericId || 'N/A'}</p>
-                            <p><strong>Identifier:</strong> {request.enteredIdentifier}</p>
-                        </CardContent>
-                        <CardFooter>
-                            <Button asChild className={cn(
-                                "w-full font-bold",
-                                isPending ? "bg-green-500 hover:bg-green-600 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
-                            )}>
-                                <Link href={`/admin/chat/${request.id}`}>
-                                    {isPending ? "JOIN CHAT" : "VIEW ACTIVE CHAT"}
-                                </Link>
-                            </Button>
-                        </CardFooter>
-                    </Card>
-                 )
-            })}
+        <div className="space-y-4">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                    placeholder="Search by UID or Identifier..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 max-w-sm"
+                />
+            </div>
+
+            {sortedAndFilteredRequests.length === 0 ? (
+                 <Card>
+                    <CardContent className="p-8 text-center text-muted-foreground">
+                        {searchTerm ? "No matching chat requests found." : "No pending or active live chat requests."}
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {sortedAndFilteredRequests.map(request => {
+                         const isPending = request.status === 'pending';
+                         return (
+                            <Card key={request.id} className={cn("flex flex-col", !isPending && "bg-blue-50 border-blue-200")}>
+                                <CardHeader>
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <CardTitle className="text-base">{isPending ? "New Chat Request" : "Active Chat"}</CardTitle>
+                                            <CardDescription>
+                                                {new Date(request.createdAt.toDate()).toLocaleString()}
+                                            </CardDescription>
+                                        </div>
+                                        {isPending && <CountdownTimer expiryTimestamp={new Timestamp(request.createdAt.seconds + 10 * 60, request.createdAt.nanoseconds)} />}
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="flex-grow space-y-2 text-sm">
+                                    <p><strong>User UID:</strong> {request.userNumericId || 'N/A'}</p>
+                                    <p><strong>Identifier:</strong> {request.enteredIdentifier}</p>
+                                </CardContent>
+                                <CardFooter>
+                                    <Button asChild className={cn(
+                                        "w-full font-bold",
+                                        isPending ? "bg-green-500 hover:bg-green-600 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
+                                    )}>
+                                        <Link href={`/admin/chat/${request.id}`}>
+                                            {isPending ? "JOIN CHAT" : "VIEW ACTIVE CHAT"}
+                                        </Link>
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                         )
+                    })}
+                </div>
+            )}
         </div>
     );
 }
