@@ -39,7 +39,7 @@ export default function HomeLayout({
     );
   }
 
-  const showNavBar = !pathname.startsWith('/buy') && !pathname.startsWith('/sell') && !pathname.startsWith('/my/team');
+  const showNavBar = !pathname.startsWith('/buy') && !pathname.startsWith('/sell') && !pathname.startsWith('/my/team') && !pathname.startsWith('/my/report-problem') && !pathname.startsWith('/my/report-status');
 
   return (
     <div className="home-layout md:bg-gray-200">
