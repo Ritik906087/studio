@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { useCollection, useDoc, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X, FileClock, AlertCircle, FileWarning, MessageCircleQuestion, Video, Image as ImageIcon } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X, FileClock, AlertCircle, FileWarning, MessageCircleQuestion, Video, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -1003,17 +1003,28 @@ function LiveChatTabContent() {
 }
 
 const VerificationItem = ({ label, isMatch }: { label: string, isMatch?: boolean }) => {
-    if (isMatch === undefined) return null;
-
+    if (isMatch === undefined) {
+        return (
+            <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{label}</span>
+                <div className="flex items-center gap-1.5 font-semibold text-yellow-600">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Scanning...</span>
+                </div>
+            </div>
+        );
+    }
+    
     const Icon = isMatch ? CheckCircle : XCircle;
     const colorClass = isMatch ? "text-green-600" : "text-red-500";
+    const text = isMatch ? "YES" : "NO";
 
     return (
         <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">{label}</span>
             <div className={cn("flex items-center gap-1.5 font-semibold", colorClass)}>
                 <Icon className="h-4 w-4" />
-                <span>{isMatch ? 'YES' : 'NO'}</span>
+                <span>{text}</span>
             </div>
         </div>
     );
@@ -1266,17 +1277,15 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
                             </Dialog>
                         </div>
 
-                         {order.ocrVerified && (
-                            <div className="mt-4">
-                                <h3 className="font-semibold text-foreground mb-2 text-sm">Automated Verification</h3>
-                                <div className="rounded-lg border bg-secondary/50 p-3 space-y-2 text-sm">
-                                    <VerificationItem label="Amount Match" isMatch={order.ocrAmountMatch} />
-                                    <VerificationItem label="UTR Match" isMatch={order.ocrUtrMatch} />
-                                    {(order.paymentType === 'upi' || order.paymentType === 'p2p_upi') && <VerificationItem label="UPI Match" isMatch={order.ocrUpiMatch} />}
-                                    {order.paymentType === 'bank' && <VerificationItem label="Account Match" isMatch={order.ocrBankAccountMatch} />}
-                                </div>
+                        <div className="mt-4">
+                            <h3 className="font-semibold text-foreground mb-2 text-sm">Automated Verification</h3>
+                            <div className="rounded-lg border bg-secondary/50 p-3 space-y-2 text-sm">
+                                <VerificationItem label="Amount Match" isMatch={order.ocrAmountMatch} />
+                                <VerificationItem label="UTR Match" isMatch={order.ocrUtrMatch} />
+                                {(order.paymentType === 'upi' || order.paymentType === 'p2p_upi') && <VerificationItem label="UPI Match" isMatch={order.ocrUpiMatch} />}
+                                {order.paymentType === 'bank' && <VerificationItem label="Account Match" isMatch={order.ocrBankAccountMatch} />}
                             </div>
-                        )}
+                        </div>
 
                         {adminMethod && (
                             <div className="mt-4">
