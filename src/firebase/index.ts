@@ -2,7 +2,7 @@
 // It can be used in both client and server contexts.
 // However, it is not generally recommended to use this in server components.
 
-import { FirebaseApp, initializeApp } from 'firebase/app';
+import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import { Auth, getAuth } from 'firebase/auth';
 import { Firestore, getFirestore } from 'firebase/firestore';
 import { FirebaseStorage, getStorage } from 'firebase/storage';
@@ -36,7 +36,7 @@ export function initializeFirebase(): FirebaseInstances {
     return firebaseInstances;
   }
 
-  const app = initializeApp(firebaseConfig);
+  const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const firestore = getFirestore(app);
   const storage = getStorage(app);

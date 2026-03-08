@@ -1491,7 +1491,6 @@ function ReportsTabContent() {
             const q = query(collection(firestore, "reports"));
             const snapshot = await getDocs(q);
             const fetchedReports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
-            // Sort client-side
             fetchedReports.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
             setReports(fetchedReports);
         } catch (e) {
