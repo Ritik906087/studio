@@ -720,11 +720,20 @@ function WithdrawalsTabContent() {
         setLoading(true);
         setError(null);
         try {
-            const q = query(collectionGroup(firestore, 'sellOrders'));
-            const querySnapshot = await getDocs(q);
-            const fetchedOrders = querySnapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() } as SellOrder));
-            setAllOrders(fetchedOrders);
+            const usersSnapshot = await getDocs(collection(firestore, 'users'));
+            const pendingWithdrawals: SellOrder[] = [];
+            for (const userDoc of usersSnapshot.docs) {
+                const sellOrdersRef = collection(firestore, 'users', userDoc.id, 'sellOrders');
+                const q = query(sellOrdersRef, where('status', '==', 'pending'));
+                const sellOrdersSnapshot = await getDocs(q);
+                sellOrdersSnapshot.forEach(orderDoc => {
+                    pendingWithdrawals.push({
+                        id: orderDoc.id,
+                        ...orderDoc.data(),
+                    } as SellOrder);
+                });
+            }
+            setAllOrders(pendingWithdrawals);
         } catch (error) {
             console.error("Error fetching withdrawals:", error);
             setError(error);
@@ -733,13 +742,13 @@ function WithdrawalsTabContent() {
         }
     }, [firestore]);
 
+
     useEffect(() => {
         fetchWithdrawals();
     }, [fetchWithdrawals]);
 
     const filteredOrders = useMemo(() => {
         const pendingOrders = allOrders
-            .filter(order => order.status === 'pending')
             .sort((a, b) => a.createdAt.seconds - b.createdAt.seconds);
 
         if (!searchTerm) return pendingOrders;
@@ -1340,18 +1349,22 @@ function ConfirmationsTabContent() {
             setAdminPaymentMethods(methodsData);
             setMethodsLoading(false);
 
+            // Fetch pending orders user by user
+            const allPendingOrders: Order[] = [];
+            for (const userDoc of usersSnapshot.docs) {
+                const ordersRef = collection(firestore, 'users', userDoc.id, 'orders');
+                const q = query(ordersRef, where('status', '==', 'pending_confirmation'));
+                const ordersSnapshot = await getDocs(q);
+                ordersSnapshot.forEach(orderDoc => {
+                    allPendingOrders.push({
+                        id: orderDoc.id,
+                        ...orderDoc.data(),
+                        path: orderDoc.ref.path,
+                    } as Order);
+                });
+            }
+            setAllOrders(allPendingOrders);
 
-            // Then fetch all orders and filter for pending confirmation ones
-            const q = query(collectionGroup(firestore, 'orders'));
-            const querySnapshot = await getDocs(q);
-            const fetchedOrders = querySnapshot.docs
-                .map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    path: doc.ref.path,
-                } as Order))
-                .filter(order => order.status === 'pending_confirmation');
-            setAllOrders(fetchedOrders);
         } catch (error) {
             console.error("Error fetching confirmations:", error);
             setError(error);
