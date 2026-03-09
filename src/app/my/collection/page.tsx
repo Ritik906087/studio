@@ -52,7 +52,7 @@ const initialPaymentMethods: PaymentMethod[] = [
   },
   {
     name: "Freecharge",
-    logo: "https://cdn-icons-png.flaticon.com/512/3682/3682321.png",
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4",
     bgColor: "bg-orange-500",
   },
 ];
