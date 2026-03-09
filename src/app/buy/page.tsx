@@ -40,6 +40,28 @@ import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
+const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
+  PhonePe: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f",
+    bgColor: "bg-violet-600",
+  },
+  Paytm: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8",
+    bgColor: "bg-sky-500",
+  },
+  MobiKwik: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7",
+    bgColor: "bg-blue-600",
+  },
+  Freecharge: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4",
+    bgColor: "bg-orange-500",
+  },
+  Airtel: {
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Airtel%2001.png?alt=media&token=357342fd-85df-43c1-a7fb-d9d57315df1d",
+    bgColor: "bg-red-500",
+  },
+};
 
 const purchaseConfig = {
     "100": 5, "200": 6, "300": 7, "400": 5, "500": 6, "600": 5, "700": 4, "800": 3, "1000": 4,
@@ -64,11 +86,6 @@ const generateOptionsFromConfig = (config: Record<string, number>) => {
 
 const allPurchaseOptions = generateOptionsFromConfig(purchaseConfig);
 
-
-const upiMethods = [
-    { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7" },
-    { name: "Freecharge", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4" },
-];
 
 const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, isCreatingOrder }: { onBuyClick: (option: any) => void; options: any[]; bonusPercentage: number; isCreatingOrder: boolean; }) => {
   return (
@@ -226,6 +243,8 @@ export default function BuyPage() {
     return doc(firestore, 'users', user.uid);
   }, [user, firestore]);
   const { data: userProfile } = useDoc<{ paymentMethods?: { name: string; upiId: string }[] }>(userProfileRef);
+
+  const [verifiedBuyUpiMethods, setVerifiedBuyUpiMethods] = useState<{name: string, upiId: string}[]>([]);
 
   const inProgressBuyOrdersQuery = useMemo(() => {
     if (!user || !firestore) return null;
@@ -417,28 +436,31 @@ const createOrder = async (provider: string, orderAmount: number) => {
 
     if (activeTab === 'usdt') {
         createOrder('TRC20', option.amount);
-    } else {
-        setIsDialogOpen(true);
+        return;
     }
-  };
 
-  const handleProviderSelect = async (methodName: string) => {
-    setIsDialogOpen(false);
-    if (!selectedAmount) return;
+    const availableMethods = userProfile?.paymentMethods?.filter(pm => 
+        ['MobiKwik', 'Freecharge'].includes(pm.name)
+    ) || [];
 
-    const isProviderLinked = userProfile?.paymentMethods?.some(pm => pm.name === methodName);
-
-    if (!isProviderLinked) {
+    if (availableMethods.length === 0) {
         toast({
             variant: "destructive",
-            title: "UPI Not Linked",
-            description: `Please link your ${methodName} UPI account first.`,
+            title: "No Verified UPI Found",
+            description: `Please link a MobiKwik or Freecharge UPI account first.`,
         });
         router.push('/my/collection/add');
         return;
     }
 
-    await createOrder(methodName, selectedAmount);
+    setVerifiedBuyUpiMethods(availableMethods);
+    setIsDialogOpen(true);
+  };
+
+  const handleProviderSelect = async (method: {name: string, upiId: string}) => {
+    setIsDialogOpen(false);
+    if (!selectedAmount) return;
+    await createOrder(method.name, selectedAmount);
   };
   
   const handleGoToOrder = () => {
@@ -517,20 +539,34 @@ const createOrder = async (provider: string, orderAmount: number) => {
        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-md p-0">
           <DialogHeader className="p-4 border-b">
-            <DialogTitle className="text-lg font-semibold text-center">Choose Payment Method</DialogTitle>
+            <DialogTitle className="text-lg font-semibold text-center">Choose Verified UPI</DialogTitle>
           </DialogHeader>
           <div className="p-4 space-y-3">
-            {upiMethods.map((method) => (
-                <button 
-                    key={method.name}
-                    onClick={() => handleProviderSelect(method.name)}
-                    className="w-full flex items-center p-3 rounded-lg border hover:bg-secondary transition-colors"
-                    disabled={isCreatingOrder}
-                >
-                    {isCreatingOrder ? <Loader2 className="h-5 w-5 mr-4 animate-spin" /> : <Image src={method.logo} alt={method.name} width={32} height={32} className="mr-4" />}
-                    <span className="font-medium">{method.name}</span>
-                </button>
-            ))}
+             {verifiedBuyUpiMethods.map((method) => {
+                const details = paymentMethodDetails[method.name as keyof typeof paymentMethodDetails];
+                return (
+                  <button 
+                      key={method.upiId}
+                      onClick={() => handleProviderSelect(method)}
+                      disabled={isCreatingOrder}
+                      className={cn("w-full flex items-center p-3 rounded-lg border hover:bg-opacity-90 transition-colors disabled:opacity-50", details?.bgColor || 'bg-gray-500', "text-white")}
+                  >
+                      {isCreatingOrder ? (
+                        <Loader2 className="h-5 w-5 mr-4 animate-spin" /> 
+                      ) : (
+                        details && (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1 mr-4">
+                              <Image src={details.logo} alt={method.name} width={32} height={32} className="object-contain" />
+                          </div>
+                        )
+                      )}
+                      <div className="text-left">
+                          <span className="font-medium">{method.name}</span>
+                          <p className="text-xs font-mono text-white/80">{method.upiId}</p>
+                      </div>
+                  </button>
+              )}
+            )}
           </div>
         </DialogContent>
       </Dialog>
