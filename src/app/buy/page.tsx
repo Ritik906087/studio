@@ -33,7 +33,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ShoppingCart, Wallet, ArrowDownUp, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useUser, useFirestore, useCollection } from '@/firebase';
+import { useUser, useFirestore, useCollection, useDoc } from '@/firebase';
 import { addDoc, collection, serverTimestamp, query, where, runTransaction, doc, getDocs, collectionGroup, orderBy, limit, arrayUnion, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -66,8 +66,6 @@ const allPurchaseOptions = generateOptionsFromConfig(purchaseConfig);
 
 
 const upiMethods = [
-    { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f" },
-    { name: "Paytm", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8" },
     { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7" },
     { name: "Freecharge", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4" },
 ];
@@ -222,6 +220,12 @@ export default function BuyPage() {
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   
   const [allOptions, setAllOptions] = useState(() => [...allPurchaseOptions]);
+
+  const userProfileRef = useMemo(() => {
+    if (!user || !firestore) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [user, firestore]);
+  const { data: userProfile } = useDoc<{ paymentMethods?: { name: string; upiId: string }[] }>(userProfileRef);
 
   const inProgressBuyOrdersQuery = useMemo(() => {
     if (!user || !firestore) return null;
@@ -420,9 +424,21 @@ const createOrder = async (provider: string, orderAmount: number) => {
 
   const handleProviderSelect = async (methodName: string) => {
     setIsDialogOpen(false);
-    if (selectedAmount) {
-      await createOrder(methodName, selectedAmount);
+    if (!selectedAmount) return;
+
+    const isProviderLinked = userProfile?.paymentMethods?.some(pm => pm.name === methodName);
+
+    if (!isProviderLinked) {
+        toast({
+            variant: "destructive",
+            title: "UPI Not Linked",
+            description: `Please link your ${methodName} UPI account first.`,
+        });
+        router.push('/my/collection/add');
+        return;
     }
+
+    await createOrder(methodName, selectedAmount);
   };
   
   const handleGoToOrder = () => {
