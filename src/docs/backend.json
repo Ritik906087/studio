@@ -165,7 +165,6 @@
           "enum": [
             "pending_payment",
             "pending_confirmation",
-            "in_applied",
             "completed",
             "cancelled",
             "failed"
@@ -431,6 +430,10 @@
       "description": "Represents a user-submitted problem report regarding an order.",
       "type": "object",
       "properties": {
+        "caseId": {
+          "type": "string",
+          "description": "A unique, user-facing ID for the support case."
+        },
         "userId": {
           "type": "string",
           "description": "The Firebase Auth UID of the user who submitted the report."
@@ -478,9 +481,13 @@
           "type": "string",
           "enum": ["pending", "resolved"],
           "description": "The current status of the report."
+        },
+        "resolutionMessage": {
+          "type": "string",
+          "description": "The message provided by the admin when resolving the report."
         }
       },
-      "required": ["userId", "orderId", "displayOrderId", "orderType", "message", "createdAt", "status", "problemType"]
+      "required": ["caseId", "userId", "orderId", "displayOrderId", "orderType", "message", "createdAt", "status", "problemType"]
     },
     "Feedback": {
       "title": "Feedback",
@@ -568,5 +575,3 @@
     }
   }
 }
-
-    

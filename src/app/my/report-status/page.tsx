@@ -3,7 +3,7 @@
 
 import React, { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChevronLeft, Hourglass, CheckCircle, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { useUser, useFirestore, useCollection } from '@/firebase';
@@ -18,36 +18,46 @@ type Report = {
   message: string;
   createdAt: Timestamp;
   status: 'pending' | 'resolved';
+  caseId: string;
+  resolutionMessage?: string;
 };
 
 const ReportStatusCard = ({ report }: { report: Report }) => {
   const isPending = report.status === 'pending';
 
   return (
-    <Card className="bg-white shadow-sm">
-      <CardContent className="p-4 space-y-3">
-        <div className="flex justify-between items-center text-xs text-muted-foreground">
-          <span className="font-mono">{report.displayOrderId}</span>
-          <span>{report.createdAt.toDate().toLocaleString()}</span>
-        </div>
-        <p className="text-sm text-foreground truncate">{report.message}</p>
-        <div className="flex justify-end">
-          <div
-            className={cn(
-              'flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold',
-              isPending
-                ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-green-100 text-green-800'
+    <Card className="bg-white shadow-sm overflow-hidden">
+        <CardHeader className="flex flex-row justify-between items-center p-4 border-b">
+           <CardTitle className="text-base">Case ID: <span className="font-mono">{report.caseId}</span></CardTitle>
+           <div
+              className={cn(
+                'flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold',
+                isPending
+                  ? 'bg-yellow-100 text-yellow-800'
+                  : 'bg-green-100 text-green-800'
+              )}
+            >
+              {isPending ? (
+                <Hourglass className="h-3 w-3" />
+              ) : (
+                <CheckCircle className="h-3 w-3" />
+              )}
+              <span className="capitalize">{report.status}</span>
+            </div>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3">
+            <div className="flex justify-between items-center text-xs text-muted-foreground">
+                <span className="font-mono">{report.displayOrderId}</span>
+                <span>{report.createdAt.toDate().toLocaleString()}</span>
+            </div>
+            <p className="text-sm text-foreground bg-secondary/50 p-3 rounded-md">{report.message}</p>
+            
+            {report.status === 'resolved' && report.resolutionMessage && (
+                <div className="p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-800">
+                    <h4 className="font-bold text-sm mb-1">Resolution Note:</h4>
+                    <p className="text-sm">{report.resolutionMessage}</p>
+                </div>
             )}
-          >
-            {isPending ? (
-              <Hourglass className="h-3 w-3" />
-            ) : (
-              <CheckCircle className="h-3 w-3" />
-            )}
-            <span className="capitalize">{report.status}</span>
-          </div>
-        </div>
       </CardContent>
     </Card>
   );

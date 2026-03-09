@@ -183,6 +183,7 @@ function ReportProblemForm() {
     
     const newReportRef = doc(collection(firestore, "reports"));
     const reportId = newReportRef.id;
+    const caseId = `LGRPT${Date.now()}`;
 
     try {
         const uploadPromises: Promise<any>[] = [];
@@ -207,6 +208,7 @@ function ReportProblemForm() {
         await Promise.all(uploadPromises);
 
         await setDoc(newReportRef, {
+            caseId: caseId,
             userId: user.uid,
             userNumericId: userProfile.numericId,
             orderId: order.id,
