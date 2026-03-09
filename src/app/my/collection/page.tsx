@@ -3,6 +3,7 @@
 
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, Plus, Wallet } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -89,16 +90,21 @@ export default function CollectionPage() {
              <div className="flex flex-col items-center justify-center pt-20 text-center text-muted-foreground">
                 <Wallet className="h-16 w-16 opacity-30" />
                 <p className="mt-4 text-lg font-medium">No UPI accounts linked.</p>
-                <p className="text-sm">Click the '+' button to add a new account.</p>
+                <p className="text-sm">Click below to add a new account.</p>
             </div>
         )}
-      </main>
 
-      <Button asChild className="fixed bottom-20 right-6 z-20 h-14 w-14 rounded-full btn-gradient shadow-lg">
-          <Link href="/my/collection/add">
-              <Plus className="h-8 w-8" />
-          </Link>
-      </Button>
+        <Link href="/my/collection/add" className="block !mt-6">
+          <Card className="bg-white">
+            <CardContent className="flex items-center justify-center gap-3 p-4">
+              <div className="grid h-6 w-6 place-items-center rounded-full bg-muted text-muted-foreground">
+                <Plus className="h-4 w-4" />
+              </div>
+              <span className="font-semibold text-foreground">Add payment UPI</span>
+            </CardContent>
+          </Card>
+        </Link>
+      </main>
     </div>
   );
 }
