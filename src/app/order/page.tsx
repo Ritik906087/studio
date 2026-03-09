@@ -30,7 +30,7 @@ type Order = {
   id: string;
   orderId: string;
   amount: number;
-  status: 'pending_payment' | 'pending_confirmation' | 'completed' | 'cancelled' | 'failed';
+  status: 'pending_payment' | 'pending_confirmation' | 'in_applied' | 'completed' | 'cancelled' | 'failed';
   utr?: string;
   createdAt: Timestamp;
   cancellationReason?: string;
@@ -56,13 +56,14 @@ const BuyTransactionCard = React.memo(({ transaction }: { transaction: Order }) 
     });
   };
 
-  const isTimeout = transaction.status === 'failed' && transaction.cancellationReason && (transaction.cancellationReason.includes('expired') || transaction.cancellationReason.includes('timed out'));
+  const isTimeout = (transaction.status === 'failed' || transaction.status === 'cancelled') && transaction.cancellationReason && (transaction.cancellationReason.includes('timed out'));
 
   const statusConfig = {
       completed: { style: "bg-green-100 text-green-800", text: "Completed" },
       cancelled: { style: "bg-red-100 text-red-800", text: "Cancelled" },
       failed: { style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800", text: isTimeout ? "Timeout" : "Failed" },
       pending_confirmation: { style: "bg-blue-100 text-blue-800", text: "Confirming" },
+      in_applied: { style: "bg-orange-100 text-orange-800", text: "In Applied" },
       pending_payment: { style: "bg-yellow-100 text-yellow-800", text: "Pending Payment" }
   }
   const currentStatus = statusConfig[transaction.status] || { style: "bg-gray-100 text-gray-800", text: transaction.status.replace(/_/g, ' ') };
@@ -265,7 +266,7 @@ export default function OrderHistoryPage() {
 
       if (statusFilter === 'all') return true;
       if (statusFilter === 'completed') return order.status === 'completed';
-      if (statusFilter === 'pending') return ['pending_payment', 'pending_confirmation'].includes(order.status);
+      if (statusFilter === 'pending') return ['pending_payment', 'pending_confirmation', 'in_applied'].includes(order.status);
       if (statusFilter === 'failed') return ['failed', 'cancelled'].includes(order.status);
       
       return true;

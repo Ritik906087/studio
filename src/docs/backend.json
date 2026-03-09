@@ -1,0 +1,570 @@
+
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Represents a user's profile in the application.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user's unique ID from Firebase Authentication."
+        },
+        "numericId": {
+          "type": "string",
+          "description": "A randomly generated 8-digit numeric ID for the user."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "The user's display name."
+        },
+        "photoURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the user's profile picture."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The user's phone number."
+        },
+        "balance": {
+          "type": "number",
+          "description": "The user's account balance."
+        },
+        "holdBalance": {
+          "type": "number",
+          "description": "The user's balance that is on hold and cannot be used."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the user profile was created."
+        },
+        "paymentMethods": {
+          "type": "array",
+          "description": "A list of the user's linked payment methods.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The name of the payment method (e.g., PhonePe, Paytm)."
+              },
+              "upiId": {
+                "type": "string",
+                "description": "The user's UPI ID for that payment method."
+              }
+            },
+            "required": ["name", "upiId"]
+          }
+        },
+        "inviterUid": {
+            "type": "string",
+            "description": "The Firebase Auth UID of the user who invited this user."
+        },
+        "claimedUserRewards": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "An array of task IDs for new user rewards that have been claimed."
+        }
+      },
+      "required": ["uid", "numericId", "balance", "holdBalance", "createdAt", "phoneNumber"]
+    },
+    "AdminPaymentMethod": {
+      "title": "Admin Payment Method",
+      "description": "Stores payment method details configured by the admin.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["bank", "upi", "usdt"]
+        },
+        "bankName": {
+          "type": "string",
+          "description": "The name of the bank."
+        },
+        "accountHolderName": {
+          "type": "string",
+          "description": "The name of the account holder for bank transfer."
+        },
+        "accountNumber": {
+          "type": "string",
+          "description": "The bank account number."
+        },
+        "ifscCode": {
+          "type": "string",
+          "description": "The IFSC code of the bank."
+        },
+        "upiHolderName": {
+          "type": "string",
+          "description": "The name of the UPI account holder."
+        },
+        "upiId": {
+          "type": "string",
+          "description": "The UPI ID."
+        },
+        "usdtWalletAddress": {
+            "type": "string",
+            "description": "The TRC20 wallet address for USDT."
+        }
+      },
+      "required": ["type"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Represents a user's request to buy LGB.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who created the order."
+        },
+        "orderId": {
+          "type": "string",
+          "description": "A unique, randomly generated ID for the order, prefixed with 'LGPAY'."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of LGB to buy, in INR."
+        },
+        "paymentType": {
+          "type": "string",
+          "description": "The payment method type chosen by the user.",
+          "enum": ["bank", "upi", "usdt", "p2p_upi"]
+        },
+        "paymentProvider": {
+          "type": "string",
+          "description": "The specific UPI provider chosen (e.g., PhonePe)."
+        },
+        "adminPaymentMethodId": {
+          "type": "string",
+          "description": "The ID of the admin payment method used for the transaction."
+        },
+        "sellerId": {
+            "type": "string",
+            "description": "The UID of the seller in a P2P transaction."
+        },
+        "sellerUpiDetails": {
+            "type": "object",
+            "description": "The UPI details of the seller in a P2P transaction.",
+            "properties": {
+                "name": { "type": "string" },
+                "upiId": { "type": "string" }
+            }
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the order.",
+          "enum": [
+            "pending_payment",
+            "pending_confirmation",
+            "in_applied",
+            "completed",
+            "cancelled",
+            "failed"
+          ]
+        },
+        "cancellationReason": {
+          "type": "string",
+          "description": "The reason provided by the user for cancelling the order."
+        },
+        "rejectionReason": {
+          "type": "string",
+          "description": "The reason provided by the admin for rejecting a payment."
+        },
+        "utr": {
+          "type": "string",
+          "description": "The UTR (for bank/UPI) or Transaction Hash (for crypto) of the payment."
+        },
+        "screenshotURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the uploaded payment screenshot."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the order was created."
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the user submitted payment proof."
+        },
+        "verificationResult": {
+            "type": "string",
+            "description": "Result from the AI payment verification flow."
+        }
+      },
+      "required": ["userId", "amount", "status", "createdAt", "orderId"]
+    },
+     "SellOrder": {
+      "title": "Sell Order",
+      "description": "Represents a user's request to sell LGB and withdraw money.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who created the sell order."
+        },
+        "userNumericId": {
+          "type": "string",
+          "description": "The numeric ID of the user who created the order."
+        },
+        "userPhoneNumber": {
+            "type": "string",
+            "description": "The phone number of the user who created the order."
+        },
+        "orderId": {
+          "type": "string",
+          "description": "A unique, randomly generated ID for the order, prefixed with 'LGPAY'."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of LGB to sell, in INR."
+        },
+        "remainingAmount": {
+            "type": "number",
+            "description": "The amount of the sell order that is still available to be bought."
+        },
+        "withdrawalMethod": {
+          "type": "object",
+          "description": "The UPI method chosen by the user for withdrawal.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "The name of the UPI provider (e.g., PhonePe)."
+            },
+            "upiId": {
+              "type": "string",
+              "description": "The UPI ID for withdrawal."
+            }
+          },
+          "required": ["name", "upiId"]
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the sell order.",
+          "enum": [
+            "pending",
+            "partially_filled",
+            "processing",
+            "completed",
+            "failed"
+          ]
+        },
+        "matchedBuyOrders": {
+            "type": "array",
+            "description": "A list of buy orders that have been matched with this sell order.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "buyOrderId": { "type": "string" },
+                    "buyerOrderId": { "type": "string" },
+                    "buyerId": { "type": "string" },
+                    "amount": { "type": "number" },
+                    "status": { "type": "string" },
+                    "createdAt": { "type": "string", "format": "date-time" },
+                    "utr": { "type": "string" }
+                }
+            }
+        },
+        "utr": {
+            "type": "string",
+            "description": "The UTR/reference number of the payment sent by the admin."
+        },
+        "failureReason": {
+            "type": "string",
+            "description": "Reason for a failed or cancelled sell order."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the order was created."
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the sell order was completed by the admin."
+        }
+      },
+      "required": ["userId", "amount", "withdrawalMethod", "status", "createdAt", "orderId", "userNumericId", "userPhoneNumber"]
+    },
+    "ChatRequest": {
+      "title": "Chat Request",
+      "description": "Represents a user's request to chat with a human agent.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the user who requested the chat, if they are logged in."
+        },
+        "userNumericId": {
+          "type": "string",
+          "description": "The numeric ID of the user, if they are logged in."
+        },
+        "enteredIdentifier": {
+          "type": "string",
+          "description": "The phone number or UID the user entered to start the chat."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the chat request.",
+          "enum": ["pending", "active", "closed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the chat request was created."
+        },
+        "chatHistory": {
+          "type": "array",
+          "description": "The full conversation history with the AI before escalating.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "isUser": { "type": "boolean" },
+              "timestamp": { "type": "number" },
+              "userName": {
+                "type": "string",
+                "description": "The name of the sender (e.g., user's display name or agent's name)."
+              },
+              "attachment": {
+                "type": "object",
+                "description": "An optional attachment with the message.",
+                "properties": {
+                  "name": { "type": "string" },
+                  "type": { "type": "string" },
+                  "url": { "type": "string", "format": "uri" }
+                }
+              }
+            }
+          }
+        },
+        "agentId": {
+          "type": "string",
+          "description": "The ID of the admin/agent who joined the chat."
+        },
+        "agentJoinedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when an agent joined the chat."
+        }
+      },
+      "required": ["enteredIdentifier", "status", "createdAt", "chatHistory"]
+    },
+    "RewardTransaction": {
+      "title": "Reward Transaction",
+      "description": "A record of a reward granted to a user, e.g., from daily tasks.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who received the reward."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of the reward in LGB."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of why the reward was given (e.g., 'Daily Task: Complete 5 orders')."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the reward was claimed."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "team_bonus",
+            "daily_task",
+            "new_user_reward"
+          ],
+          "description": "The type of the reward."
+        },
+        "orderId": {
+          "type": "string",
+          "description": "A unique ID for the reward transaction."
+        }
+      },
+      "required": [
+        "userId",
+        "amount",
+        "description",
+        "createdAt",
+        "type",
+        "orderId"
+      ]
+    },
+    "DailyReward": {
+      "title": "Daily Reward",
+      "description": "Tracks rewards claimed by a user on a specific day. The document ID should be in YYYY-MM-DD format.",
+      "type": "object",
+      "properties": {
+        "claimedTaskIds": {
+          "type": "array",
+          "description": "A list of task IDs that have been claimed for the day.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "The date for which the rewards were claimed."
+        }
+      },
+      "required": ["claimedTaskIds", "date"]
+    },
+    "Report": {
+      "title": "Problem Report",
+      "description": "Represents a user-submitted problem report regarding an order.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the user who submitted the report."
+        },
+        "userNumericId": {
+          "type": "string",
+          "description": "The numeric ID of the user."
+        },
+        "orderId": {
+          "type": "string",
+          "description": "The ID of the order being reported (Firestore document ID)."
+        },
+        "displayOrderId": {
+           "type": "string",
+           "description": "The user-facing order ID (e.g., LGPAY...)."
+        },
+        "orderType": {
+          "type": "string",
+          "enum": ["buy", "sell"]
+        },
+        "problemType": {
+          "type": "string",
+          "description": "The category of problem selected by the user."
+        },
+        "message": {
+          "type": "string",
+          "description": "The user's description of the problem."
+        },
+        "screenshotURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL of the uploaded screenshot evidence."
+        },
+        "videoURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL of the uploaded video evidence."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the report was created."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "resolved"],
+          "description": "The current status of the report."
+        }
+      },
+      "required": ["userId", "orderId", "displayOrderId", "orderType", "message", "createdAt", "status", "problemType"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "Represents user-submitted feedback or suggestions.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The Firebase Auth UID of the user who submitted the feedback."
+        },
+        "userNumericId": {
+          "type": "string",
+          "description": "The numeric ID of the user."
+        },
+        "message": {
+          "type": "string",
+          "description": "The user's feedback or suggestion."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the feedback was submitted."
+        }
+      },
+      "required": ["userId", "userNumericId", "message", "createdAt"]
+    }
+  },
+  "auth": {
+    "providers": ["email", "phone"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores public profile information for each user."
+    },
+    "/paymentMethods/{methodId}": {
+      "schema": {
+        "$ref": "#/entities/AdminPaymentMethod"
+      },
+      "description": "Stores admin-configured payment methods (Bank or UPI) for users to make payments to."
+    },
+    "/users/{userId}/orders/{orderId}": {
+      "schema": {
+        "$ref": "#/entities/Order"
+      },
+      "description": "Stores user orders to buy LGB."
+    },
+     "/users/{userId}/sellOrders/{orderId}": {
+      "schema": {
+        "$ref": "#/entities/SellOrder"
+      },
+      "description": "Stores user orders to sell LGB."
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+        "schema": {
+            "$ref": "#/entities/RewardTransaction"
+        },
+        "description": "Stores miscellaneous user transactions, such as claimed rewards."
+    },
+    "/chatRequests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/ChatRequest"
+      },
+      "description": "Stores user requests to chat with a human agent."
+    },
+    "/users/{userId}/dailyRewards/{date}": {
+      "schema": {
+        "$ref": "#/entities/DailyReward"
+      },
+      "description": "Stores daily claimed rewards for a user. {date} is YYYY-MM-DD."
+    },
+    "/reports/{reportId}": {
+      "schema": {
+        "$ref": "#/entities/Report"
+      },
+      "description": "Stores user-submitted problem reports for orders."
+    },
+    "/feedback/{feedbackId}": {
+      "schema": {
+        "$ref": "#/entities/Feedback"
+      },
+      "description": "Stores user-submitted feedback and suggestions."
+    }
+  }
+}

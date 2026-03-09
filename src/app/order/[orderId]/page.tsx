@@ -26,7 +26,7 @@ type Order = {
     id: string;
     orderId: string;
     amount: number;
-    status: string;
+    status: 'pending_payment' | 'pending_confirmation' | 'in_applied' | 'completed' | 'cancelled' | 'failed';
     utr: string;
     screenshotURL: string;
     submittedAt: Timestamp;
@@ -72,60 +72,25 @@ function OrderStatusContent() {
 
         setIsUpdatingStatus(true);
         try {
-            await runTransaction(firestore, async (transaction) => {
-                const buyOrderDoc = await transaction.get(orderRef);
-                if (!buyOrderDoc.exists()) throw new Error("Buy order not found.");
-                const buyOrderData = buyOrderDoc.data() as Order;
-    
-                if (buyOrderData.paymentType === 'p2p_upi' && buyOrderData.matchedSellOrderPath) {
-                    const sellOrderRef = doc(firestore, buyOrderData.matchedSellOrderPath);
-                    const sellOrderDoc = await transaction.get(sellOrderRef);
-    
-                    if (sellOrderDoc.exists()) {
-                        const sellOrderData = sellOrderDoc.data();
-                        
-                        const newRemainingAmount = (sellOrderData.remainingAmount || 0) + buyOrderData.amount;
-                        
-                        let newSellOrderStatus = 'partially_filled';
-                        if (newRemainingAmount >= sellOrderData.amount) {
-                             newSellOrderStatus = 'pending';
-                        }
-    
-                        const updatedMatchedBuyOrders = (sellOrderData.matchedBuyOrders || []).map((bo: any) => 
-                            bo.buyOrderId === order.id ? { ...bo, status: 'failed' } : bo
-                        );
-    
-                        transaction.update(sellOrderRef, {
-                            remainingAmount: newRemainingAmount,
-                            status: newSellOrderStatus,
-                            matchedBuyOrders: updatedMatchedBuyOrders
-                        });
-                    }
-                }
-    
-                transaction.update(orderRef, {
-                    status: 'failed',
-                    rejectionReason: 'Order review timed out.',
-                });
+             await updateDoc(orderRef, {
+                status: 'in_applied',
             });
-            
             toast({
-                variant: 'destructive',
-                title: 'Order Failed',
-                description: 'The order was not reviewed in time.',
+                title: 'Order Under Review',
+                description: 'System is busy. Please wait for admin review.',
             });
-            setTimeout(() => router.push('/home'), 1000);
     
         } catch (error) {
             console.error("Order expiry error:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'Failed to update the order status.' });
+        } finally {
             setIsUpdatingStatus(false);
         }
     };
     
     useEffect(() => {
         if (!order || order.status !== 'pending_confirmation' || !order.submittedAt) {
-            if (order && order.status !== 'pending_confirmation') {
+            if (order && !['pending_confirmation', 'in_applied'].includes(order.status)) {
                 setTimeLeft(0);
             }
             return;
@@ -141,7 +106,9 @@ function OrderStatusContent() {
             if (secondsLeft <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                handleOrderExpiry();
+                if (order.status === 'pending_confirmation') {
+                    handleOrderExpiry();
+                }
             } else {
                 setTimeLeft(secondsLeft);
             }
@@ -172,7 +139,7 @@ function OrderStatusContent() {
         )
     }
     
-    const isTimeout = order.status === 'failed' && order.rejectionReason && (order.rejectionReason.includes('expired') || order.rejectionReason.includes('timed out'));
+    const isTimeout = (order.status === 'failed' || order.status === 'cancelled') && (order.rejectionReason?.includes('timed out') || order.cancellationReason?.includes('timed out'));
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -198,6 +165,12 @@ function OrderStatusContent() {
                                 <h2 className="text-2xl font-bold text-green-600">Confirmation</h2>
                                 <p className="text-muted-foreground">Your payment is under review.</p>
                             </>
+                        ) : order.status === 'in_applied' ? (
+                             <>
+                                <AlertTriangle className="h-16 w-16 text-orange-500" />
+                                <h2 className="text-2xl font-bold text-orange-600">In Applied</h2>
+                                <p className="text-muted-foreground">System busy. Please wait for admin review.</p>
+                            </>
                         ) : (
                             <>
                                 {isTimeout ? (
@@ -209,26 +182,32 @@ function OrderStatusContent() {
                                     {isTimeout ? 'Timeout' : order.status.replace('_', ' ')}
                                 </h2>
                                 <p className="text-muted-foreground">
-                                    {isTimeout ? "This order has expired." : "This order could not be completed."}
+                                    {isTimeout ? "This order has timed out." : "This order could not be completed."}
                                 </p>
                             </>
                         )}
                         
                     </CardContent>
-                    <CardFooter className={cn("p-4", order.status === 'pending_confirmation' ? 'bg-green-100' : 'bg-primary/10')}>
+                    <CardFooter className={cn("p-4", 
+                        order.status === 'pending_confirmation' ? 'bg-green-100' 
+                        : order.status === 'in_applied' ? 'bg-orange-100'
+                        : 'bg-primary/10'
+                    )}>
                          <div className="w-full text-center">
                             {order.status === 'pending_confirmation' ? (
                                 <>
                                     <p className="text-sm text-green-800 font-semibold">Estimated time remaining</p>
                                     <div className="text-3xl font-mono font-bold text-green-600">
-                                        {timeLeft !== null ? formatTime(timeLeft) : <Loader size="md" className="inline-block"/>}
+                                        {timeLeft !== null && timeLeft > 0 ? formatTime(timeLeft) : <Loader size="sm" className="inline-block"/>}
                                     </div>
                                 </>
+                            ) : order.status === 'in_applied' ? (
+                                <p className="w-full text-center text-sm text-orange-600 font-semibold">In applied System busy</p>
                             ) : order.status === 'completed' ? (
                                  <p className="w-full text-center text-sm text-green-600 font-semibold">Processed successfully!</p>
                             ) : (
                                 <p className={cn("w-full text-center text-sm font-semibold", isTimeout ? "text-orange-600" : "text-destructive")}>
-                                    This order is no longer active.
+                                    {isTimeout ? 'This order has timed out.' : 'This order is no longer active.'}
                                 </p>
                             )}
                          </div>

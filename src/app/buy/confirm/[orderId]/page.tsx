@@ -239,7 +239,7 @@ function PaymentDetailsContent() {
 
                 transaction.update(orderRef, {
                     status: isAutoCancel ? 'failed' : 'cancelled',
-                    cancellationReason: reason,
+                    cancellationReason: isAutoCancel ? 'Order timed out' : reason,
                 });
             });
 
@@ -247,7 +247,7 @@ function PaymentDetailsContent() {
                 toast({ title: 'Order Cancelled' });
                 router.push('/order');
             } else {
-                toast({ title: 'Order Expired', variant: 'destructive' });
+                toast({ title: 'Order Timeout', variant: 'destructive' });
                 router.push('/order');
             }
 
@@ -327,7 +327,7 @@ function PaymentDetailsContent() {
             if (secondsLeft <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                handleCancelOrder(true, 'Order automatically expired');
+                handleCancelOrder(true, 'Order timed out');
             } else {
                 setTimeLeft(secondsLeft);
             }

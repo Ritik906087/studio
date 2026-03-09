@@ -1,6 +1,6 @@
 
 
-"use client";
+'use client';
 import {
   Card,
   CardContent,
@@ -22,6 +22,7 @@ import {
   ArrowUpFromLine,
   History,
   Clock,
+  AlertCircle,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
@@ -113,12 +114,12 @@ const Countdown = ({ expiryTimestamp, onExpire }: { expiryTimestamp: Timestamp, 
         return () => clearInterval(interval);
     }, [expiryTimestamp, onExpire, isExpired]);
 
-    if (!timeLeft) return null;
+    if (!timeLeft || timeLeft === "Expired") return null;
 
     return (
         <div className={cn(
             "flex items-center gap-1 text-xs font-mono",
-            timeLeft === "Expired" ? "text-red-500" : "text-yellow-600"
+            "text-yellow-600"
         )}>
             <Clock className="h-3 w-3" />
             <span>{timeLeft}</span>
@@ -152,6 +153,10 @@ const InProgressOrderCard = ({ order, onExpire }: { order: any, onExpire: (order
             if (order.submittedAt) { 
                 expiryTimestamp = new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds);
             }
+        } else if (order.status === 'in_applied') {
+            buttonText = "View Status";
+            buttonLink = `/order/${order.id}`;
+            statusText = "In Applied";
         }
     } else if (isSell) {
          if (['pending', 'partially_filled', 'processing'].includes(order.status)) {
@@ -182,7 +187,8 @@ const InProgressOrderCard = ({ order, onExpire }: { order: any, onExpire: (order
                         <p className="font-bold text-lg">{currencySymbol}{displayAmount}</p>
                         <div className="flex items-center gap-2">
                              <p className="text-xs text-muted-foreground capitalize">{statusText}</p>
-                             {expiryTimestamp && <Countdown expiryTimestamp={expiryTimestamp} onExpire={() => onExpire(order.id, order.type)} />}
+                             {expiryTimestamp ? <Countdown expiryTimestamp={expiryTimestamp} onExpire={() => onExpire(order.id, order.type)} /> 
+                             : order.status === 'in_applied' ? <p className="text-xs text-orange-600 font-semibold">System Busy</p> : null}
                         </div>
                     </div>
                     <Button asChild size="sm" className="font-bold flex-shrink-0">
@@ -215,7 +221,7 @@ export default function HomePage() {
     if (!user || !firestore) return null;
     return query(
         collection(firestore, 'users', user.uid, 'orders'),
-        where('status', 'in', ['pending_payment', 'pending_confirmation'])
+        where('status', 'in', ['pending_payment', 'pending_confirmation', 'in_applied'])
     );
   }, [user, firestore]);
 
@@ -259,11 +265,11 @@ export default function HomePage() {
             if (type === 'buy') {
                 transaction.update(orderRef, {
                     status: 'failed',
-                    cancellationReason: 'Order automatically expired.',
+                    cancellationReason: 'Order timed out.',
                 });
             }
         });
-        toast({ variant: 'destructive', title: 'Order Expired', description: `Your ${type} order has been marked as failed.` });
+        toast({ variant: 'destructive', title: 'Order Timeout', description: `Your ${type} order has timed out.` });
     } catch (error) {
         console.error(`Failed to expire ${type} order ${orderId}:`, error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not update expired order.' });

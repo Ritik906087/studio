@@ -73,7 +73,7 @@ type Order = {
     userId: string;
     orderId: string;
     amount: number;
-    status: 'pending_confirmation';
+    status: 'pending_confirmation' | 'in_applied';
     submittedAt?: Timestamp;
     utr?: string;
     screenshotURL?: string;
@@ -1437,7 +1437,7 @@ function ConfirmationsTabContent() {
                     ...orderDoc.data(),
                     path: orderDoc.ref.path,
                 } as Order))
-                .filter(order => order.status === 'pending_confirmation');
+                .filter(order => order.status === 'pending_confirmation' || order.status === 'in_applied');
             setAllOrders(allPendingOrders);
 
         } catch (error) {
@@ -1528,11 +1528,18 @@ function ConfirmationsTabContent() {
                                         <p className="text-sm text-muted-foreground">Amount</p>
                                         <p className="font-bold text-lg text-primary">₹{order.amount.toFixed(2)}</p>
                                     </div>
-                                    {order.submittedAt && (
-                                        <CountdownTimer 
-                                            expiryTimestamp={new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds)} 
-                                        />
-                                    )}
+                                    <div>
+                                        {order.status === 'pending_confirmation' && order.submittedAt ? (
+                                            <CountdownTimer 
+                                                expiryTimestamp={new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds)} 
+                                            />
+                                        ) : order.status === 'in_applied' ? (
+                                            <div className="flex items-center gap-1.5 text-xs font-semibold text-orange-600">
+                                                <AlertCircle className="h-3 w-3" />
+                                                <span>In Applied</span>
+                                            </div>
+                                        ) : null}
+                                    </div>
                                 </CardHeader>
                                 <CardContent className="p-4 pt-0 space-y-2 text-sm">
                                     <p><strong>User:</strong> {order.user?.displayName || 'N/A'} ({order.user?.numericId})</p>
