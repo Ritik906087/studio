@@ -1,6 +1,5 @@
 
-
-"use client";
+'use client';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -174,7 +173,7 @@ const UsdtPurchaseForm = ({ onBuyClick, bonusPercentage, isCreatingOrder }: { on
                 <CardContent className="p-4">
                     <Label htmlFor="usdt-amount" className="text-sm text-green-900/80">Deposit amount (minimum 5 USDT)</Label>
                     <div className="flex items-center gap-2 mt-1">
-                        <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/usdt-logo.png?alt=media&token=16c8f93a-832a-43c2-8419-2479e394f451" width={28} height={28} alt="USDT" />
+                        <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/USDT%20LOGO%20.png?alt=media&token=bfd96cbc-634b-42a5-bbd8-2195f964b76b" width={28} height={28} alt="USDT" />
                         <Input 
                             id="usdt-amount"
                             type="number"
