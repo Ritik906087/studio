@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
 import { doc, runTransaction, collection, query, where, getDocs, arrayUnion, Timestamp, updateDoc } from 'firebase/firestore';
 import Image from 'next/image';
+import { Progress } from '@/components/ui/progress';
 
 const TelegramIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-sky-500">
@@ -21,17 +22,24 @@ const TelegramIcon = () => (
     </svg>
 );
 
+const UpiIcons = () => (
+    <div className="flex -space-x-3 items-center justify-center">
+        <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7" width={28} height={28} alt="MobiKwik" className="rounded-full bg-white border-2 border-white" />
+        <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4" width={28} height={28} alt="Freecharge" className="rounded-full bg-white border-2 border-white" />
+    </div>
+);
+
 const newbieTasksList = [
     { id: 'nb_telegram', title: 'Subscribe to Official Channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/LGB_PAY" },
     { id: 'nb_tutorial', title: 'Watch Beginner Tutorial', icon: <PlaySquare className="h-6 w-6 text-blue-500" />, action: "go", href: "#" },
-    { id: 'nb_upi', title: 'Link Mobikwik/Freecharge', icon: <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7" width={28} height={28} alt="MobiKwik" />, action: "go", href: "/my/collection/add" },
-    { id: 'nb_purchase', title: 'Purchase 1000 LG', icon: <CircleDollarSign className="h-6 w-6 text-yellow-500" />, action: 'go', href: '/buy' },
+    { id: 'nb_upi', title: 'Link Mobikwik/Freecharge', icon: <UpiIcons />, action: "go", href: "/my/collection/add" },
+    { id: 'nb_purchase', title: 'Purchase 1000 LG', icon: <CircleDollarSign className="h-6 w-6 text-yellow-500" />, action: 'go', href: '/buy', goal: 1000 },
 ];
 
 const FINAL_REWARD_ID = 'nb_final_reward';
 const FINAL_REWARD_AMOUNT = 300;
 
-const NewbieTaskItem = ({ icon, title, isCompleted, onAction }: { icon: React.ReactNode, title: string, isCompleted: boolean, onAction: () => void }) => {
+const NewbieTaskItem = ({ icon, title, isCompleted, onAction, progress, goal }: { icon: React.ReactNode, title: string, isCompleted: boolean, onAction: () => void, progress?: number, goal?: number }) => {
     return (
         <div className="flex items-center gap-4 p-3 bg-white rounded-xl shadow-sm transition-all hover:shadow-md">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary shadow-inner">
@@ -39,6 +47,12 @@ const NewbieTaskItem = ({ icon, title, isCompleted, onAction }: { icon: React.Re
             </div>
             <div className="flex-1">
                 <p className="font-bold text-sm text-foreground">{title}</p>
+                 {progress !== undefined && goal !== undefined && (
+                    <div className="flex items-center gap-2 mt-1">
+                        <Progress value={Math.min((progress / goal) * 100, 100)} className="h-1.5 w-20" />
+                        <p className="text-xs text-muted-foreground font-mono">{Math.min(progress, goal)}/{goal}</p>
+                    </div>
+                )}
             </div>
             <div className="flex-shrink-0">
                 {isCompleted ? (
@@ -59,6 +73,7 @@ export default function NewbieRewardsPage() {
 
     const [isClaimingFinal, setIsClaimingFinal] = useState(false);
     const [taskStatus, setTaskStatus] = useState<Record<string, boolean>>({});
+    const [taskProgress, setTaskProgress] = useState<Record<string, number>>({});
 
     const userProfileRef = useMemo(() => {
         if (!user || !firestore) return null;
@@ -72,6 +87,7 @@ export default function NewbieRewardsPage() {
 
         const claimed = new Set(userProfile.claimedUserRewards || []);
         const status: Record<string, boolean> = {};
+        const progress: Record<string, number> = {};
 
         // Check UPI Link
         const isUpiLinked = userProfile.paymentMethods?.some(pm => ['MobiKwik', 'Freecharge'].includes(pm.name)) || false;
@@ -82,24 +98,25 @@ export default function NewbieRewardsPage() {
         status['nb_upi'] = isUpiLinked;
         
         // Check Purchase
-        if (!claimed.has('nb_purchase')) {
-            // This query avoids a composite index by fetching completed orders and filtering client-side
-            const purchaseQuery = query(
-                collection(firestore, 'users', user.uid, 'orders'),
-                where('status', '==', 'completed')
-            );
-            const purchaseSnapshot = await getDocs(purchaseQuery);
-            // Check if any completed order has amount >= 1000
-            const hasPurchased = purchaseSnapshot.docs.some(doc => doc.data().amount >= 1000);
-
-            if (hasPurchased) {
-                await updateDoc(userProfileRef, { claimedUserRewards: arrayUnion('nb_purchase') });
-                claimed.add('nb_purchase');
+        const purchaseQuery = query(
+            collection(firestore, 'users', user.uid, 'orders'),
+            where('status', '==', 'completed')
+        );
+        const purchaseSnapshot = await getDocs(purchaseQuery);
+        let maxPurchaseAmount = 0;
+        purchaseSnapshot.forEach(doc => {
+            if (doc.data().amount > maxPurchaseAmount) {
+                maxPurchaseAmount = doc.data().amount;
             }
-            status['nb_purchase'] = hasPurchased;
-        } else {
-             status['nb_purchase'] = true;
+        });
+        
+        const hasPurchased = maxPurchaseAmount >= 1000;
+        if (hasPurchased && !claimed.has('nb_purchase')) {
+            await updateDoc(userProfileRef, { claimedUserRewards: arrayUnion('nb_purchase') });
+            claimed.add('nb_purchase');
         }
+        status['nb_purchase'] = hasPurchased;
+        progress['nb_purchase'] = maxPurchaseAmount;
 
         // Check manual tasks
         status['nb_telegram'] = claimed.has('nb_telegram');
@@ -107,6 +124,7 @@ export default function NewbieRewardsPage() {
         status[FINAL_REWARD_ID] = claimed.has(FINAL_REWARD_ID);
 
         setTaskStatus(status);
+        setTaskProgress(progress);
     }, [user, firestore, userProfile, userProfileRef]);
 
 
@@ -125,7 +143,8 @@ export default function NewbieRewardsPage() {
 
         if (userProfileRef) {
             await updateDoc(userProfileRef, { claimedUserRewards: arrayUnion(taskId) });
-            setTaskStatus(prev => ({ ...prev, [taskId]: true }));
+            // Re-fetch to update status from db
+            checkTaskCompletion();
         }
     };
     
@@ -202,6 +221,7 @@ export default function NewbieRewardsPage() {
             <div className="space-y-3">
                 {newbieTasksList.map(task => {
                     const isCompleted = taskStatus[task.id] || false;
+                    const currentProgress = taskProgress[task.id] || 0;
                     
                     let onAction = () => router.push(task.href);
                     if (task.action === "go" && (task.href.startsWith('http') || task.href === '#')) {
@@ -215,6 +235,8 @@ export default function NewbieRewardsPage() {
                             title={task.title}
                             isCompleted={isCompleted}
                             onAction={onAction}
+                            progress={task.goal ? currentProgress : undefined}
+                            goal={task.goal}
                         />
                     );
                 })}
