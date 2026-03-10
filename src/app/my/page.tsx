@@ -121,7 +121,7 @@ export default function MyPage() {
     }
   };
 
-  const totalNewUserTasks = 6;
+  const totalNewUserTasks = 5;
   const showNewUserRewardButton = !profileLoading && (!userProfile?.claimedUserRewards || userProfile.claimedUserRewards.length < totalNewUserTasks);
 
 
