@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -10,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { useUser, useFirestore, useDoc } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { doc, runTransaction, collection, addDoc, serverTimestamp, query, where, getDocs, arrayUnion, getDoc, Timestamp } from 'firebase/firestore';
+import { doc, runTransaction, collection, query, where, getDocs, arrayUnion, Timestamp, updateDoc } from 'firebase/firestore';
 import Image from 'next/image';
 
 const TelegramIcon = () => (
@@ -20,33 +21,31 @@ const TelegramIcon = () => (
     </svg>
 );
 
+const newbieTasksList = [
+    { id: 'nb_telegram', title: 'Subscribe to Official Channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/LGB_PAY" },
+    { id: 'nb_tutorial', title: 'Watch Beginner Tutorial', icon: <PlaySquare className="h-6 w-6 text-blue-500" />, action: "go", href: "#" },
+    { id: 'nb_upi', title: 'Link Mobikwik/Freecharge', icon: <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7" width={28} height={28} alt="MobiKwik" />, action: "go", href: "/my/collection/add" },
+    { id: 'nb_purchase', title: 'Purchase 1000 LG', icon: <CircleDollarSign className="h-6 w-6 text-yellow-500" />, action: 'go', href: '/buy' },
+];
 
-const NewbieTaskItem = ({ icon, title, isCompleted, isClaimed, onClaim, onAction, actionText, isClaiming }: { icon: React.ReactNode, title: string, isCompleted: boolean, isClaimed: boolean, onClaim: () => void, onAction: () => void, actionText: string, isClaiming: boolean }) => {
-    
-    const renderButton = () => {
-        if (isClaimed) {
-            return <Button size="sm" className="font-semibold h-8 text-xs px-5 bg-green-500 hover:bg-green-500 cursor-default" disabled>Done</Button>;
-        }
-        if (isCompleted) {
-            return (
-                <Button size="sm" onClick={onClaim} className="font-semibold h-8 text-xs px-5 btn-gradient" disabled={isClaiming}>
-                    {isClaiming ? <Loader size="xs" /> : 'Claim'}
-                </Button>
-            );
-        }
-        return <Button size="sm" onClick={onAction} className="font-semibold h-8 text-xs px-5">{actionText}</Button>;
-    };
+const FINAL_REWARD_ID = 'nb_final_reward';
+const FINAL_REWARD_AMOUNT = 300;
 
+const NewbieTaskItem = ({ icon, title, isCompleted, onAction }: { icon: React.ReactNode, title: string, isCompleted: boolean, onAction: () => void }) => {
     return (
-        <div className="flex items-center gap-4 p-3 bg-secondary/50 rounded-xl">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
+        <div className="flex items-center gap-4 p-3 bg-white rounded-xl shadow-sm transition-all hover:shadow-md">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary shadow-inner">
                 {icon}
             </div>
             <div className="flex-1">
                 <p className="font-bold text-sm text-foreground">{title}</p>
             </div>
             <div className="flex-shrink-0">
-                {renderButton()}
+                {isCompleted ? (
+                    <Button size="sm" className="font-semibold h-8 text-xs px-6 bg-green-500 hover:bg-green-600 shadow-[0_4px_14px_0_rgb(0,200,83,38%)] cursor-default" disabled>Done</Button>
+                ) : (
+                    <Button size="sm" onClick={onAction} className="font-semibold h-8 text-xs px-6 bg-gray-300 text-gray-700 hover:bg-gray-400 active:scale-95 transition-transform">Go</Button>
+                )}
             </div>
         </div>
     );
@@ -58,18 +57,8 @@ export default function NewbieRewardsPage() {
     const { toast } = useToast();
     const router = useRouter();
 
-    const [claiming, setClaiming] = useState<string | null>(null);
-    const [dataLoading, setDataLoading] = useState(true);
-    const [hasCompletedFirstOrder, setHasCompletedFirstOrder] = useState(false);
-    
-    const newbieTasks = useMemo(() => [
-        { id: 'nb_telegram', title: 'Subscribe to Official Channel', reward: 20, icon: <TelegramIcon />, action: "join" },
-        { id: 'nb_tutorial', title: 'Watch Beginner Tutorial', reward: 20, icon: <PlaySquare className="h-6 w-6 text-blue-500" />, action: "watch" },
-        { id: 'nb_upi', title: 'Link Mobikwik/Freecharge', reward: 30, icon: <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7" width={28} height={28} alt="MobiKwik" />, action: "connect" },
-        { id: 'nb_purchase', title: 'Purchase 1000 LG', reward: 130, icon: <CircleDollarSign className="h-6 w-6 text-yellow-500" />, action: 'buy' },
-    ], []);
-
-    const finalBonusTask = { id: 'nb_final', title: 'Claim Final Bonus', reward: 300 };
+    const [isClaimingFinal, setIsClaimingFinal] = useState(false);
+    const [taskStatus, setTaskStatus] = useState<Record<string, boolean>>({});
 
     const userProfileRef = useMemo(() => {
         if (!user || !firestore) return null;
@@ -77,92 +66,94 @@ export default function NewbieRewardsPage() {
     }, [user, firestore]);
 
     const { data: userProfile, loading: profileLoading } = useDoc<{ claimedUserRewards?: string[], paymentMethods?: { name: string }[] }>(userProfileRef);
-    
-    const claimedRewards = useMemo(() => new Set(userProfile?.claimedUserRewards || []), [userProfile]);
 
-    const fetchData = useCallback(async () => {
-        if (!user || !firestore) {
-            setDataLoading(false);
-            return;
+    const checkTaskCompletion = useCallback(async () => {
+        if (!user || !firestore || !userProfile || !userProfileRef) return;
+
+        const claimed = new Set(userProfile.claimedUserRewards || []);
+        const status: Record<string, boolean> = {};
+
+        // Check UPI Link
+        const isUpiLinked = userProfile.paymentMethods?.some(pm => ['MobiKwik', 'Freecharge'].includes(pm.name)) || false;
+        if (isUpiLinked && !claimed.has('nb_upi')) {
+            await updateDoc(userProfileRef, { claimedUserRewards: arrayUnion('nb_upi') });
+            claimed.add('nb_upi'); 
         }
-        setDataLoading(true);
-        try {
-            const ordersQuery = query(
+        status['nb_upi'] = isUpiLinked;
+        
+        // Check Purchase
+        if (!claimed.has('nb_purchase')) {
+            const purchaseQuery = query(
                 collection(firestore, 'users', user.uid, 'orders'),
-                where('status', '==', 'completed')
+                where('status', '==', 'completed'),
+                where('amount', '>=', 1000)
             );
-            const ordersSnapshot = await getDocs(ordersQuery);
-            const hasSufficientOrder = ordersSnapshot.docs.some(doc => doc.data().amount >= 1000);
-            setHasCompletedFirstOrder(hasSufficientOrder);
-        } catch (error) {
-            console.error("Error fetching task data:", error);
-            toast({ variant: 'destructive', title: "Could not load task progress" });
-        } finally {
-            setDataLoading(false);
+            const purchaseSnapshot = await getDocs(purchaseQuery);
+            const hasPurchased = !purchaseSnapshot.empty;
+            if (hasPurchased) {
+                await updateDoc(userProfileRef, { claimedUserRewards: arrayUnion('nb_purchase') });
+                claimed.add('nb_purchase');
+            }
+            status['nb_purchase'] = hasPurchased;
+        } else {
+             status['nb_purchase'] = true;
         }
-    }, [user, firestore, toast]);
+
+        // Check manual tasks
+        status['nb_telegram'] = claimed.has('nb_telegram');
+        status['nb_tutorial'] = claimed.has('nb_tutorial');
+        status[FINAL_REWARD_ID] = claimed.has(FINAL_REWARD_ID);
+
+        setTaskStatus(status);
+    }, [user, firestore, userProfile, userProfileRef]);
+
 
     useEffect(() => {
-        if (!profileLoading) {
-            fetchData();
+        if (userProfile) {
+            checkTaskCompletion();
         }
-    }, [profileLoading, fetchData]);
+    }, [userProfile, checkTaskCompletion]);
 
-    const handleClaim = async (taskId: string, reward: number, taskTitle: string) => {
+    const handleSimpleTask = async (taskId: string, href: string) => {
+        if (href === '#') {
+            toast({ title: "Tutorial 'watched'!", description: "This task is now complete." });
+        } else {
+            window.open(href, '_blank');
+        }
+
+        if (userProfileRef) {
+            await updateDoc(userProfileRef, { claimedUserRewards: arrayUnion(taskId) });
+            setTaskStatus(prev => ({ ...prev, [taskId]: true }));
+        }
+    };
+    
+    const handleFinalClaim = async () => {
         if (!user || !firestore || !userProfileRef) return;
-        setClaiming(taskId);
+        setIsClaimingFinal(true);
         try {
             await runTransaction(firestore, async (transaction) => {
                 const userDoc = await transaction.get(userProfileRef);
                 if (!userDoc.exists()) throw new Error("User not found");
-                const userData = userDoc.data();
                 
-                const alreadyClaimed = (userData.claimedUserRewards || []).includes(taskId);
-                if (alreadyClaimed) throw new Error("Reward already claimed.");
-
-                const newBalance = (userData.balance || 0) + reward;
+                const newBalance = (userDoc.data().balance || 0) + FINAL_REWARD_AMOUNT;
                 transaction.update(userProfileRef, { 
                     balance: newBalance,
-                    claimedUserRewards: arrayUnion(taskId)
+                    claimedUserRewards: arrayUnion(FINAL_REWARD_ID)
                 });
             });
-
-             await addDoc(collection(firestore, 'users', user.uid, 'transactions'), {
-                userId: user.uid,
-                amount: reward,
-                description: `Newbie Reward: ${taskTitle}`,
-                createdAt: serverTimestamp(),
-                type: 'new_user_reward',
-                orderId: `LGPAYN${Date.now()}`
-            });
-            toast({ title: "Reward Claimed!", description: `₹${reward} has been added to your balance.` });
+            toast({ title: "Reward Claimed!", description: `₹${FINAL_REWARD_AMOUNT} has been added to your balance.` });
+            setTaskStatus(prev => ({ ...prev, [FINAL_REWARD_ID]: true }));
         } catch (error: any) {
              toast({ variant: 'destructive', title: error.message || 'Failed to claim reward.' });
         } finally {
-            setClaiming(null);
+            setIsClaimingFinal(false);
         }
     }
     
-    const isUpiConnected = useMemo(() => !!userProfile?.paymentMethods?.some(pm => ['MobiKwik', 'Freecharge'].includes(pm.name)), [userProfile]);
-    
-    const allTasksCompleted = useMemo(() => newbieTasks.every(task => claimedRewards.has(task.id)), [newbieTasks, claimedRewards]);
-    const isFinalBonusClaimed = useMemo(() => claimedRewards.has(finalBonusTask.id), [claimedRewards]);
+    const allTasksCompleted = newbieTasksList.every(task => taskStatus[task.id]);
+    const isFinalRewardClaimed = taskStatus[FINAL_REWARD_ID];
+    const loading = userLoading || profileLoading;
 
-    const totalBonus = useMemo(() => {
-        let total = 0;
-        newbieTasks.forEach(task => {
-            if (claimedRewards.has(task.id)) {
-                total += task.reward;
-            }
-        });
-        if(isFinalBonusClaimed) {
-            total += finalBonusTask.reward;
-        }
-        return total;
-    }, [claimedRewards, newbieTasks, finalBonusTask, isFinalBonusClaimed]);
-    
-    const loading = userLoading || profileLoading || dataLoading;
-    
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen bg-secondary">
@@ -172,7 +163,7 @@ export default function NewbieRewardsPage() {
     }
 
     return (
-        <div className="flex min-h-screen flex-col bg-secondary">
+        <div className="flex min-h-screen flex-col bg-secondary font-body">
           <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
             <Button asChild variant="ghost" size="icon" className="h-8 w-8">
               <Link href="/my">
@@ -184,80 +175,44 @@ export default function NewbieRewardsPage() {
           </header>
 
           <main className="flex-grow space-y-4 p-4">
-            <Card className="border-none bg-gradient-to-r from-blue-500 to-blue-400 text-white shadow-lg">
-                <CardContent className="p-4 flex justify-between items-center">
+            <Card className="border-none bg-gradient-to-br from-primary via-violet-500 to-accent text-white shadow-lg shadow-primary/30">
+                <CardContent className="p-5 flex justify-between items-center">
                     <div>
-                        <p className="text-sm opacity-80">
-                            {allTasksCompleted && !isFinalBonusClaimed ? "Final Bonus" : "Total bonus"}
-                        </p>
-                        <p className="text-3xl font-bold">
-                            {allTasksCompleted && !isFinalBonusClaimed 
-                                ? `₹ ${finalBonusTask.reward}` 
-                                : (totalBonus > 0 ? `₹ ${totalBonus}` : `${totalBonus}`)
-                            }
-                        </p>
+                        <p className="text-sm opacity-90">Reward Amount</p>
+                        <p className="text-4xl font-bold mt-1">₹{FINAL_REWARD_AMOUNT}</p>
                     </div>
-                    {allTasksCompleted && !isFinalBonusClaimed ? (
+                    {allTasksCompleted && !isFinalRewardClaimed ? (
                         <Button 
-                            className="bg-white/90 text-blue-500 font-bold rounded-lg px-4 py-2 text-sm hover:bg-white"
-                            disabled={claiming === finalBonusTask.id}
-                            onClick={() => handleClaim(finalBonusTask.id, finalBonusTask.reward, finalBonusTask.title)}
+                            className="bg-white text-primary font-bold rounded-lg px-5 py-2 text-sm hover:bg-white/90 shadow-[0_4px_14px_0_rgb(0,0,0,10%)] transition-all active:scale-95 animate-pulse"
+                            disabled={isClaimingFinal}
+                            onClick={handleFinalClaim}
                         >
-                            {claiming === finalBonusTask.id ? <Loader size="xs" /> : 'Receive'}
+                            {isClaimingFinal ? <Loader size="xs" /> : 'Claim'}
                         </Button>
                     ) : (
-                        <div className="bg-black/20 text-white font-semibold rounded-lg px-4 py-2 text-sm">
-                            Received
+                        <div className={cn("bg-black/20 text-white font-semibold rounded-lg px-4 py-2 text-sm", isFinalRewardClaimed && "bg-green-500")}>
+                            {isFinalRewardClaimed ? 'Done' : 'Undone'}
                         </div>
                     )}
                 </CardContent>
             </Card>
             
             <div className="space-y-3">
-                {newbieTasks.map(task => {
-                    let isCompleted = false;
-                    let actionText = "Go";
-                    let onAction = () => {};
-
-                    switch(task.action) {
-                        case 'join':
-                            isCompleted = true; // Auto-completed, just need to claim
-                            actionText = "Join";
-                            onAction = () => {
-                                window.open('https://t.me/LGB_PAY', '_blank');
-                                toast({ title: "Welcome to the Channel!", description: "You can now claim your reward." });
-                            };
-                            break;
-                        case 'watch':
-                            isCompleted = true;
-                            actionText = "Watch";
-                             onAction = () => {
-                                toast({ title: "Tutorial 'watched'!", description: "You can now claim your reward." });
-                            };
-                            break;
-                        case 'connect':
-                            isCompleted = isUpiConnected;
-                            actionText = "Link";
-                            onAction = () => router.push('/my/collection/add');
-                            break;
-                        case 'buy':
-                            isCompleted = hasCompletedFirstOrder;
-                            actionText = "Buy";
-                            onAction = () => router.push('/buy');
-                            break;
+                {newbieTasksList.map(task => {
+                    const isCompleted = taskStatus[task.id] || false;
+                    
+                    let onAction = () => router.push(task.href);
+                    if (task.action === "go" && (task.href.startsWith('http') || task.href === '#')) {
+                         onAction = () => handleSimpleTask(task.id, task.href);
                     }
-
+                    
                     return (
                         <NewbieTaskItem
                             key={task.id}
                             icon={task.icon}
                             title={task.title}
                             isCompleted={isCompleted}
-                            isClaimed={claimedRewards.has(task.id)}
-                            onClaim={() => handleClaim(task.id, task.reward, task.title)}
                             onAction={onAction}
-                            actionText={actionText}
-                            isClaiming={claiming === task.id}
                         />
                     );
                 })}

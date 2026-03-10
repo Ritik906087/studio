@@ -121,8 +121,8 @@ export default function MyPage() {
     }
   };
 
-  const totalNewUserTasks = 5;
-  const showNewUserRewardButton = !profileLoading && (!userProfile?.claimedUserRewards || userProfile.claimedUserRewards.length < totalNewUserTasks);
+  const isFinalNewbieRewardClaimed = userProfile?.claimedUserRewards?.includes('nb_final_reward');
+  const showNewUserRewardButton = !profileLoading && !isFinalNewbieRewardClaimed;
 
 
   return (
