@@ -166,7 +166,7 @@ const UsdtPurchaseForm = ({ onBuyClick, bonusPercentage, isCreatingOrder }: { on
         <div className="space-y-4 pt-4">
             <div className="flex justify-between items-center text-sm font-semibold px-2">
                 <span>Main Network: TRC-20</span>
-                <span className="text-primary">1 USDT = 110 LGB</span>
+                <span className="text-primary">1 USDT ≈ 110₹</span>
             </div>
 
             <Card className="bg-green-500/10 border-green-500 shadow-none">
@@ -302,16 +302,16 @@ const createOrder = async (provider: string, orderAmount: number) => {
     let finalPaymentType = activeTab;
 
     try {
-        const allSellOrdersQuery = query(collectionGroup(firestore, 'sellOrders'));
-        const allSellOrdersSnapshot = await getDocs(allSellOrdersQuery);
+        const p2pCandidatesQuery = query(
+            collectionGroup(firestore, 'sellOrders'),
+            where('status', 'in', ['pending', 'partially_filled']),
+            where('remainingAmount', '>=', orderAmount)
+        );
+        const allSellOrdersSnapshot = await getDocs(p2pCandidatesQuery);
         
         const allCandidates = allSellOrdersSnapshot.docs
             .map(doc => ({ ref: doc.ref, data: doc.data() }))
-            .filter(({ data }) => 
-                ['pending', 'partially_filled'].includes(data.status) &&
-                data.remainingAmount >= orderAmount &&
-                data.userId !== user.uid
-            );
+            .filter(({ data }) => data.userId !== user.uid);
 
         const sellOrderCandidateDoc = allCandidates
             .sort((a, b) => {
