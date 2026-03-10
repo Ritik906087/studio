@@ -40,6 +40,14 @@ const FINAL_REWARD_ID = 'nb_final_reward';
 const FINAL_REWARD_AMOUNT = 300;
 
 const NewbieTaskItem = ({ icon, title, isCompleted, onAction, progress, goal }: { icon: React.ReactNode, title: string, isCompleted: boolean, onAction: () => void, progress?: number, goal?: number }) => {
+    
+    const renderButton = () => {
+        if (isCompleted) {
+            return <Button size="sm" className="font-semibold h-8 text-xs px-6 bg-green-500 hover:bg-green-500 shadow-[0_4px_14px_0_rgb(0,200,83,38%)] cursor-default" disabled>Done</Button>;
+        }
+        return <Button size="sm" onClick={onAction} className="font-semibold h-8 text-xs px-6 bg-gray-300 text-gray-700 hover:bg-gray-400 active:scale-95 transition-transform">Go</Button>;
+    };
+    
     return (
         <div className="flex items-center gap-4 p-3 bg-white rounded-xl shadow-sm transition-all hover:shadow-md">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary shadow-inner">
@@ -55,11 +63,7 @@ const NewbieTaskItem = ({ icon, title, isCompleted, onAction, progress, goal }: 
                 )}
             </div>
             <div className="flex-shrink-0">
-                {isCompleted ? (
-                    <Button size="sm" className="font-semibold h-8 text-xs px-6 bg-green-500 hover:bg-green-600 shadow-[0_4px_14px_0_rgb(0,200,83,38%)] cursor-default" disabled>Done</Button>
-                ) : (
-                    <Button size="sm" onClick={onAction} className="font-semibold h-8 text-xs px-6 bg-gray-300 text-gray-700 hover:bg-gray-400 active:scale-95 transition-transform">Go</Button>
-                )}
+                {renderButton()}
             </div>
         </div>
     );
@@ -103,20 +107,18 @@ export default function NewbieRewardsPage() {
             where('status', '==', 'completed')
         );
         const purchaseSnapshot = await getDocs(purchaseQuery);
-        let maxPurchaseAmount = 0;
+        let totalPurchaseAmount = 0;
         purchaseSnapshot.forEach(doc => {
-            if (doc.data().amount > maxPurchaseAmount) {
-                maxPurchaseAmount = doc.data().amount;
-            }
+            totalPurchaseAmount += doc.data().amount;
         });
         
-        const hasPurchased = maxPurchaseAmount >= 1000;
+        const hasPurchased = totalPurchaseAmount >= 1000;
         if (hasPurchased && !claimed.has('nb_purchase')) {
             await updateDoc(userProfileRef, { claimedUserRewards: arrayUnion('nb_purchase') });
             claimed.add('nb_purchase');
         }
         status['nb_purchase'] = hasPurchased;
-        progress['nb_purchase'] = maxPurchaseAmount;
+        progress['nb_purchase'] = totalPurchaseAmount;
 
         // Check manual tasks
         status['nb_telegram'] = claimed.has('nb_telegram');
