@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult, signOut } from "firebase/auth";
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc, runTransaction } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
@@ -189,11 +189,13 @@ export default function AddCollectionPage() {
 
       toast({
         title: "Success!",
-        description: `${selectedMethod?.name} has been linked successfully.`,
+        description: `${selectedMethod?.name} has been linked successfully. Please log in again.`,
       });
       
-      // The auth state might be incorrect now. Force a reload to restore the original session from the cookie.
-      window.location.href = '/my/collection';
+      // Log out the user after successful linking for security
+      await signOut(auth);
+      document.cookie = 'firebase-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      window.location.href = '/login';
 
     } catch (error: any) {
        console.error("Linking error:", error);

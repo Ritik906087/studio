@@ -22,6 +22,8 @@ import { useLanguage } from "@/context/language-context";
 import { signInWithEmailAndPassword, getAuth } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { useFirestore } from "@/firebase";
+import { doc, updateDoc } from "firebase/firestore";
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -30,6 +32,7 @@ export function LoginForm() {
   const { toast } = useToast();
   const router = useRouter();
   const auth = getAuth();
+  const firestore = useFirestore();
 
   const formSchema = z.object({
     phone: z
@@ -60,8 +63,21 @@ export function LoginForm() {
       const email = `${values.phone}@lgpay.app`;
       const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
       
-      const idToken = await userCredential.user.getIdToken();
+      const user = userCredential.user;
+      const idToken = await user.getIdToken();
       document.cookie = `firebase-auth-token=${idToken}; path=/; max-age=3600`; // 1 hour expiry
+
+      if (firestore) {
+        const sessionId = Date.now().toString() + Math.random().toString(36).substring(2);
+        const userRef = doc(firestore, 'users', user.uid);
+        try {
+          await updateDoc(userRef, { sessionId });
+          localStorage.setItem('user-session-id', sessionId);
+        } catch (dbError) {
+          console.error("Failed to update session ID:", dbError);
+          // Don't fail the login if this fails, but log it.
+        }
+      }
 
       toast({
         title: "Login Successful",

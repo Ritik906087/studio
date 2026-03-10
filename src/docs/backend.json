@@ -73,6 +73,10 @@
             "type": "string"
           },
           "description": "An array of task IDs for new user rewards that have been claimed."
+        },
+        "sessionId": {
+            "type": "string",
+            "description": "A unique identifier for the current login session to enforce single-device login."
         }
       },
       "required": ["uid", "numericId", "balance", "holdBalance", "createdAt", "phoneNumber"]
@@ -430,10 +434,6 @@
       "description": "Represents a user-submitted problem report regarding an order.",
       "type": "object",
       "properties": {
-        "caseId": {
-          "type": "string",
-          "description": "A unique, user-facing ID for the support case."
-        },
         "userId": {
           "type": "string",
           "description": "The Firebase Auth UID of the user who submitted the report."
@@ -481,13 +481,9 @@
           "type": "string",
           "enum": ["pending", "resolved"],
           "description": "The current status of the report."
-        },
-        "resolutionMessage": {
-          "type": "string",
-          "description": "The message provided by the admin when resolving the report."
         }
       },
-      "required": ["caseId", "userId", "orderId", "displayOrderId", "orderType", "message", "createdAt", "status", "problemType"]
+      "required": ["userId", "orderId", "displayOrderId", "orderType", "message", "createdAt", "status", "problemType"]
     },
     "Feedback": {
       "title": "Feedback",
