@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { useUser, useFirestore, useDoc } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { doc, runTransaction, collection, addDoc, serverTimestamp, query, where, getDocs, limit, arrayUnion } from 'firebase/firestore';
+import { doc, runTransaction, collection, addDoc, serverTimestamp, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import Image from 'next/image';
 
 const TelegramIcon = () => (
@@ -87,17 +87,17 @@ export default function NewbieRewardsPage() {
         }
         setDataLoading(true);
         try {
+            // To avoid a composite index error, query only on 'status' and filter 'amount' on the client.
             const ordersQuery = query(
                 collection(firestore, 'users', user.uid, 'orders'),
-                where('status', '==', 'completed'),
-                where('amount', '>=', 1000),
-                limit(1)
+                where('status', '==', 'completed')
             );
             const ordersSnapshot = await getDocs(ordersQuery);
-            setHasCompletedFirstOrder(!ordersSnapshot.empty);
+            const hasSufficientOrder = ordersSnapshot.docs.some(doc => doc.data().amount >= 1000);
+            setHasCompletedFirstOrder(hasSufficientOrder);
         } catch (error) {
             console.error("Error fetching task data:", error);
-            toast({ variant: 'destructive', title: "Could not load tasks" });
+            toast({ variant: 'destructive', title: "Could not load task progress" });
         } finally {
             setDataLoading(false);
         }
