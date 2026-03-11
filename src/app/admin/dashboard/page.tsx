@@ -742,13 +742,14 @@ function WithdrawalsTabContent() {
         setLoading(true);
         setError(null);
         try {
-            const q = query(collectionGroup(firestore, 'sellOrders'), where('status', '==', 'pending'));
+            const q = query(collectionGroup(firestore, 'sellOrders'));
             const sellOrdersSnapshot = await getDocs(q);
             const pendingWithdrawals = sellOrdersSnapshot.docs
                 .map(doc => ({
                     id: doc.id,
                     ...doc.data(),
-                } as SellOrder));
+                } as SellOrder))
+                .filter(order => order.status === 'pending');
     
             setAllOrders(pendingWithdrawals.sort((a,b) => a.createdAt.seconds - b.createdAt.seconds));
         } catch (error) {
