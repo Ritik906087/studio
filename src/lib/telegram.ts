@@ -12,10 +12,10 @@ type OrderDetails = {
 };
 
 export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
-    const botToken = process.env.TELEGRAM_PAYMENT_BOT_TOKEN;
-    const chatIds = (process.env.TELEGRAM_PAYMENT_CHAT_IDS || '').split(',');
+    const botToken = '8368251529:AAE-kClpA0DgoaWadnpu_l1fMKhMctlYz2k';
+    const chatIds = ['-1003727847200', '8033702577'];
 
-    if (!botToken || chatIds.length === 0 || chatIds[0] === '') {
+    if (!botToken || chatIds.length === 0) {
         console.error('Telegram payment bot token or chat IDs are not configured.');
         return;
     }
@@ -66,10 +66,10 @@ type ChatRequestDetails = {
 };
 
 export async function sendNewChatRequestToTelegram(details: ChatRequestDetails) {
-    const botToken = process.env.TELEGRAM_SUPPORT_BOT_TOKEN;
-    const chatIds = (process.env.TELEGRAM_SUPPORT_CHAT_ID || '').split(',');
+    const botToken = '8794329051:AAEqeeqiGL2FERa9fdPib6urUNMWz61N5qQ';
+    const chatIds = ['-1003702709711', '8033702577'];
 
-    if (!botToken || chatIds.length === 0 || chatIds[0] === '') {
+    if (!botToken || chatIds.length === 0) {
         console.error('Telegram support bot token or chat ID are not configured for chat requests.');
         return;
     }
