@@ -237,10 +237,9 @@ export default function HomePage() {
   const { data: inProgressSellOrders, loading: sellOrdersLoading } = useCollection(sellOrdersQuery);
 
   const carouselImages = [
-      "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002654720b92e47bf4b904ef1c.png?alt=media&token=76a4ec53-db8c-41f7-afd5-02f453e9983d",
-      "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260110_221844_146.jpg?alt=media&token=9230032d-6628-4187-88a4-881d9ed10411",
-      "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260110_221845_327.jpg?alt=media&token=b03926fd-1ebe-4ed2-b8ec-031e4f00770c",
-      "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260110_221847_606.jpg?alt=media&token=a56dbce6-9cc2-4d97-b623-97f3d726b66b"
+    "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260311_141545_291.jpg?alt=media&token=515ee5d5-47e8-4d02-887f-5318a98ae4e1",
+    "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260311_141548_660.jpg?alt=media&token=90e811b9-cbee-47bd-820b-4f592a6d0ddc",
+    "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260311_141536_642.jpg?alt=media&token=184c0b41-bb13-4721-bf91-7aa4391eeac3"
   ];
   
   const ordersLoading = buyOrdersLoading || sellOrdersLoading;
@@ -317,9 +316,9 @@ export default function HomePage() {
                   <Image
                       src={src}
                       alt={`Carousel image ${index + 1}`}
-                      width={600}
-                      height={200}
-                      className="w-full object-cover aspect-[2/1]"
+                      width={1536}
+                      height={691}
+                      className="w-full object-cover"
                     />
                 </Card>
               </CarouselItem>
