@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -171,15 +170,15 @@ export default function NewbieFriendRewardsPage() {
                     <CardContent className="grid grid-cols-3 divide-x divide-primary-foreground/30 p-4 text-center">
                         <div className="space-y-1 pr-2">
                             <p className="text-xs opacity-80">Total bonus</p>
-                            <p className="font-bold text-xl">₹{loading ? <Skeleton className="h-6 w-10 mx-auto bg-primary-foreground/20" /> : totalBonus}</p>
+                            <div className="font-bold text-xl">₹{loading ? <Skeleton className="h-6 w-10 mx-auto bg-primary-foreground/20" /> : totalBonus}</div>
                         </div>
                         <div className="space-y-1 px-2">
                             <p className="text-xs opacity-80">Done / All Friends</p>
-                            <p className="font-bold text-xl">{loading ? <Skeleton className="h-6 w-10 mx-auto bg-primary-foreground/20" /> : `${doneFriendsCount} / ${allFriendsCount}`}</p>
+                            <div className="font-bold text-xl">{loading ? <Skeleton className="h-6 w-10 mx-auto bg-primary-foreground/20" /> : `${doneFriendsCount} / ${allFriendsCount}`}</div>
                         </div>
                         <div className="space-y-1 pl-2">
                             <p className="text-xs opacity-80">Received bonus</p>
-                            <p className="font-bold text-xl">₹{loading ? <Skeleton className="h-6 w-10 mx-auto bg-primary-foreground/20" /> : receivedBonus}</p>
+                            <div className="font-bold text-xl">₹{loading ? <Skeleton className="h-6 w-10 mx-auto bg-primary-foreground/20" /> : receivedBonus}</div>
                         </div>
                     </CardContent>
                 </Card>
