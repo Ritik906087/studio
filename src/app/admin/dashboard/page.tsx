@@ -585,7 +585,10 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
     const firestore = useFirestore();
     const { toast } = useToast();
     const receiptRef = useRef<HTMLDivElement>(null);
-    const isBankWithdrawal = order.withdrawalMethod.type === 'bank';
+
+    // This is the user's destination account (either bank or UPI).
+    const withdrawalDetails = order.withdrawalMethod;
+    const isBankWithdrawal = withdrawalDetails.type === 'bank';
 
     const handleConfirm = async () => {
         if (utr.length !== 12 || !/^\d+$/.test(utr)) {
@@ -705,16 +708,16 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
                             <p><strong>Amount:</strong> <span className="font-bold text-lg text-primary">₹{order.amount}</span></p>
                             <p><strong>User UID:</strong> {order.userNumericId}</p>
                             <p><strong>Phone:</strong> {order.userPhoneNumber}</p>
-                            <p><strong>Method:</strong> {order.withdrawalMethod.type.toUpperCase()}</p>
+                            <p><strong>Method:</strong> {withdrawalDetails.type.toUpperCase()}</p>
                             {isBankWithdrawal ? (
                                 <>
-                                <p><strong>Bank:</strong> {order.withdrawalMethod.bankName}</p>
-                                <p><strong>Holder:</strong> {order.withdrawalMethod.accountHolderName}</p>
-                                <p><strong>Account No:</strong> {order.withdrawalMethod.accountNumber}</p>
-                                <p><strong>IFSC:</strong> {order.withdrawalMethod.ifscCode}</p>
+                                <p><strong>Bank:</strong> {withdrawalDetails.bankName}</p>
+                                <p><strong>Holder:</strong> {withdrawalDetails.accountHolderName}</p>
+                                <p><strong>Account No:</strong> {withdrawalDetails.accountNumber}</p>
+                                <p><strong>IFSC:</strong> {withdrawalDetails.ifscCode}</p>
                                 </>
                             ) : (
-                                <p><strong>To ({order.withdrawalMethod.name}):</strong> {order.withdrawalMethod.upiId}</p>
+                                <p><strong>To ({withdrawalDetails.name}):</strong> {withdrawalDetails.upiId}</p>
                             )}
                             <div className="space-y-2 pt-2">
                                 <Label htmlFor="utr">12-Digit UTR Number</Label>
@@ -2048,5 +2051,3 @@ export default function AdminDashboardPage() {
 
     return <AdminDashboard />;
 }
-
-    
