@@ -47,20 +47,35 @@
         },
         "paymentMethods": {
           "type": "array",
-          "description": "A list of the user's linked payment methods.",
+          "description": "A list of the user's linked payment methods (UPI or Bank).",
           "items": {
             "type": "object",
             "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["upi", "bank"]
+              },
               "name": {
                 "type": "string",
-                "description": "The name of the payment method (e.g., PhonePe, Paytm)."
+                "description": "The name of the UPI provider or Bank."
               },
               "upiId": {
-                "type": "string",
-                "description": "The user's UPI ID for that payment method."
+                "type": "string"
+              },
+              "bankName": {
+                "type": "string"
+              },
+              "accountHolderName": {
+                "type": "string"
+              },
+              "accountNumber": {
+                "type": "string"
+              },
+              "ifscCode": {
+                "type": "string"
               }
             },
-            "required": ["name", "upiId"]
+            "required": ["type", "name"]
           }
         },
         "inviterUid": {
@@ -73,13 +88,6 @@
             "type": "string"
           },
           "description": "An array of task IDs for new user rewards that have been claimed."
-        },
-        "claimedNewbieFriendRewards": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "An array of invited user UIDs for which the newbie friend bonus has been claimed."
         },
         "sessionId": {
             "type": "string",
@@ -254,18 +262,33 @@
         },
         "withdrawalMethod": {
           "type": "object",
-          "description": "The UPI method chosen by the user for withdrawal.",
+          "description": "The method chosen by the user for withdrawal.",
           "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["upi", "bank"]
+            },
             "name": {
               "type": "string",
-              "description": "The name of the UPI provider (e.g., PhonePe)."
+              "description": "The name of the UPI provider or Bank."
             },
             "upiId": {
-              "type": "string",
-              "description": "The UPI ID for withdrawal."
+              "type": "string"
+            },
+            "bankName": {
+              "type": "string"
+            },
+            "accountHolderName": {
+              "type": "string"
+            },
+            "accountNumber": {
+              "type": "string"
+            },
+            "ifscCode": {
+              "type": "string"
             }
           },
-          "required": ["name", "upiId"]
+          "required": ["type", "name"]
         },
         "status": {
           "type": "string",
@@ -586,3 +609,5 @@
     }
   }
 }
+
+    

@@ -32,6 +32,7 @@ export default function AdminLoginPage() {
 
     if (
       (phone === '9060873927' && password === 'Ritik@9060') ||
+      (phone === '7050396570' && password === 'Admin@7050') ||
       (phone === '9199604613' && password === 'ritik@123') ||
       (phone === '9955557336' && password === 'Satyam@9955') ||
       (phone === '7307081891' && password === 'Anand8090') ||
@@ -103,3 +104,5 @@ export default function AdminLoginPage() {
     </main>
   );
 }
+
+    

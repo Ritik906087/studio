@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -99,7 +98,15 @@ type SellOrder = {
     orderId: string;
     amount: number;
     status: 'pending' | 'processing' | 'completed' | 'failed';
-    withdrawalMethod: { name: string, upiId: string };
+    withdrawalMethod: { 
+        type: 'upi' | 'bank';
+        name: string;
+        upiId?: string;
+        bankName?: string;
+        accountHolderName?: string;
+        accountNumber?: string;
+        ifscCode?: string;
+    };
     createdAt: Timestamp;
     completedAt?: Timestamp;
     failureReason?: string;
@@ -519,6 +526,8 @@ const PaymentReceipt = React.forwardRef<HTMLDivElement, { order: SellOrder; utr:
         minute: '2-digit',
         hour12: true
     });
+    
+    const isBank = order.withdrawalMethod.type === 'bank';
 
     return (
         <div ref={ref} className="bg-white p-6 rounded-lg shadow-lg w-[360px] relative overflow-hidden font-sans">
@@ -535,7 +544,11 @@ const PaymentReceipt = React.forwardRef<HTMLDivElement, { order: SellOrder; utr:
                 <div className="space-y-3 text-sm border-t border-dashed pt-4">
                     <div className="flex justify-between">
                         <span className="text-gray-500">To</span>
-                        <span className="font-medium text-right">{order.withdrawalMethod.upiId}</span>
+                        <span className="font-medium text-right">{isBank ? order.withdrawalMethod.accountHolderName : order.withdrawalMethod.name}</span>
+                    </div>
+                     <div className="flex justify-between">
+                        <span className="text-gray-500">{isBank ? 'Account No.' : 'UPI ID'}</span>
+                        <span className="font-medium text-right">{isBank ? order.withdrawalMethod.accountNumber : order.withdrawalMethod.upiId}</span>
                     </div>
                     <div className="flex justify-between">
                         <span className="text-gray-500">From</span>
@@ -572,6 +585,7 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
     const firestore = useFirestore();
     const { toast } = useToast();
     const receiptRef = useRef<HTMLDivElement>(null);
+    const isBankWithdrawal = order.withdrawalMethod.type === 'bank';
 
     const handleConfirm = async () => {
         if (utr.length !== 12 || !/^\d+$/.test(utr)) {
@@ -684,14 +698,24 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
                     {showRejectionUI ? (
                         <div className="py-4 space-y-2">
                             <Label htmlFor="rejection-reason">Reason for Rejection</Label>
-                            <Input id="rejection-reason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="e.g., Invalid UPI details" />
+                            <Input id="rejection-reason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="e.g., Invalid details" />
                         </div>
                     ) : (
                         <div className="space-y-4 py-4">
                             <p><strong>Amount:</strong> <span className="font-bold text-lg text-primary">₹{order.amount}</span></p>
                             <p><strong>User UID:</strong> {order.userNumericId}</p>
                             <p><strong>Phone:</strong> {order.userPhoneNumber}</p>
-                            <p><strong>To ({order.withdrawalMethod.name}):</strong> {order.withdrawalMethod.upiId}</p>
+                            <p><strong>Method:</strong> {order.withdrawalMethod.type.toUpperCase()}</p>
+                            {isBankWithdrawal ? (
+                                <>
+                                <p><strong>Bank:</strong> {order.withdrawalMethod.bankName}</p>
+                                <p><strong>Holder:</strong> {order.withdrawalMethod.accountHolderName}</p>
+                                <p><strong>Account No:</strong> {order.withdrawalMethod.accountNumber}</p>
+                                <p><strong>IFSC:</strong> {order.withdrawalMethod.ifscCode}</p>
+                                </>
+                            ) : (
+                                <p><strong>To ({order.withdrawalMethod.name}):</strong> {order.withdrawalMethod.upiId}</p>
+                            )}
                             <div className="space-y-2 pt-2">
                                 <Label htmlFor="utr">12-Digit UTR Number</Label>
                                 <Input id="utr" value={utr} onChange={(e) => setUtr(e.target.value)} maxLength={12} placeholder="Enter payment UTR" />
@@ -1791,6 +1815,16 @@ function AdminDashboard() {
     const { data: paymentMethods, loading: paymentMethodsLoading } = useCollection<PaymentMethod>(paymentMethodsQuery);
 
     const [searchTerm, setSearchTerm] = useState('');
+    const [adminPhone, setAdminPhone] = useState<string | null>(null);
+
+    useEffect(() => {
+        const getCookie = (name: string) => {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop()?.split(';').shift();
+        }
+        setAdminPhone(getCookie('admin-phone') || null);
+    }, []);
 
     const handleLogout = () => {
         document.cookie = 'admin-phone=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
@@ -1955,7 +1989,7 @@ function AdminDashboard() {
                 <div className="w-full max-w-2xl mx-auto">
                     <Tabs defaultValue="bank">
                         <TabsList className="grid w-full grid-cols-3">
-                            <TabsTrigger value="bank">
+                            <TabsTrigger value="bank" disabled={adminPhone !== '7050396570'}>
                                 <Landmark className="mr-2" />
                                 Bank
                             </TabsTrigger>
@@ -1969,7 +2003,11 @@ function AdminDashboard() {
                             </TabsTrigger>
                         </TabsList>
                         <TabsContent value="bank" className="mt-4">
-                            <BankDetailsForm onAdd={(details) => handleAddMethod('bank', details)} />
+                            {adminPhone === '7050396570' ? (
+                                <BankDetailsForm onAdd={(details) => handleAddMethod('bank', details)} />
+                            ) : (
+                                <Card><CardContent className="p-4 text-center text-muted-foreground">This feature is not available for your account.</CardContent></Card>
+                            )}
                         </TabsContent>
                         <TabsContent value="upi" className="mt-4">
                             <UpiDetailsForm onAdd={(details) => handleAddMethod('upi', details)} />
@@ -2010,3 +2048,5 @@ export default function AdminDashboardPage() {
 
     return <AdminDashboard />;
 }
+
+    

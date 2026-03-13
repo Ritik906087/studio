@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ChevronLeft, Info, Wallet } from 'lucide-react';
+import { ChevronLeft, Info, Wallet, Landmark } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc } from '@/firebase';
@@ -24,19 +24,25 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader } from '@/components/ui/loader';
 
+type WithdrawalMethod = {
+    type: 'upi' | 'bank';
+    name: string;
+    upiId?: string;
+    bankName?: string;
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+}
+
 type UserProfile = {
   id: string;
   balance: number;
   holdBalance: number;
   numericId: string;
   phoneNumber: string;
-  paymentMethods?: { name: string; upiId: string }[];
+  paymentMethods?: WithdrawalMethod[];
 };
 
-type WithdrawalMethod = {
-    name: string;
-    upiId: string;
-}
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
   PhonePe: {
@@ -68,7 +74,7 @@ export default function SellPage() {
   const firestore = useFirestore();
 
   const [amount, setAmount] = useState('');
-  const [selectedUpi, setSelectedUpi] = useState<WithdrawalMethod | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<WithdrawalMethod | null>(null);
   const [isAmountValid, setIsAmountValid] = useState(true);
   const [isSelling, setIsSelling] = useState(false);
 
@@ -101,8 +107,8 @@ export default function SellPage() {
         return;
     }
     
-    if (!selectedUpi) {
-        toast({ variant: 'destructive', title: 'No UPI selected', description: 'Please select a UPI account for withdrawal.' });
+    if (!selectedMethod) {
+        toast({ variant: 'destructive', title: 'No method selected', description: 'Please select a withdrawal method.' });
         return;
     }
 
@@ -141,7 +147,7 @@ export default function SellPage() {
                 orderId: orderId,
                 amount: sellAmount,
                 remainingAmount: sellAmount, // For P2P matching
-                withdrawalMethod: selectedUpi,
+                withdrawalMethod: selectedMethod,
                 status: 'pending',
                 createdAt: serverTimestamp(),
                 userNumericId: profileData.numericId,
@@ -189,7 +195,7 @@ export default function SellPage() {
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>1. Minimum withdrawal amount is ₹100.</p>
             <p>2. Withdrawal amount must be a multiple of 100 (e.g., 100, 500, 1200).</p>
-            <p>3. Funds will be transferred to your selected UPI account within 30 minutes.</p>
+            <p>3. Funds will be transferred to your selected account within 30 minutes.</p>
           </CardContent>
         </Card>
 
@@ -234,30 +240,41 @@ export default function SellPage() {
                     <Skeleton className="h-24 w-full" />
                 ) : userProfile?.paymentMethods && userProfile.paymentMethods.length > 0 ? (
                     <RadioGroup 
-                        onValueChange={(value) => setSelectedUpi(JSON.parse(value))}
+                        onValueChange={(value) => setSelectedMethod(JSON.parse(value))}
                         className="space-y-3"
                     >
-                        {userProfile.paymentMethods.map((method) => {
-                            const details = paymentMethodDetails[method.name];
-                            if (!details) return null;
-                            return (
-                                <Label key={method.upiId} htmlFor={method.upiId} className={cn("flex items-center gap-4 rounded-xl p-3 border-2 border-transparent has-[:checked]:border-primary", details.bgColor)}>
-                                    <RadioGroupItem value={JSON.stringify(method)} id={method.upiId} className="border-white text-white ring-offset-0" />
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
-                                        <Image
-                                            src={details.logo}
-                                            alt={`${method.name} logo`}
-                                            width={32}
-                                            height={32}
-                                            className="object-contain"
-                                        />
-                                    </div>
-                                    <div className="text-white">
-                                        <span className="text-lg font-semibold">{method.name}</span>
-                                        <p className="text-sm font-mono text-white/80">{method.upiId}</p>
-                                    </div>
-                                </Label>
-                            )
+                        {userProfile.paymentMethods.map((method, index) => {
+                            if (method.type === 'upi') {
+                                const details = paymentMethodDetails[method.name];
+                                if (!details) return null;
+                                return (
+                                    <Label key={method.upiId} htmlFor={method.upiId} className={cn("flex items-center gap-4 rounded-xl p-3 border-2 border-transparent has-[:checked]:border-primary", details.bgColor)}>
+                                        <RadioGroupItem value={JSON.stringify(method)} id={method.upiId} className="border-white text-white ring-offset-0" />
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
+                                            <Image src={details.logo} alt={`${method.name} logo`} width={32} height={32} className="object-contain" />
+                                        </div>
+                                        <div className="text-white">
+                                            <span className="text-lg font-semibold">{method.name}</span>
+                                            <p className="text-sm font-mono text-white/80">{method.upiId}</p>
+                                        </div>
+                                    </Label>
+                                )
+                            }
+                            if (method.type === 'bank') {
+                                 return (
+                                    <Label key={method.accountNumber} htmlFor={`bank-${index}`} className="flex items-center gap-4 rounded-xl p-3 border-2 border-transparent has-[:checked]:border-primary bg-slate-700">
+                                        <RadioGroupItem value={JSON.stringify(method)} id={`bank-${index}`} className="border-white text-white ring-offset-0" />
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
+                                            <Landmark className="h-6 w-6 text-slate-700"/>
+                                        </div>
+                                        <div className="text-white">
+                                            <span className="text-lg font-semibold">{method.bankName}</span>
+                                            <p className="text-sm font-mono text-white/80">{method.accountNumber}</p>
+                                        </div>
+                                    </Label>
+                                )
+                            }
+                            return null;
                         })}
                     </RadioGroup>
                 ) : (
@@ -265,7 +282,7 @@ export default function SellPage() {
                         <Wallet className="h-8 w-8 opacity-50 mb-2" />
                         <p>No withdrawal method active</p>
                         <Button asChild variant="link" className="mt-1">
-                            <Link href="/my/collection/add">Add UPI Account</Link>
+                            <Link href="/my/collection/add">Add Payment Method</Link>
                         </Button>
                     </div>
                 )}
@@ -277,7 +294,7 @@ export default function SellPage() {
         <Button 
             className="w-full h-12 btn-gradient font-bold text-base"
             onClick={handleSell}
-            disabled={isSelling || !isAmountValid || !amount || !selectedUpi}
+            disabled={isSelling || !isAmountValid || !amount || !selectedMethod}
         >
           {isSelling ? <Loader size="sm" className="mr-2" /> : 'Sell Now'}
         </Button>
@@ -285,3 +302,5 @@ export default function SellPage() {
     </div>
   );
 }
+
+    
