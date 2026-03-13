@@ -204,17 +204,24 @@ export default function NewbieRewardsPage() {
                         <p className="text-sm opacity-90">Reward Amount</p>
                         <p className="text-4xl font-bold mt-1">₹{FINAL_REWARD_AMOUNT}</p>
                     </div>
-                    {allTasksCompleted && !isFinalRewardClaimed ? (
-                        <Button 
-                            className="bg-white text-primary font-bold rounded-lg px-5 py-2 text-sm hover:bg-white/90 shadow-[0_4px_14px_0_rgb(0,0,0,10%)] transition-all active:scale-95 animate-pulse"
-                            disabled={isClaimingFinal}
-                            onClick={handleFinalClaim}
-                        >
-                            {isClaimingFinal ? <Loader size="xs" /> : 'Claim'}
-                        </Button>
+                     {allTasksCompleted ? (
+                        isFinalRewardClaimed ? (
+                            <Button size="lg" className="font-semibold h-10 text-sm px-6 bg-green-500 hover:bg-green-500 shadow-[0_4px_14px_0_rgb(0,200,83,38%)] cursor-default" disabled>
+                                Claimed
+                            </Button>
+                        ) : (
+                            <Button
+                                size="lg"
+                                className="bg-white text-primary font-bold rounded-lg px-5 h-10 text-sm hover:bg-white/90 shadow-[0_4px_14px_0_rgb(0,0,0,10%)] transition-all active:scale-95 animate-pulse"
+                                disabled={isClaimingFinal}
+                                onClick={handleFinalClaim}
+                            >
+                                {isClaimingFinal ? <Loader size="xs" /> : 'Claim'}
+                            </Button>
+                        )
                     ) : (
-                        <div className={cn("bg-black/20 text-white font-semibold rounded-lg px-4 py-2 text-sm", isFinalRewardClaimed && "bg-green-500")}>
-                            {isFinalRewardClaimed ? 'Done' : 'Undone'}
+                        <div className="bg-black/20 text-white font-semibold rounded-lg px-4 py-2 text-sm">
+                            Undone
                         </div>
                     )}
                 </CardContent>

@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { useUser, useFirestore, useCollection, useDoc } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { doc, runTransaction, collection, query, where, arrayUnion, serverTimestamp, addDoc, getDocs } from 'firebase/firestore';
+import { doc, runTransaction, collection, query, where, arrayUnion, serverTimestamp, addDoc, getDocs, Timestamp } from 'firebase/firestore';
 import {
   Accordion,
   AccordionContent,
@@ -18,8 +19,11 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 
-const FRIEND_REWARD_AMOUNT = 50;
+
+const FRIEND_REWARD_AMOUNT = 200;
+const FRIEND_PURCHASE_GOAL = 1000;
 
 type FriendProfile = {
     id: string;
@@ -33,7 +37,7 @@ type UserProfile = {
     claimedNewbieFriendRewards?: string[];
 }
 
-const FriendItem = ({ friend, status }: { friend: FriendProfile, status: 'Done' | 'Undone' | 'Received' }) => {
+const FriendItem = ({ friend, status, progress, goal }: { friend: FriendProfile, status: 'Done' | 'Undone' | 'Received', progress: number, goal: number }) => {
     
     const statusConfig = {
         Done: { text: "Done", className: "bg-green-100 text-green-800" },
@@ -49,6 +53,12 @@ const FriendItem = ({ friend, status }: { friend: FriendProfile, status: 'Done' 
             <div className="flex-1">
                 <p className="font-semibold text-sm">Invited Friend</p>
                 <p className="font-mono text-xs text-muted-foreground">{friend.numericId}</p>
+                 {status !== 'Received' && ( // Don't show progress for already claimed
+                    <div className="flex items-center gap-2 mt-1">
+                        <Progress value={Math.min((progress / goal) * 100, 100)} className="h-1.5 w-20" />
+                        <p className="text-xs text-muted-foreground font-mono">{Math.min(progress, goal)}/{goal}</p>
+                    </div>
+                )}
             </div>
             <div className={cn("px-3 py-1 text-xs font-bold rounded-full", currentStatus.className)}>
                 {currentStatus.text}
@@ -64,6 +74,8 @@ export default function NewbieFriendRewardsPage() {
     const router = useRouter();
 
     const [isClaiming, setIsClaiming] = useState(false);
+    const [friendPurchaseStats, setFriendPurchaseStats] = useState<Record<string, number>>({});
+    const [loadingStats, setLoadingStats] = useState(true);
     
     const userProfileRef = useMemo(() => {
         if (!user || !firestore) return null;
@@ -79,6 +91,31 @@ export default function NewbieFriendRewardsPage() {
 
     const { data: invitedFriends, loading: friendsLoading } = useCollection<FriendProfile>(invitedUsersQuery);
     
+    useEffect(() => {
+        if (!invitedFriends || invitedFriends.length === 0 || !firestore) {
+            setLoadingStats(false);
+            return;
+        }
+
+        const fetchStats = async () => {
+            setLoadingStats(true);
+            const stats: Record<string, number> = {};
+            for (const friend of invitedFriends) {
+                const ordersQuery = query(
+                    collection(firestore, 'users', friend.id, 'orders'),
+                    where('status', '==', 'completed')
+                );
+                const ordersSnapshot = await getDocs(ordersQuery);
+                const totalPurchase = ordersSnapshot.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
+                stats[friend.id] = totalPurchase;
+            }
+            setFriendPurchaseStats(stats);
+            setLoadingStats(false);
+        };
+
+        fetchStats();
+    }, [invitedFriends, firestore]);
+    
     const friendStats = useMemo(() => {
         if (!invitedFriends) return { done: [], undone: [], received: [] };
 
@@ -89,7 +126,9 @@ export default function NewbieFriendRewardsPage() {
         const received: FriendProfile[] = [];
 
         invitedFriends.forEach(friend => {
-            const hasCompletedTask = friend.claimedUserRewards?.includes('nb_final_reward') || false;
+            const totalPurchase = friendPurchaseStats[friend.id] || 0;
+            const hasCompletedTask = totalPurchase >= FRIEND_PURCHASE_GOAL;
+            
             if (hasCompletedTask) {
                 if (claimedFriendUids.has(friend.id)) {
                     received.push(friend);
@@ -103,7 +142,7 @@ export default function NewbieFriendRewardsPage() {
         
         return { done, undone, received };
 
-    }, [invitedFriends, userProfile]);
+    }, [invitedFriends, userProfile, friendPurchaseStats]);
 
     const totalBonus = friendStats.done.length * FRIEND_REWARD_AMOUNT;
     const receivedBonus = friendStats.received.length * FRIEND_REWARD_AMOUNT;
@@ -151,7 +190,7 @@ export default function NewbieFriendRewardsPage() {
         }
     };
     
-    const loading = userLoading || profileLoading || friendsLoading;
+    const loading = userLoading || profileLoading || friendsLoading || loadingStats;
 
     return (
         <div className="flex min-h-screen flex-col bg-secondary font-body">
@@ -184,7 +223,7 @@ export default function NewbieFriendRewardsPage() {
                 </Card>
 
                 <p className="text-sm text-destructive text-center bg-red-100 p-2 rounded-lg">
-                    Warning: You need to remind your friends to complete the newbie tasks to receive rewards
+                   Warning: You will receive ₹200 LG only when your referred user buys ₹1000 worth of LG.
                 </p>
                 
                 <Accordion type="single" collapsible defaultValue="item-1" className="w-full">
@@ -198,7 +237,8 @@ export default function NewbieFriendRewardsPage() {
                              ) : allFriendsCount > 0 ? (
                                 [...friendStats.done, ...friendStats.undone, ...friendStats.received].map(friend => {
                                     const status = friendStats.done.includes(friend) ? 'Done' : friendStats.received.includes(friend) ? 'Received' : 'Undone';
-                                    return <FriendItem key={friend.id} friend={friend} status={status} />
+                                    const progress = friendPurchaseStats[friend.id] || 0;
+                                    return <FriendItem key={friend.id} friend={friend} status={status} progress={progress} goal={FRIEND_PURCHASE_GOAL} />
                                 })
                              ) : (
                                 <p className="text-center text-sm text-muted-foreground p-4">You haven't invited any friends yet.</p>
