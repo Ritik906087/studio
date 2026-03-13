@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -188,7 +189,7 @@ export default function SellPage() {
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>1. Minimum withdrawal amount is ₹100.</p>
             <p>2. Withdrawal amount must be a multiple of 100 (e.g., 100, 500, 1200).</p>
-            <p>3. Funds will be transferred to your selected UPI account within 24 hours.</p>
+            <p>3. Funds will be transferred to your selected UPI account within 30 minutes.</p>
           </CardContent>
         </Card>
 

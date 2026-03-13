@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2, Info, Send } from 'lucide-react';
+import { ChevronLeft, Copy, Upload, Loader2, Info, Send, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useCollection, useDoc, useUser, useFirestore, useStorage } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -466,7 +466,7 @@ function PaymentDetailsContent() {
                     const receiverDetailsForTg = Object.fromEntries(
                         Object.entries(details).map(([key, value]) => [key, String(value)])
                     );
-                    await sendOrderConfirmationToTelegram({
+                    sendOrderConfirmationToTelegram({
                         orderId: order.orderId,
                         userNumericId: userProfile.numericId,
                         amount: order.baseAmount,
@@ -735,6 +735,15 @@ function PaymentDetailsContent() {
             </header>
 
             <main className="flex-grow p-4 space-y-4">
+                 <Card className="bg-yellow-50 border border-yellow-200">
+                    <CardContent className="p-3 flex items-start gap-3 text-yellow-800">
+                        <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm">
+                            Please pay from the UPI app you have selected. If your name/time doesn't match but the UPI ID/Account Number is correct, your payment will be processed without issues. Paying from an unselected method may cause failure.
+                        </p>
+                    </CardContent>
+                </Card>
+
                 {(type === 'upi' || type === 'p2p_upi') && currentProviderDetails && provider && (
                     <Card className={cn("text-white shadow-md", currentProviderDetails.bgColor)}>
                         <CardContent className="p-3 flex items-center justify-between">
