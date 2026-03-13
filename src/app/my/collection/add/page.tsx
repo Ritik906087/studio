@@ -21,6 +21,7 @@ import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationRes
 import { useUser, useFirestore, useDoc } from '@/firebase';
 import { doc, runTransaction } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 
 type PaymentMethod = {
@@ -67,7 +68,8 @@ export default function AddCollectionPage() {
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
   const confirmationResult = useRef<ConfirmationResult | null>(null);
 
-  const showBankOption = userProfile?.phoneNumber === '7050396570';
+  const specialBankUsers = ['7050396570', '7307081891', '9798630209', '9965567336', '9199604613'];
+  const showBankOption = userProfile?.phoneNumber && specialBankUsers.includes(userProfile.phoneNumber);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -360,51 +362,52 @@ export default function AddCollectionPage() {
 
       {/* Bank Dialog */}
       <Dialog open={isBankDialogOpen} onOpenChange={setIsBankDialogOpen}>
-          <DialogContent className="sm:max-w-[425px] rounded-2xl">
-            <DialogHeader>
+        <DialogContent className="sm:max-w-[425px] rounded-2xl p-0">
+            <DialogHeader className="p-6 pb-4 border-b">
               <DialogTitle className="text-center text-xl font-bold">Link Bank Account</DialogTitle>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label>Account Holder Name</Label>
-                <Input placeholder="Full Name" className="h-12" value={accountHolderName} onChange={e => setAccountHolderName(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Bank Name</Label>
-                <Input placeholder="e.g., State Bank of India" className="h-12" value={bankName} onChange={e => setBankName(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Account Number</Label>
-                <Input placeholder="Bank Account Number" className="h-12" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <Label>IFSC Code</Label>
-                <Input placeholder="IFSC Code" className="h-12" value={ifscCode} onChange={e => setIfscCode(e.target.value)} />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="bank-phone">Enter Your Registered Phone Number</Label>
-                <Input id="bank-phone" type="tel" placeholder="Phone Number" className="h-12" value={phone} onChange={e => setPhone(e.target.value)} maxLength={10} />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="bank-otp">OTP</Label>
-                <div className="relative flex items-center">
-                  <Input id="bank-otp" placeholder="Verification Code" className="h-12 pr-28" value={otp} onChange={e => setOtp(e.target.value)} disabled={!otpSent} />
-                  <Button type="button" variant="secondary" className={cn("absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30", (isOtpSending || countdown > 0) && "px-2")} onClick={handleSendOtp} disabled={isOtpSending || countdown > 0}>
-                    {isOtpSending ? <Loader size="xs" /> : (countdown > 0 ? `${countdown}s` : (otpSent ? "Resend" : "Send"))}
-                  </Button>
+            <ScrollArea className="max-h-[60vh]">
+              <div className="grid gap-4 p-6">
+                  <div className="grid gap-2">
+                    <Label>Account Holder Name</Label>
+                    <Input placeholder="Full Name" className="h-12" value={accountHolderName} onChange={e => setAccountHolderName(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Bank Name</Label>
+                    <Input placeholder="e.g., State Bank of India" className="h-12" value={bankName} onChange={e => setBankName(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Account Number</Label>
+                    <Input placeholder="Bank Account Number" className="h-12" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>IFSC Code</Label>
+                    <Input placeholder="IFSC Code" className="h-12" value={ifscCode} onChange={e => setIfscCode(e.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="bank-phone">Enter Your Registered Phone Number</Label>
+                    <Input id="bank-phone" type="tel" placeholder="Phone Number" className="h-12" value={phone} onChange={e => setPhone(e.target.value)} maxLength={10} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="bank-otp">OTP</Label>
+                    <div className="relative flex items-center">
+                      <Input id="bank-otp" placeholder="Verification Code" className="h-12 pr-28" value={otp} onChange={e => setOtp(e.target.value)} disabled={!otpSent} />
+                      <Button type="button" variant="secondary" className={cn("absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30", (isOtpSending || countdown > 0) && "px-2")} onClick={handleSendOtp} disabled={isOtpSending || countdown > 0}>
+                        {isOtpSending ? <Loader size="xs" /> : (countdown > 0 ? `${countdown}s` : (otpSent ? "Resend" : "Send"))}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <DialogFooter className="sm:justify-center">
+            </ScrollArea>
+            <DialogFooter className="sm:justify-center p-6 pt-4 border-t">
               <Button type="submit" onClick={handleBankFormSubmit} className="w-full h-12 rounded-full btn-gradient font-bold text-base" disabled={isLinking || !otpSent || !otp || !accountNumber}>
                 {isLinking && <Loader size="xs" className="mr-2" />}
                 Link Bank Account
               </Button>
             </DialogFooter>
-          </DialogContent>
+        </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-    
