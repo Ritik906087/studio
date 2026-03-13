@@ -1398,54 +1398,22 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
 function ConfirmationsTabContent() {
     const firestore = useFirestore();
     const [allOrders, setAllOrders] = useState<Order[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<any>(null);
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-    const [usersLoading, setUsersLoading] = useState(true);
     const [adminPaymentMethods, setAdminPaymentMethods] = useState<PaymentMethod[]>([]);
+    
+    const [ordersLoading, setOrdersLoading] = useState(true);
+    const [usersLoading, setUsersLoading] = useState(true);
     const [methodsLoading, setMethodsLoading] = useState(true);
+
+    const [error, setError] = useState<any>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Fetch static data (users, payment methods) once on component mount
+    // Real-time listener for orders
     useEffect(() => {
         if (!firestore) return;
-        const fetchStaticData = async () => {
-            setUsersLoading(true);
-            setMethodsLoading(true);
-            try {
-                const usersPromise = getDocs(collection(firestore, 'users'));
-                const methodsPromise = getDocs(collection(firestore, 'paymentMethods'));
-
-                const [usersSnapshot, methodsSnapshot] = await Promise.all([
-                    usersPromise,
-                    methodsPromise,
-                ]);
-
-                const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
-                setAllUsers(usersData);
-                setUsersLoading(false);
-
-                const methodsData = methodsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentMethod));
-                setAdminPaymentMethods(methodsData);
-                setMethodsLoading(false);
-            } catch (e) {
-                console.error("Error fetching static confirmation data:", e);
-                setError(e); // Set an error state to inform the user
-            }
-        };
-        fetchStaticData();
-    }, [firestore]);
-    
-    // Set up a real-time listener for the orders collection group
-    useEffect(() => {
-        if (!firestore) return;
-
-        setLoading(true);
-        // Query the entire 'orders' collection group to avoid needing a specific index
+        setOrdersLoading(true);
         const q = query(collectionGroup(firestore, 'orders'));
-        
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            // Filter for pending confirmations on the client-side
             const pendingOrders = snapshot.docs
                 .map(orderDoc => ({
                     id: orderDoc.id,
@@ -1455,17 +1423,51 @@ function ConfirmationsTabContent() {
                 .filter(order => ['pending_confirmation', 'in_applied'].includes(order.status));
             
             setAllOrders(pendingOrders);
-            setLoading(false);
+            setOrdersLoading(false);
             setError(null);
         }, (err) => {
             console.error("Error listening to order confirmations:", err);
             setError(err);
-            setLoading(false);
+            setOrdersLoading(false);
         });
 
-        // Cleanup listener on component unmount
         return () => unsubscribe();
     }, [firestore]);
+
+    // Real-time listener for users
+    useEffect(() => {
+        if (!firestore) return;
+        setUsersLoading(true);
+        const q = query(collection(firestore, 'users'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+            setAllUsers(usersData);
+            setUsersLoading(false);
+        }, (err) => {
+            console.error("Error listening to users:", err);
+            setUsersLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [firestore]);
+    
+    // Fetch payment methods once
+    useEffect(() => {
+        if (!firestore) return;
+        setMethodsLoading(true);
+        getDocs(collection(firestore, 'paymentMethods'))
+            .then((snapshot) => {
+                const methodsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentMethod));
+                setAdminPaymentMethods(methodsData);
+            })
+            .catch((err) => {
+                console.error("Error fetching payment methods:", err);
+            })
+            .finally(() => {
+                setMethodsLoading(false);
+            });
+    }, [firestore]);
+
 
     const usersMap = useMemo(() => {
         return new Map(allUsers.map(user => [user.id, user]));
@@ -1489,7 +1491,9 @@ function ConfirmationsTabContent() {
         );
     }, [ordersWithUserData, searchTerm]);
     
-    if (loading || usersLoading || methodsLoading) {
+    const loading = ordersLoading || usersLoading || methodsLoading;
+
+    if (loading) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
