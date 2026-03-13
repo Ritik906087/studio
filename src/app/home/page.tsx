@@ -1,5 +1,4 @@
 
-
 'use client';
 import {
   Card,
@@ -329,17 +328,12 @@ export default function HomePage() {
         {/* Buy/Sell Actions */}
         <div className="grid grid-cols-2 gap-4">
           <Link href="/buy" className="block">
-            <Card className="border-none bg-yellow-100 shadow-lg h-full">
+            <Card className="border-none bg-primary/10 shadow-lg h-full">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold text-yellow-900">Buy LG</h3>
-                    <p className="text-xs text-yellow-800">
-                      Flexible purchasing
-                    </p>
-                  </div>
+                  <h3 className="font-bold text-primary text-lg">Buy LG</h3>
                   <div className="rounded-md bg-black/5 p-2">
-                    <ArrowDownToLine className="h-5 w-5 text-yellow-900" />
+                    <ArrowDownToLine className="h-5 w-5 text-primary" />
                   </div>
                 </div>
               </CardContent>
@@ -349,12 +343,9 @@ export default function HomePage() {
             <Card className="border-none bg-green-100 shadow-lg">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold text-green-900">Sell LG</h3>
-                    <p className="text-xs text-green-800">Efficient and fast</p>
-                  </div>
+                  <h3 className="font-bold text-green-800 text-lg">Sell LG</h3>
                   <div className="rounded-md bg-black/5 p-2">
-                    <ArrowUpFromLine className="h-5 w-5 text-green-900" />
+                    <ArrowUpFromLine className="h-5 w-5 text-green-700" />
                   </div>
                 </div>
               </CardContent>

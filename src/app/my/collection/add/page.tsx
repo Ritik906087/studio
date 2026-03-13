@@ -118,9 +118,9 @@ export default function AddCollectionPage() {
   const validateUpi = (upi: string, methodName: string): boolean => {
     const upiRegexMap: { [key: string]: RegExp } = {
         "PhonePe": /^[a-zA-Z0-9.\-_]{2,256}@(ybl|ibl|axl)$/,
-        "Paytm": /^[a-zA-Z0-9.\-_]{2,256}@(paytm|ptaxis|ptyes|ptsbi|pthdfc)$/,
-        "MobiKwik": /^[a-zA-Z0-9.\-_]{2,256}@(ikwik|mbk)$/,
-        "Freecharge": /^[a-zA-Z0-9.\-_]{2,256}@freecharge$/,
+        "Paytm": /^[a-zA-Z0-9.\-_]{2,256}@(ptaap|ptpy|pthdfc|ptsbi|ptaxis)$/,
+        "MobiKwik": /^[a-zA-Z0-9.\-_]{2,256}@(ikwik|mbk|mbkns)$/,
+        "Freecharge": /^[a-zA-Z0-9.\-_]{2,256}@(freecharge|axisbank)$/,
         "Airtel": /^[a-zA-Z0-9.\-_]{2,256}@airtel$/,
     };
 
@@ -148,7 +148,7 @@ export default function AddCollectionPage() {
         toast({ 
             variant: "destructive", 
             title: "Invalid UPI ID", 
-            description: `Please enter the correct UPI of ${selectedMethod.name}` 
+            description: `Please enter a valid UPI ID for ${selectedMethod.name}` 
         });
         return;
     }

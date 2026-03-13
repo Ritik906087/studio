@@ -10,6 +10,7 @@ import Image from "next/image";
 import { useUser, useFirestore, useDoc } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
+import { useLanguage } from "@/context/language-context";
 
 type LinkedPaymentMethod = {
   name: string;
@@ -27,6 +28,7 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
 export default function CollectionPage() {
   const { user } = useUser();
   const firestore = useFirestore();
+  const { translations } = useLanguage();
 
   const userProfileRef = useMemo(() => {
     if (!user || !firestore) return null;
@@ -45,7 +47,7 @@ export default function CollectionPage() {
             <ChevronLeft className="h-6 w-6 text-muted-foreground" />
           </Link>
         </Button>
-        <h1 className="text-xl font-bold">My Collection</h1>
+        <h1 className="text-xl font-bold">{translations.collection}</h1>
         <div className="w-8"></div>
       </header>
 
