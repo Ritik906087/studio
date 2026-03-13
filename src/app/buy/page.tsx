@@ -299,25 +299,29 @@ const createOrder = async (provider: string, orderAmount: number) => {
     let finalPaymentType: 'upi' | 'bank' | 'usdt' | 'p2p_upi' = activeTab;
 
     try {
-        const allSellOrdersSnapshot = await getDocs(collectionGroup(firestore, 'sellOrders'));
-        
-        const allCandidates = allSellOrdersSnapshot.docs
-            .map(doc => ({ ref: doc.ref, data: doc.data() }))
-            .filter(({ data }) => 
-                ['pending', 'partially_filled'].includes(data.status) &&
-                data.userId !== user.uid && 
-                data.remainingAmount >= orderAmount
-            );
+        let sellOrderCandidateDoc: any = null;
 
-        const sellOrderCandidateDoc = allCandidates
-            .sort((a, b) => {
-                const remainderA = a.data.remainingAmount - orderAmount;
-                const remainderB = b.data.remainingAmount - orderAmount;
-                if (remainderA !== remainderB) {
-                    return remainderA - remainderB;
-                }
-                return a.data.createdAt.seconds - b.data.createdAt.seconds;
-            })[0];
+        if (activeTab === 'upi') {
+            const allSellOrdersSnapshot = await getDocs(collectionGroup(firestore, 'sellOrders'));
+            
+            const allCandidates = allSellOrdersSnapshot.docs
+                .map(doc => ({ ref: doc.ref, data: doc.data() }))
+                .filter(({ data }) => 
+                    ['pending', 'partially_filled'].includes(data.status) &&
+                    data.userId !== user.uid && 
+                    data.remainingAmount >= orderAmount
+                );
+
+            sellOrderCandidateDoc = allCandidates
+                .sort((a, b) => {
+                    const remainderA = a.data.remainingAmount - orderAmount;
+                    const remainderB = b.data.remainingAmount - orderAmount;
+                    if (remainderA !== remainderB) {
+                        return remainderA - remainderB;
+                    }
+                    return a.data.createdAt.seconds - b.data.createdAt.seconds;
+                })[0];
+        }
 
 
         await runTransaction(firestore, async (transaction) => {
@@ -511,14 +515,6 @@ const createOrder = async (provider: string, orderAmount: number) => {
       </header>
 
       <main className="p-4 flex-grow">
-         <Card className="bg-yellow-50 border border-yellow-200 mb-4">
-            <CardContent className="p-3 flex items-start gap-3 text-yellow-800">
-                <Info className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                <p className="text-sm">
-                    If your name/time doesn't match but the UPI ID/Account Number is correct, your payment will be processed without issues. Paying from an unselected method may cause failure.
-                </p>
-            </CardContent>
-        </Card>
         <Tabs value={activeTab} className="w-full" onValueChange={(value) => setActiveTab(value as any)}>
           <TabsList className="grid w-full grid-cols-3 gap-2 h-auto p-0 bg-transparent">
              <TabsTrigger value="upi" className="flex flex-col items-center justify-center p-3 h-auto rounded-xl border-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all space-y-1">
