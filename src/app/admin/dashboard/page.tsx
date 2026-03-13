@@ -1412,15 +1412,21 @@ function ConfirmationsTabContent() {
     useEffect(() => {
         if (!firestore) return;
         setOrdersLoading(true);
-        const q = query(collectionGroup(firestore, 'orders'), where('status', 'in', ['pending_confirmation', 'in_applied']));
+        // Fetch the 100 most recent orders and filter for pending ones on the client.
+        // This avoids a complex Firestore index on the 'status' field for collection group queries.
+        const q = query(collectionGroup(firestore, 'orders'), orderBy('createdAt', 'desc'), limit(100));
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const pendingOrders = snapshot.docs.map(orderDoc => ({
+            const recentOrders = snapshot.docs.map(orderDoc => ({
                 id: orderDoc.id,
                 ...orderDoc.data(),
                 path: orderDoc.ref.path,
             } as Order));
-            
+
+            const pendingOrders = recentOrders.filter(order => 
+                ['pending_confirmation', 'in_applied'].includes(order.status)
+            );
+
             setAllOrders(pendingOrders);
             setOrdersLoading(false);
             setError(null);
@@ -1612,128 +1618,6 @@ function ConfirmationsTabContent() {
                 </div>
             )}
         </div>
-    )
-}
-
-function ReviewReportDialog({ report, onResolved }: { report: Report, onResolved: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [isUpdating, setIsUpdating] = useState(false);
-    const [showResolutionUI, setShowResolutionUI] = useState(false);
-    const [resolutionMessage, setResolutionMessage] = useState('');
-    const firestore = useFirestore();
-    const { toast } = useToast();
-
-    const handleResolve = async () => {
-        if (!resolutionMessage.trim()) {
-            toast({ variant: 'destructive', title: 'Message required', description: 'Please provide a resolution message for the user.' });
-            return;
-        }
-
-        if (!firestore) return;
-        setIsUpdating(true);
-        const reportRef = doc(firestore, 'reports', report.id);
-        try {
-            await updateDoc(reportRef, { 
-                status: 'resolved',
-                resolutionMessage: resolutionMessage
-            });
-            toast({ title: 'Report Resolved' });
-            setOpen(false);
-            onResolved();
-        } catch (e: any) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to update report status.' });
-        } finally {
-            setIsUpdating(false);
-            setShowResolutionUI(false);
-            setResolutionMessage('');
-        }
-    };
-    
-    const handleOpenChange = (o: boolean) => {
-        setOpen(o);
-        if (!o) {
-            setShowResolutionUI(false);
-            setResolutionMessage('');
-        }
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogTrigger asChild>
-                <Button size="sm">Review</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Review User Report</DialogTitle>
-                    <DialogDescription>
-                        Case ID: <span className="font-mono">{report.caseId}</span>
-                    </DialogDescription>
-                </DialogHeader>
-
-                {showResolutionUI ? (
-                    <div className="py-4 space-y-2">
-                        <Label htmlFor="resolution-message">Resolution Message</Label>
-                        <Textarea 
-                            id="resolution-message" 
-                            placeholder="Explain the resolution to the user..."
-                            value={resolutionMessage}
-                            onChange={(e) => setResolutionMessage(e.target.value)}
-                        />
-                    </div>
-                ) : (
-                    <div className="py-2 max-h-[60vh] overflow-y-auto text-sm space-y-4">
-                        <p><strong>Order ID:</strong> <span className="font-mono">{report.displayOrderId}</span></p>
-                        <p><strong>Order Type:</strong> <span className="capitalize">{report.orderType}</span></p>
-                        <p><strong>Problem:</strong> <span className="font-semibold">{report.problemType}</span></p>
-                        <div>
-                            <p><strong>Message:</strong></p>
-                            <p className="bg-secondary p-2 rounded-md mt-1">{report.message}</p>
-                        </div>
-                        <div className="space-y-2">
-                            <p><strong>Evidence:</strong></p>
-                            {report.screenshotURL && (
-                                <Button asChild variant="outline" size="sm" className="w-full">
-                                    <a href={report.screenshotURL} target="_blank" rel="noopener noreferrer">
-                                        <ImageIcon className="mr-2" /> View Screenshot
-                                    </a>
-                                </Button>
-                            )}
-                            {report.videoURL && (
-                                <Button asChild variant="outline" size="sm" className="w-full">
-                                    <a href={report.videoURL} target="_blank" rel="noopener noreferrer">
-                                        <Video className="mr-2" /> View Video
-                                    </a>
-                                </Button>
-                            )}
-                            {!report.screenshotURL && !report.videoURL && (
-                                <p className="text-xs text-muted-foreground">No evidence uploaded.</p>
-                            )}
-                        </div>
-                    </div>
-                )}
-                
-                <DialogFooter>
-                    {showResolutionUI ? (
-                        <>
-                            <Button variant="ghost" onClick={() => setShowResolutionUI(false)} disabled={isUpdating}>Back</Button>
-                            <Button onClick={handleResolve} disabled={isUpdating || !resolutionMessage.trim()}>
-                                {isUpdating && <Loader size="xs" className="mr-2" />}
-                                Confirm Resolution
-                            </Button>
-                        </>
-                    ) : (
-                        <>
-                            <Button variant="outline" onClick={() => setOpen(false)}>Close</Button>
-                            {report.status === 'pending' && (
-                                <Button onClick={() => setShowResolutionUI(true)} disabled={isUpdating}>
-                                    Mark as Resolved
-                                </Button>
-                            )}
-                        </>
-                    )}
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     )
 }
 
