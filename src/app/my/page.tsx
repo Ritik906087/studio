@@ -40,6 +40,7 @@ import {
   FileQuestion,
   FileClock,
   MessageSquareText,
+  PlaySquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -98,6 +99,7 @@ export default function MyPage() {
 
   const listItems = [
       { icon: HelpCircle, label: translations.helpCenter, href: "/help" },
+      { icon: PlaySquare, label: "Tutorial", href: "/my/tutorial" },
       { icon: Globe, label: translations.language },
   ]
 
