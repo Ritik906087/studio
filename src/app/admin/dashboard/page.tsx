@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { useCollection, useDoc, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X, FileClock, AlertCircle, FileWarning, MessageCircleQuestion, Video, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X, FileClock, AlertCircle, FileWarning, MessageCircleQuestion, Video, Image as ImageIcon, Loader2, RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -1402,92 +1402,63 @@ function ConfirmationsTabContent() {
     const [adminPaymentMethods, setAdminPaymentMethods] = useState<PaymentMethod[]>([]);
     
     const [ordersLoading, setOrdersLoading] = useState(true);
-    const [usersLoading, setUsersLoading] = useState(false);
     const [methodsLoading, setMethodsLoading] = useState(true);
 
     const [error, setError] = useState<any>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Real-time listener for pending orders
-    useEffect(() => {
+    const fetchConfirmations = useCallback(async () => {
         if (!firestore) return;
         setOrdersLoading(true);
-        // Fetch the 100 most recent orders and filter for pending ones on the client.
-        // This avoids a complex Firestore index on the 'status' field for collection group queries.
-        const q = query(collectionGroup(firestore, 'orders'), orderBy('createdAt', 'desc'), limit(100));
-        
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const recentOrders = snapshot.docs.map(orderDoc => ({
+        setError(null);
+        try {
+            // This query fetches ALL orders and will be slow, but avoids the index error.
+            const q = query(collectionGroup(firestore, 'orders'));
+            const snapshot = await getDocs(q);
+
+            const allFetchedOrders = snapshot.docs.map(orderDoc => ({
                 id: orderDoc.id,
                 ...orderDoc.data(),
                 path: orderDoc.ref.path,
             } as Order));
 
-            const pendingOrders = recentOrders.filter(order => 
+            const pendingOrders = allFetchedOrders.filter(order => 
                 ['pending_confirmation', 'in_applied'].includes(order.status)
             );
-
+            
             setAllOrders(pendingOrders);
-            setOrdersLoading(false);
-            setError(null);
-        }, (err) => {
-            console.error("Error listening to order confirmations:", err);
-            setError(err);
-            setOrdersLoading(false);
-        });
 
-        return () => unsubscribe();
-    }, [firestore]);
-
-    // Fetch user data for the orders
-    useEffect(() => {
-        if (!firestore || allOrders.length === 0) {
-            setUsersLoading(false);
-            return;
-        }
-    
-        const userIds = [...new Set(allOrders.map(order => order.userId))];
-        const newUsersToFetch = userIds.filter(id => !usersMap.has(id));
-
-        if (newUsersToFetch.length === 0) {
-            return;
-        }
-
-        setUsersLoading(true);
-        
-        const fetchUsers = async () => {
-            try {
+            if (pendingOrders.length > 0) {
+                const userIds = [...new Set(pendingOrders.map(order => order.userId))];
                 const newUserPromises = [];
-                // Batch fetch in chunks of 30 (Firestore 'in' query limit)
-                for (let i = 0; i < newUsersToFetch.length; i += 30) {
-                    const chunk = newUsersToFetch.slice(i, i + 30);
+                for (let i = 0; i < userIds.length; i += 30) {
+                    const chunk = userIds.slice(i, i + 30);
                     const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', chunk));
                     newUserPromises.push(getDocs(usersQuery));
                 }
-    
                 const userSnapshots = await Promise.all(newUserPromises);
                 const newUsersData: UserProfile[] = userSnapshots.flatMap(snapshot => 
                     snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile))
                 );
-
-                setUsersMap(prevMap => {
-                    const newMap = new Map(prevMap);
-                    newUsersData.forEach(user => newMap.set(user.id, user));
-                    return newMap;
-                });
-            } catch (err) {
-                console.error("Error fetching users for orders:", err);
-                setError(err);
-            } finally {
-                setUsersLoading(false);
+                const newUsersMap = new Map<string, UserProfile>();
+                newUsersData.forEach(user => newUsersMap.set(user.id, user));
+                setUsersMap(newUsersMap);
+            } else {
+                setUsersMap(new Map());
             }
-        };
-        
-        fetchUsers();
+
+        } catch (err: any) {
+            console.error("Error fetching confirmations:", err);
+            setError(err);
+        } finally {
+            setOrdersLoading(false);
+        }
+    }, [firestore]);
+
+    useEffect(() => {
+        fetchConfirmations();
+    }, [fetchConfirmations]);
     
-    }, [allOrders, firestore, usersMap]);
-    
-    // Fetch payment methods once
     useEffect(() => {
         if (!firestore) return;
         setMethodsLoading(true);
@@ -1506,10 +1477,11 @@ function ConfirmationsTabContent() {
 
 
     const ordersWithUserData = useMemo(() => {
-        return allOrders.map(order => ({
+        const sortedOrders = [...allOrders].sort((a, b) => (b.submittedAt?.seconds || b.createdAt.seconds) - (a.submittedAt?.seconds || a.createdAt.seconds));
+        return sortedOrders.map(order => ({
             ...order,
             user: usersMap.get(order.userId)
-        })).sort((a, b) => b.createdAt.seconds - a.createdAt.seconds); // Newest first
+        }));
     }, [allOrders, usersMap]);
 
     const filteredOrders = useMemo(() => {
@@ -1524,14 +1496,6 @@ function ConfirmationsTabContent() {
     }, [ordersWithUserData, searchTerm]);
     
     const loading = ordersLoading || methodsLoading;
-
-    if (loading) {
-        return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
-            </div>
-        )
-    }
 
     if (error) {
          return (
@@ -1553,16 +1517,26 @@ function ConfirmationsTabContent() {
 
     return (
         <div className="space-y-4">
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                    placeholder="Search by Order ID, UID, or UTR..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 max-w-sm"
-                />
+            <div className="flex justify-between items-center">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input
+                        placeholder="Search by Order ID, UID, or UTR..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 max-w-sm"
+                    />
+                </div>
+                <Button onClick={fetchConfirmations} variant="outline" size="sm" disabled={ordersLoading}>
+                     {ordersLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                     Refresh
+                </Button>
             </div>
-            {filteredOrders.length === 0 ? (
+            {loading ? (
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
+                </div>
+            ) : filteredOrders.length === 0 ? (
                 <Card>
                     <CardContent className="p-8 text-center text-muted-foreground">
                         No payments are pending confirmation.
@@ -1593,7 +1567,7 @@ function ConfirmationsTabContent() {
                                     </div>
                                 </CardHeader>
                                 <CardContent className="p-4 pt-0 space-y-2 text-sm">
-                                    <p><strong>User:</strong> {order.user ? `${order.user.displayName} (${order.user.numericId})` : (usersLoading ? <Skeleton className="h-4 w-20 inline-block"/> : 'N/A')}</p>
+                                    <p><strong>User:</strong> {order.user ? `${order.user.displayName} (${order.user.numericId})` : <Skeleton className="h-4 w-20 inline-block"/>}</p>
                                     <p className="flex items-start gap-2"><strong>UTR/TxHash:</strong> <span className="font-mono text-right break-all">{order.utr}</span></p>
                                      {order.paymentProvider && (
                                         <p className="flex items-center gap-2">
@@ -1610,7 +1584,7 @@ function ConfirmationsTabContent() {
                                     )}
                                 </CardContent>
                                 <CardFooter className="p-4 pt-0">
-                                    <ProcessConfirmationDialog order={order} onProcessed={() => {}} adminPaymentMethods={adminPaymentMethods} />
+                                    <ProcessConfirmationDialog order={order} onProcessed={fetchConfirmations} adminPaymentMethods={adminPaymentMethods} />
                                 </CardFooter>
                             </Card>
                         )
