@@ -244,37 +244,36 @@ export default function SellPage() {
                         className="space-y-3"
                     >
                         {userProfile.paymentMethods.map((method, index) => {
-                            if (method.type === 'upi') {
-                                const details = paymentMethodDetails[method.name];
-                                if (!details) return null;
-                                return (
-                                    <Label key={method.upiId} htmlFor={method.upiId} className={cn("flex items-center gap-4 rounded-xl p-3 border-2 border-transparent has-[:checked]:border-primary", details.bgColor)}>
-                                        <RadioGroupItem value={JSON.stringify(method)} id={method.upiId} className="border-white text-white ring-offset-0" />
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
-                                            <Image src={details.logo} alt={`${method.name} logo`} width={32} height={32} className="object-contain" />
-                                        </div>
-                                        <div className="text-white">
-                                            <span className="text-lg font-semibold">{method.name}</span>
-                                            <p className="text-sm font-mono text-white/80">{method.upiId}</p>
-                                        </div>
-                                    </Label>
-                                )
-                            }
-                            if (method.type === 'bank') {
-                                 return (
-                                    <Label key={method.accountNumber} htmlFor={`bank-${index}`} className="flex items-center gap-4 rounded-xl p-3 border-2 border-transparent has-[:checked]:border-primary bg-slate-700">
-                                        <RadioGroupItem value={JSON.stringify(method)} id={`bank-${index}`} className="border-white text-white ring-offset-0" />
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
+                            const isUpi = method.type === 'upi';
+                            const isBank = method.type === 'bank';
+                            const key = isUpi ? method.upiId : (isBank ? method.accountNumber : `method-${index}`);
+                            const id = isUpi ? method.upiId : (isBank ? `bank-${index}` : `method-id-${index}`);
+                            
+                            const upiDetails = isUpi ? paymentMethodDetails[method.name] : null;
+                            const bgColor = isBank ? 'bg-slate-700' : (upiDetails ? upiDetails.bgColor : 'bg-gray-500');
+
+                            if (!key || !id) return null;
+
+                            return (
+                                <Label key={key} htmlFor={id!} className={cn("flex items-center gap-4 rounded-xl p-3 border-2 border-transparent has-[:checked]:border-primary", bgColor)}>
+                                    <RadioGroupItem value={JSON.stringify(method)} id={id!} className="border-white text-white ring-offset-0" />
+                                    
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
+                                        {isUpi && upiDetails ? (
+                                            <Image src={upiDetails.logo} alt={`${method.name} logo`} width={32} height={32} className="object-contain" />
+                                        ) : isBank ? (
                                             <Landmark className="h-6 w-6 text-slate-700"/>
-                                        </div>
-                                        <div className="text-white">
-                                            <span className="text-lg font-semibold">{method.bankName}</span>
-                                            <p className="text-sm font-mono text-white/80">{method.accountNumber}</p>
-                                        </div>
-                                    </Label>
-                                )
-                            }
-                            return null;
+                                        ) : (
+                                            <Wallet className="h-6 w-6 text-gray-500"/>
+                                        )}
+                                    </div>
+
+                                    <div className="text-white">
+                                        <span className="text-lg font-semibold">{isUpi ? method.name : method.bankName}</span>
+                                        <p className="text-sm font-mono text-white/80">{isUpi ? method.upiId : method.accountNumber}</p>
+                                    </div>
+                                </Label>
+                            );
                         })}
                     </RadioGroup>
                 ) : (
@@ -302,5 +301,3 @@ export default function SellPage() {
     </div>
   );
 }
-
-    
