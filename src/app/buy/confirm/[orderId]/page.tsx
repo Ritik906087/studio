@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
@@ -37,7 +38,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { sendOrderConfirmationToTelegram } from '@/lib/telegram';
 
 
-type PaymentMethod = {
+type AdminPaymentMethod = {
     id: string;
     type: 'bank' | 'upi' | 'usdt';
     bankName?: string;
@@ -49,6 +50,17 @@ type PaymentMethod = {
     usdtWalletAddress?: string;
 }
 
+type WithdrawalMethod = {
+    type: 'upi' | 'bank';
+    name: string;
+    upiId?: string;
+    bankName?: string;
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    upiHolderName?: string;
+}
+
 type Order = {
     id: string;
     amount: number;
@@ -56,11 +68,11 @@ type Order = {
     status: string;
     createdAt: Timestamp;
     orderId: string;
-    paymentType: 'bank' | 'upi' | 'usdt' | 'p2p_upi';
+    paymentType: 'bank' | 'upi' | 'usdt' | 'p2p_upi' | 'p2p_bank';
     paymentProvider: string;
     adminPaymentMethodId?: string;
     sellerId?: string;
-    sellerUpiDetails?: { name: string; upiId: string };
+    sellerWithdrawalDetails?: WithdrawalMethod;
     matchedSellOrderId?: string;
     matchedSellOrderPath?: string;
 };
@@ -141,7 +153,7 @@ function PaymentDetailsContent() {
     ];
 
     const paymentMethodsQuery = useMemo(() => firestore ? collection(firestore, 'paymentMethods') : null, [firestore]);
-    const { data: allPaymentMethods, loading: allPaymentMethodsLoading } = useCollection<PaymentMethod>(paymentMethodsQuery);
+    const { data: allPaymentMethods, loading: allPaymentMethodsLoading } = useCollection<AdminPaymentMethod>(paymentMethodsQuery);
 
 
     const orderRef = useMemo(() => {
@@ -168,13 +180,9 @@ function PaymentDetailsContent() {
     const paymentTargetDetails = useMemo(() => {
         if (orderLoading) return null;
 
-        if (type === 'p2p_upi') {
-            if (order && order.sellerUpiDetails) {
-                return {
-                    type: 'upi',
-                    upiHolderName: order.sellerUpiDetails.name,
-                    upiId: order.sellerUpiDetails.upiId,
-                }
+        if (type === 'p2p_upi' || type === 'p2p_bank') {
+            if (order && order.sellerWithdrawalDetails) {
+                return order.sellerWithdrawalDetails;
             }
             return null;
         }
@@ -184,7 +192,7 @@ function PaymentDetailsContent() {
     }, [order, orderLoading, type, allPaymentMethods]);
 
     useEffect(() => {
-        if (orderRef && paymentTargetDetails?.id && order && !order.adminPaymentMethodId && type !== 'p2p_upi') {
+        if (orderRef && paymentTargetDetails?.id && order && !order.adminPaymentMethodId && type !== 'p2p_upi' && type !== 'p2p_bank') {
             updateDoc(orderRef, { adminPaymentMethodId: paymentTargetDetails.id })
                 .catch(err => console.error("Failed to set admin payment method ID on order", err));
         }
@@ -348,18 +356,21 @@ function PaymentDetailsContent() {
             };
         }
         if (paymentTargetDetails.type === 'upi') {
-            return {
-                'Recipient Name': paymentTargetDetails.upiHolderName,
+            const detailsObj: { [key: string]: string | undefined } = {
                 'UPI ID': paymentTargetDetails.upiId,
+            };
+            if (paymentTargetDetails.upiHolderName) {
+                detailsObj['Recipient Name'] = paymentTargetDetails.upiHolderName;
             }
+            return detailsObj;
         }
         if (paymentTargetDetails.type === 'usdt') {
             return {
-                'USDT Address (TRC20)': paymentTargetDetails.usdtWalletAddress,
+                'USDT Address (TRC20)': (paymentTargetDetails as any).usdtWalletAddress,
             }
         }
         return null;
-    }, [paymentTargetDetails]);
+    }, [paymentTargetDetails, order]);
 
     const copyToClipboard = (text: string) => {
         if (!text) return;
@@ -434,7 +445,7 @@ function PaymentDetailsContent() {
 
                 let sellOrderRef: any = null;
                 let sellOrderDoc: any = null;
-                if (buyOrderData.paymentType === 'p2p_upi' && buyOrderData.matchedSellOrderPath) {
+                if ((buyOrderData.paymentType === 'p2p_upi' || buyOrderData.paymentType === 'p2p_bank') && buyOrderData.matchedSellOrderPath) {
                     sellOrderRef = doc(firestore, buyOrderData.matchedSellOrderPath);
                     sellOrderDoc = await transaction.get(sellOrderRef);
                 }
@@ -775,7 +786,7 @@ function PaymentDetailsContent() {
                 
                 <Card>
                     <CardHeader>
-                        <CardTitle>{type === 'bank' ? 'Bank Transfer' : type === 'usdt' ? 'USDT (TRC20) Payment' : 'Pay via UPI'}</CardTitle>
+                        <CardTitle>{type === 'bank' || type === 'p2p_bank' ? 'Bank Transfer' : type === 'usdt' ? 'USDT (TRC20) Payment' : 'Pay via UPI'}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4 text-sm">
                         <div className="flex justify-between items-center pt-0">
@@ -817,7 +828,7 @@ function PaymentDetailsContent() {
                     </CardContent>
                 </Card>
 
-                {(type === 'upi' || type === 'p2p_upi') && details && order && (
+                {(type === 'upi' || type === 'p2p_upi') && details && details['UPI ID'] && order && (
                     <Card>
                         <CardHeader>
                             <CardTitle>Scan QR to Pay</CardTitle>
@@ -825,7 +836,7 @@ function PaymentDetailsContent() {
                         <CardContent className="flex flex-col items-center gap-2">
                              <Image
                                 src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
-                                    `upi://pay?pa=${details['UPI ID']}&pn=${encodeURIComponent(details['Recipient Name']!)}&am=${order.baseAmount}&tn=${order.orderId}`
+                                    `upi://pay?pa=${details['UPI ID']}&pn=${encodeURIComponent(details['Recipient Name']! || 'Recipient')}&am=${order.baseAmount}&tn=${order.orderId}`
                                 )}&size=200x200&qzone=2`}
                                 width={200}
                                 height={200}

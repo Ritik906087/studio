@@ -164,7 +164,7 @@
         "paymentType": {
           "type": "string",
           "description": "The payment method type chosen by the user.",
-          "enum": ["bank", "upi", "usdt", "p2p_upi"]
+          "enum": ["bank", "upi", "usdt", "p2p_upi", "p2p_bank"]
         },
         "paymentProvider": {
           "type": "string",
@@ -178,12 +178,17 @@
             "type": "string",
             "description": "The UID of the seller in a P2P transaction."
         },
-        "sellerUpiDetails": {
+        "sellerWithdrawalDetails": {
             "type": "object",
-            "description": "The UPI details of the seller in a P2P transaction.",
+            "description": "The withdrawal details of the seller in a P2P transaction.",
             "properties": {
+                "type": { "type": "string", "enum": ["upi", "bank"] },
                 "name": { "type": "string" },
-                "upiId": { "type": "string" }
+                "upiId": { "type": "string" },
+                "bankName": { "type": "string" },
+                "accountHolderName": { "type": "string" },
+                "accountNumber": { "type": "string" },
+                "ifscCode": { "type": "string" }
             }
         },
         "status": {
@@ -609,5 +614,3 @@
     }
   }
 }
-
-    

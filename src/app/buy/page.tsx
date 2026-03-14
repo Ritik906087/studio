@@ -296,12 +296,12 @@ const createOrder = async (provider: string, orderAmount: number) => {
     
     const bonusPercentage = activeTab === 'bank' ? 5 : activeTab === 'upi' ? 6 : (activeTab === 'usdt' ? 0 : 0);
     const finalAmount = orderAmount + (orderAmount * (bonusPercentage / 100));
-    let finalPaymentType: 'upi' | 'bank' | 'usdt' | 'p2p_upi' = activeTab;
+    let finalPaymentType: 'upi' | 'bank' | 'usdt' | 'p2p_upi' | 'p2p_bank' = activeTab;
 
     try {
         let sellOrderCandidateDoc: any = null;
 
-        if (activeTab === 'upi') {
+        if (activeTab === 'upi' || activeTab === 'bank') {
             const allSellOrdersSnapshot = await getDocs(collectionGroup(firestore, 'sellOrders'));
             
             const allCandidates = allSellOrdersSnapshot.docs
@@ -309,7 +309,8 @@ const createOrder = async (provider: string, orderAmount: number) => {
                 .filter(({ data }) => 
                     ['pending', 'partially_filled'].includes(data.status) &&
                     data.userId !== user.uid && 
-                    data.remainingAmount >= orderAmount
+                    data.remainingAmount >= orderAmount &&
+                    data.withdrawalMethod?.type === activeTab
                 );
 
             sellOrderCandidateDoc = allCandidates
@@ -340,10 +341,11 @@ const createOrder = async (provider: string, orderAmount: number) => {
                     const isStatusValid = ['pending', 'partially_filled'].includes(sellOrderData.status);
                     const isAmountSufficient = sellOrderData.remainingAmount >= orderAmount;
                     const isNotOwnOrder = sellOrderData.userId !== user.uid;
+                    const isTypeMatch = sellOrderData.withdrawalMethod?.type === activeTab;
 
-                    if (isStatusValid && isAmountSufficient && isNotOwnOrder) {
+                    if (isStatusValid && isAmountSufficient && isNotOwnOrder && isTypeMatch) {
                         p2pMatchFound = true;
-                        finalPaymentType = 'p2p_upi';
+                        finalPaymentType = activeTab === 'upi' ? 'p2p_upi' : 'p2p_bank';
 
                         const newRemainingAmount = sellOrderData.remainingAmount - orderAmount;
                         const newSellOrderStatus = newRemainingAmount > 0 ? 'partially_filled' : 'processing';
@@ -356,9 +358,9 @@ const createOrder = async (provider: string, orderAmount: number) => {
                             orderId: buyOrderDisplayId,
                             status: 'pending_payment',
                             paymentProvider: provider,
-                            sellerUpiDetails: sellOrderData.withdrawalMethod,
+                            sellerWithdrawalDetails: sellOrderData.withdrawalMethod,
                             sellerId: sellOrderData.userId,
-                            paymentType: 'p2p_upi',
+                            paymentType: finalPaymentType,
                             createdAt: serverTimestamp(),
                             matchedSellOrderId: sellOrderDoc.id,
                             matchedSellOrderPath: sellOrderRef.path,
