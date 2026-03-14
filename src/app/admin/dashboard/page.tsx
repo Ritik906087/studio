@@ -1624,6 +1624,100 @@ function ConfirmationsTabContent() {
     )
 }
 
+function ReviewReportDialog({ report, onResolved }: { report: Report; onResolved: () => void }) {
+    const [open, setOpen] = useState(false);
+    const [resolutionMessage, setResolutionMessage] = useState('');
+    const [isResolving, setIsResolving] = useState(false);
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const handleResolve = async () => {
+        if (!resolutionMessage.trim()) {
+            toast({ variant: 'destructive', title: 'Resolution message is required.' });
+            return;
+        }
+        if (!firestore) return;
+        setIsResolving(true);
+        try {
+            const reportRef = doc(firestore, 'reports', report.id);
+            await updateDoc(reportRef, {
+                status: 'resolved',
+                resolutionMessage: resolutionMessage,
+            });
+            toast({ title: 'Report Resolved' });
+            setOpen(false);
+            onResolved();
+        } catch (error: any) {
+            console.error('Failed to resolve report:', error);
+            toast({ variant: 'destructive', title: 'Failed to resolve report', description: error.message });
+        } finally {
+            setIsResolving(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="outline" size="sm" disabled={report.status === 'resolved'}>
+                    {report.status === 'resolved' ? 'Resolved' : 'Review'}
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Review Report: {report.caseId}</DialogTitle>
+                    <DialogDescription>
+                        User {report.userNumericId} reported a problem with order {report.displayOrderId}.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                    <p><strong>Problem:</strong> {report.problemType}</p>
+                    <p><strong>Message:</strong></p>
+                    <p className="text-sm p-3 bg-secondary rounded-md">{report.message}</p>
+                    
+                    {report.screenshotURL && (
+                        <div>
+                            <strong>Screenshot:</strong>
+                            <a href={report.screenshotURL} target="_blank" rel="noopener noreferrer" className="text-primary underline ml-2">View Image</a>
+                        </div>
+                    )}
+                    {report.videoURL && (
+                         <div>
+                            <strong>Video:</strong>
+                            <a href={report.videoURL} target="_blank" rel="noopener noreferrer" className="text-primary underline ml-2">View Video</a>
+                        </div>
+                    )}
+                     <p><strong>Order Type:</strong> {report.orderType}</p>
+
+                    {report.status === 'resolved' ? (
+                        <div>
+                            <Label>Resolution Message</Label>
+                            <p className="text-sm p-3 bg-green-100 rounded-md text-green-900">{report.resolutionMessage}</p>
+                        </div>
+                    ) : (
+                         <div className="space-y-2 pt-4">
+                            <Label htmlFor="resolutionMessage">Resolution Message</Label>
+                            <Textarea
+                                id="resolutionMessage"
+                                value={resolutionMessage}
+                                onChange={(e) => setResolutionMessage(e.target.value)}
+                                placeholder="Explain how the issue was resolved..."
+                            />
+                        </div>
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="secondary" onClick={() => setOpen(false)} disabled={isResolving}>Close</Button>
+                    {report.status === 'pending' && (
+                        <Button onClick={handleResolve} disabled={isResolving || !resolutionMessage.trim()}>
+                            {isResolving ? <Loader size="xs" className="mr-2"/> : 'Mark as Resolved'}
+                        </Button>
+                    )}
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function ReportsTabContent() {
     const firestore = useFirestore();
 
@@ -2056,3 +2150,6 @@ export default function AdminDashboardPage() {
     return <AdminDashboard />;
 }
 
+
+
+    
