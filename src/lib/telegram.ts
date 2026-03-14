@@ -1,7 +1,8 @@
 
 'use server';
 
-const tags = '@PRAJAPATI_KING1 @Anandyda89 @Zx_PiYUSH_02 @Satyam_ll @RITIK90608';
+// Define tags at the top as a constant
+const TAGS = '@PRAJAPATI_KING1 @Anandyda89 @Zx_PiYUSH_02 @Satyam_ll @RITIK90608';
 
 type OrderDetails = {
     orderId: string;
@@ -11,15 +12,73 @@ type OrderDetails = {
     receiverDetails: { [key: string]: string | undefined };
 };
 
+// A generic function to handle sending messages to avoid code duplication
+async function sendTelegramMessage(botToken: string | undefined, chatIds: string[], message: string, botName: string) {
+    if (!botToken || chatIds.length === 0 || chatIds.every(id => !id.trim())) {
+        console.error(`[TelegramBot] CRITICAL: ${botName} bot token or chat IDs are not configured. This is the likely reason for failure in production. Please add the required secrets to your Firebase App Hosting backend environment variables.`);
+        // Log what we have to help debugging
+        console.error(`[TelegramBot] DEBUG: Bot Token Found: ${!!botToken}, Chat IDs Found: ${chatIds.length}`);
+        return;
+    }
+
+    console.log(`[TelegramBot] INFO: Sending ${botName} message to ${chatIds.length} chat(s).`);
+
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+    const sendPromises = chatIds.map(chatId => {
+        const trimmedChatId = chatId.trim();
+        if (!trimmedChatId) {
+            console.warn(`[TelegramBot] WARN: Skipped empty chat ID for ${botName} bot.`);
+            // Return a resolved promise for empty chat IDs
+            return Promise.resolve({ ok: false, status: 'skipped', statusText: 'Skipped empty chat ID' } as Response);
+        }
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: trimmedChatId,
+                text: message,
+                parse_mode: 'Markdown',
+            }),
+        });
+    });
+
+    try {
+        const results = await Promise.allSettled(sendPromises);
+
+        results.forEach((result, index) => {
+            const chatId = chatIds[index]?.trim();
+            if (!chatId) return;
+
+            if (result.status === 'rejected') {
+                console.error(`[TelegramBot] FATAL: Network error for ${botName} bot sending to chat ID ${chatId}:`, result.reason);
+            } else {
+                // The promise was fulfilled, but the fetch response might indicate an error
+                const response = result.value;
+                if (!response.ok) {
+                    if (response.statusText === 'Skipped empty chat ID') return; // Skip logging for intentionally skipped IDs
+                    // Try to parse the error response from Telegram
+                    response.json().then(errorBody => {
+                        console.error(`[TelegramBot] ERROR: Failed to send ${botName} message to chat ID ${chatId}. Status: ${response.status}. Response:`, JSON.stringify(errorBody, null, 2));
+                    }).catch(() => {
+                        // If parsing fails, log the raw status
+                        console.error(`[TelegramBot] ERROR: Failed to send ${botName} message to chat ID ${chatId}. Status: ${response.status}. Could not parse error response.`);
+                    });
+                } else {
+                    console.log(`[TelegramBot] SUCCESS: Sent ${botName} message to chat ID ${chatId}.`);
+                }
+            }
+        });
+    } catch (e) {
+        // This catch is for Promise.allSettled itself, which should not happen.
+        console.error(`[TelegramBot] FATAL: An unexpected error occurred in sendTelegramMessage for ${botName}.`, e);
+    }
+}
+
+
 export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
     const botToken = process.env.TELEGRAM_PAYMENT_BOT_TOKEN;
     const chatIds = process.env.TELEGRAM_PAYMENT_CHAT_IDS?.split(',') || [];
-
-    if (!botToken || chatIds.length === 0) {
-        console.error('[TelegramBot] ERROR: Payment bot token or chat IDs are not configured in .env file.');
-        return;
-    }
-    console.log(`[TelegramBot] INFO: Sending payment proof for Order ID ${details.orderId} to ${chatIds.length} chat(s).`);
 
     let receiverText = '';
     for (const [key, value] of Object.entries(details.receiverDetails)) {
@@ -38,49 +97,10 @@ export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
 
 *Receiver Details:*${receiverText}
 
-${tags}
+${TAGS}
     `;
 
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-
-    const sendPromises = chatIds.map(chatId => {
-        const trimmedChatId = chatId.trim();
-        if (!trimmedChatId) {
-            console.warn('[TelegramBot] WARN: Empty chat ID found in TELEGRAM_PAYMENT_CHAT_IDS.');
-            return Promise.resolve({ ok: false, status: 'skipped' });
-        }
-        return fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: trimmedChatId,
-                text: message,
-                parse_mode: 'Markdown',
-            }),
-        });
-    });
-
-    try {
-        const results = await Promise.allSettled(sendPromises);
-
-        results.forEach((result, index) => {
-            const chatId = chatIds[index].trim();
-            if (result.status === 'rejected') {
-                console.error(`[TelegramBot] FATAL: Network error sending PAYMENT message to chat ID ${chatId}:`, result.reason);
-            } else if (result.value && !result.value.ok) {
-                if (result.value.status === 'skipped') return;
-                result.value.json().then(errorBody => {
-                    console.error(`[TelegramBot] ERROR: Failed to send PAYMENT message to chat ID ${chatId}. Status: ${result.value.status}. Response:`, JSON.stringify(errorBody));
-                }).catch(() => {
-                    console.error(`[TelegramBot] ERROR: Failed to send PAYMENT message to chat ID ${chatId}. Status: ${result.value.status}. Could not parse error response.`);
-                });
-            } else if (result.value?.ok) {
-                console.log(`[TelegramBot] SUCCESS: Sent PAYMENT message to chat ID ${chatId}.`);
-            }
-        });
-    } catch (e) {
-        console.error('[TelegramBot] FATAL: An unexpected error occurred while sending Telegram notifications.', e);
-    }
+    await sendTelegramMessage(botToken, chatIds, message, 'Payment');
 }
 
 type ChatRequestDetails = {
@@ -92,12 +112,6 @@ export async function sendNewChatRequestToTelegram(details: ChatRequestDetails) 
     const botToken = process.env.TELEGRAM_SUPPORT_BOT_TOKEN;
     const chatIds = process.env.TELEGRAM_SUPPORT_CHAT_IDS?.split(',') || [];
 
-    if (!botToken || chatIds.length === 0) {
-        console.error('[TelegramBot] ERROR: Support bot token or chat IDs are not configured in .env file.');
-        return;
-    }
-    console.log(`[TelegramBot] INFO: Sending new chat request for User ${details.userNumericId || details.enteredIdentifier} to ${chatIds.length} chat(s).`);
-
     const message = `
 *New Live Chat Request!* 💬
 
@@ -108,47 +122,8 @@ A user needs help.
 
 Please check the admin panel to join the chat.
 
-${tags}
+${TAGS}
     `;
 
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-
-    const sendPromises = chatIds.map(chatId => {
-        const trimmedChatId = chatId.trim();
-        if (!trimmedChatId) {
-            console.warn('[TelegramBot] WARN: Empty chat ID found in TELEGRAM_SUPPORT_CHAT_IDS.');
-            return Promise.resolve({ ok: false, status: 'skipped' });
-        }
-        return fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: trimmedChatId,
-                text: message,
-                parse_mode: 'Markdown',
-            }),
-        });
-    });
-
-    try {
-        const results = await Promise.allSettled(sendPromises);
-
-        results.forEach((result, index) => {
-            const chatId = chatIds[index].trim();
-            if (result.status === 'rejected') {
-                console.error(`[TelegramBot] FATAL: Network error sending SUPPORT message to chat ID ${chatId}:`, result.reason);
-            } else if (result.value && !result.value.ok) {
-                if (result.value.status === 'skipped') return;
-                 result.value.json().then(errorBody => {
-                    console.error(`[TelegramBot] ERROR: Failed to send SUPPORT message to chat ID ${chatId}. Status: ${result.value.status}. Response:`, JSON.stringify(errorBody));
-                }).catch(() => {
-                    console.error(`[TelegramBot] ERROR: Failed to send SUPPORT message to chat ID ${chatId}. Status: ${result.value.status}. Could not parse error response.`);
-                });
-            } else if (result.value?.ok) {
-                console.log(`[TelegramBot] SUCCESS: Sent SUPPORT message to chat ID ${chatId}.`);
-            }
-        });
-    } catch (e) {
-        console.error('[TelegramBot] FATAL: An unexpected error occurred while sending Telegram notifications.', e);
-    }
+    await sendTelegramMessage(botToken, chatIds, message, 'Support');
 }
