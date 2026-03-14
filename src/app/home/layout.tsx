@@ -79,12 +79,19 @@ export default function HomeLayout({
   }
 
   const noNavRoutes = [
-    '/buy', 
-    '/sell', 
-    '/my/team', 
-    '/my/report-problem/', // Note the trailing slash to match dynamic routes
-    '/my/report-status', 
-    '/my/feedback'
+    '/buy',
+    '/sell',
+    '/my/team',
+    '/my/report-problem',
+    '/my/report-status',
+    '/my/feedback',
+    '/my/collection',
+    '/my/change-password',
+    '/my/transactions',
+    '/my/settings',
+    '/my/new-user-rewards',
+    '/my/newbie-friend-rewards',
+    '/my/tutorial',
   ];
 
   const showNavBar = !noNavRoutes.some(route => pathname.startsWith(route));
