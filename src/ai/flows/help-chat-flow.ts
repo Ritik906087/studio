@@ -35,14 +35,22 @@ async function createHumanAgentRequest(input: {
     }
 
     try {
-        await addDoc(collection(db, 'chatRequests'), {
-            userId: input.uid,
-            userNumericId: userNumericId,
+        const docData: any = {
             enteredIdentifier: input.enteredIdentifier,
             chatHistory: input.chatHistory,
             status: 'pending',
             createdAt: serverTimestamp(),
-        });
+        };
+
+        if (input.uid) {
+            docData.userId = input.uid;
+        }
+
+        if (userNumericId) {
+            docData.userNumericId = userNumericId;
+        }
+
+        await addDoc(collection(db, 'chatRequests'), docData);
         
         // Wait for the notification to be sent to ensure reliability
         await sendNewChatRequestToTelegram({

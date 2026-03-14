@@ -276,8 +276,11 @@ export default function HelpPage() {
         setUidError('');
         identifier = uid;
     } else {
-        if (phone.length !== 10 || !/^[6-9]\d{9}$/.test(phone)) {
-            setPhoneError('Please enter a valid 10-digit mobile number.');
+        const isPhone = phone.length === 10 && /^[6-9]\d{9}$/.test(phone);
+        const isUid = phone.length === 8 && /^\d{8}$/.test(phone);
+
+        if (!isPhone && !isUid) {
+            setPhoneError('Please enter a valid 10-digit mobile number or 8-digit UID.');
             return;
         }
         setPhoneError('');
@@ -598,11 +601,11 @@ export default function HelpPage() {
               </div>
           ) : (
               <div className="space-y-2">
-                  <label htmlFor="phone" className="font-medium">Please enter your registered Phone Number</label>
+                  <label htmlFor="phone" className="font-medium">Please enter your registered Phone Number or UID</label>
                   <Input 
                       id="phone" 
                       type="tel"
-                      placeholder="Enter 10-digit mobile number" 
+                      placeholder="Enter 10-digit mobile or 8-digit UID" 
                       value={phone}
                       onChange={(e) => {
                           const value = e.target.value.replace(/\D/g, '');
