@@ -16,7 +16,7 @@ export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
     const chatIds = process.env.TELEGRAM_PAYMENT_CHAT_IDS?.split(',') || [];
 
     if (!botToken || chatIds.length === 0) {
-        console.error('Telegram payment bot token or chat IDs are not configured.');
+        console.error('[TelegramBot] Payment bot token or chat IDs are not configured.');
         return;
     }
 
@@ -54,7 +54,7 @@ ${tags}
             }),
         }).then(async (response) => {
             if (!response.ok) {
-                const errorBody = await response.json();
+                const errorBody = await response.json().catch(() => ({ description: 'Could not parse error response from Telegram.' }));
                 console.error(`[TelegramBot] Failed to send PAYMENT message to chat ID ${chatId}. Status: ${response.status}`, errorBody);
             }
         }).catch(error => {
@@ -75,7 +75,7 @@ export async function sendNewChatRequestToTelegram(details: ChatRequestDetails) 
     const chatIds = process.env.TELEGRAM_SUPPORT_CHAT_IDS?.split(',') || [];
 
     if (!botToken || chatIds.length === 0) {
-        console.error('Telegram support bot token or chat IDs are not configured for chat requests.');
+        console.error('[TelegramBot] Support bot token or chat IDs are not configured for chat requests.');
         return;
     }
 
@@ -106,7 +106,7 @@ ${tags}
             }),
         }).then(async (response) => {
             if (!response.ok) {
-                const errorBody = await response.json();
+                const errorBody = await response.json().catch(() => ({ description: 'Could not parse error response from Telegram.' }));
                 console.error(`[TelegramBot] Failed to send SUPPORT message to chat ID ${chatId}. Status: ${response.status}`, errorBody);
             }
         }).catch(error => {
