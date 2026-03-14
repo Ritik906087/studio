@@ -3,6 +3,7 @@
 
 // Define tags at the top as a constant
 const TAGS = '@PRAJAPATI_KING1 @Anandyda89 @Zx_PiYUSH_02 @Satyam_ll @RITIK90608';
+const FETCH_TIMEOUT = 20000; // 20 seconds timeout for Telegram API requests
 
 type OrderDetails = {
     orderId: string;
@@ -15,23 +16,30 @@ type OrderDetails = {
 // A generic function to handle sending messages to avoid code duplication
 async function sendTelegramMessage(botToken: string | undefined, chatIds: string[], message: string, botName: string) {
     if (!botToken || chatIds.length === 0 || chatIds.every(id => !id.trim())) {
-        console.error(`[TelegramBot] CRITICAL: ${botName} bot token or chat IDs are not configured. This is the likely reason for failure in production. Please add the required secrets to your Firebase App Hosting backend environment variables.`);
+        console.error(`[TelegramBot] [${botName}] CRITICAL: Bot token or chat IDs are not configured. This is the likely reason for failure in production. Please add the required secrets to your Firebase App Hosting backend environment variables.`);
         // Log what we have to help debugging
-        console.error(`[TelegramBot] DEBUG: Bot Token Found: ${!!botToken}, Chat IDs Found: ${chatIds.length}`);
+        const maskedToken = botToken ? `${botToken.slice(0, 5)}...${botToken.slice(-4)}` : 'Not Provided';
+        console.error(`[TelegramBot] [${botName}] DEBUG: Bot Token Found: ${!!botToken} (${maskedToken}), Chat IDs Found: ${chatIds.length}`);
         return;
     }
 
-    console.log(`[TelegramBot] INFO: Sending ${botName} message to ${chatIds.length} chat(s).`);
+    console.log(`[TelegramBot] [${botName}] INFO: Preparing to send message to ${chatIds.length} chat(s).`);
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    
+    // Using AbortController for timeout, which is more reliable for fetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
     const sendPromises = chatIds.map(chatId => {
         const trimmedChatId = chatId.trim();
         if (!trimmedChatId) {
-            console.warn(`[TelegramBot] WARN: Skipped empty chat ID for ${botName} bot.`);
+            console.warn(`[TelegramBot] [${botName}] WARN: Skipped empty chat ID.`);
             // Return a resolved promise for empty chat IDs
             return Promise.resolve({ ok: false, status: 'skipped', statusText: 'Skipped empty chat ID' } as Response);
         }
+        
+        console.log(`[TelegramBot] [${botName}] INFO: Sending to Chat ID: ${trimmedChatId}`);
         return fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -40,6 +48,7 @@ async function sendTelegramMessage(botToken: string | undefined, chatIds: string
                 text: message,
                 parse_mode: 'Markdown',
             }),
+            signal: controller.signal, // Pass the signal to the fetch request
         });
     });
 
@@ -51,7 +60,12 @@ async function sendTelegramMessage(botToken: string | undefined, chatIds: string
             if (!chatId) return;
 
             if (result.status === 'rejected') {
-                console.error(`[TelegramBot] FATAL: Network error for ${botName} bot sending to chat ID ${chatId}:`, result.reason);
+                // This will catch network errors and timeouts from AbortController
+                 if ((result.reason as Error).name === 'AbortError') {
+                    console.error(`[TelegramBot] [${botName}] FATAL: Request to Telegram API timed out after ${FETCH_TIMEOUT / 1000} seconds for chat ID ${chatId}. This is likely due to a serverless cold start. The increased timeout should help.`);
+                } else {
+                    console.error(`[TelegramBot] [${botName}] FATAL: Network error sending to chat ID ${chatId}:`, result.reason);
+                }
             } else {
                 // The promise was fulfilled, but the fetch response might indicate an error
                 const response = result.value;
@@ -59,19 +73,21 @@ async function sendTelegramMessage(botToken: string | undefined, chatIds: string
                     if (response.statusText === 'Skipped empty chat ID') return; // Skip logging for intentionally skipped IDs
                     // Try to parse the error response from Telegram
                     response.json().then(errorBody => {
-                        console.error(`[TelegramBot] ERROR: Failed to send ${botName} message to chat ID ${chatId}. Status: ${response.status}. Response:`, JSON.stringify(errorBody, null, 2));
+                        console.error(`[TelegramBot] [${botName}] ERROR: Failed to send message to chat ID ${chatId}. Status: ${response.status}. Response:`, JSON.stringify(errorBody, null, 2));
                     }).catch(() => {
                         // If parsing fails, log the raw status
-                        console.error(`[TelegramBot] ERROR: Failed to send ${botName} message to chat ID ${chatId}. Status: ${response.status}. Could not parse error response.`);
+                        console.error(`[TelegramBot] [${botName}] ERROR: Failed to send message to chat ID ${chatId}. Status: ${response.status}. Could not parse error response.`);
                     });
                 } else {
-                    console.log(`[TelegramBot] SUCCESS: Sent ${botName} message to chat ID ${chatId}.`);
+                    console.log(`[TelegramBot] [${botName}] SUCCESS: Sent message to chat ID ${chatId}.`);
                 }
             }
         });
     } catch (e) {
         // This catch is for Promise.allSettled itself, which should not happen.
-        console.error(`[TelegramBot] FATAL: An unexpected error occurred in sendTelegramMessage for ${botName}.`, e);
+        console.error(`[TelegramBot] [${botName}] FATAL: An unexpected error occurred in sendTelegramMessage.`, e);
+    } finally {
+        clearTimeout(timeoutId); // Clear the timeout in all cases
     }
 }
 
