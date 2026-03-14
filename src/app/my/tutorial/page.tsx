@@ -17,7 +17,7 @@ const tutorials = [
     id: 'buy',
     title: 'How to Buy LGB',
     description: 'A step-by-step guide on purchasing LGB in the app.',
-    videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    videoUrl: '',
     steps: [
       'Go to the Home page and click "Buy".',
       'Select the amount you want to purchase.',
@@ -31,7 +31,7 @@ const tutorials = [
     id: 'sell',
     title: 'How to Sell LGB',
     description: 'Learn how to sell your LGB and withdraw funds.',
-    videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    videoUrl: '',
     steps: [
         'Go to the Home page and click "Sell".',
         'Enter the amount you wish to sell.',
@@ -44,7 +44,7 @@ const tutorials = [
     id: 'upi',
     title: 'How to Link a UPI Account',
     description: 'Link your UPI account to enable withdrawals.',
-    videoUrl: 'https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+    videoUrl: '',
     steps: [
         'Go to the "My" page.',
         'Tap on "Payment Method".',
@@ -86,13 +86,20 @@ export default function TutorialPage() {
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
                 <div className="space-y-4">
-                    <div className="aspect-video w-full overflow-hidden rounded-lg bg-black">
-                        <video
-                            src={tutorial.videoUrl}
-                            controls
-                            className="h-full w-full object-cover"
-                            poster="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_00000000bd5072068c98a569253739e7.png?alt=media&token=3035c470-4755-4b35-a364-60d55ae22513"
-                        />
+                    <div className="aspect-video w-full overflow-hidden rounded-lg bg-black flex items-center justify-center text-white/70 text-center p-4">
+                        {tutorial.videoUrl ? (
+                            <video
+                                src={tutorial.videoUrl}
+                                controls
+                                className="h-full w-full object-contain"
+                                poster="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_00000000bd5072068c98a569253739e7.png?alt=media&token=3035c470-4755-4b35-a364-60d55ae22513"
+                            />
+                        ) : (
+                            <div className="flex flex-col items-center gap-2">
+                                <PlayCircle className="h-10 w-10" />
+                                <p className="font-semibold">Video Coming Soon</p>
+                            </div>
+                        )}
                     </div>
                     <ul className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
                         {tutorial.steps.map((step, index) => (
