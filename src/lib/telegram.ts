@@ -67,7 +67,7 @@ type ChatRequestDetails = {
 
 export async function sendNewChatRequestToTelegram(details: ChatRequestDetails) {
     const botToken = process.env.TELEGRAM_SUPPORT_BOT_TOKEN;
-    const chatIds = process.env.TELEGRAM_SUPPORT_CHAT_ID?.split(',') || [];
+    const chatIds = process.env.TELEGRAM_SUPPORT_CHAT_IDS?.split(',') || [];
 
     if (!botToken || chatIds.length === 0) {
         console.error('Telegram support bot token or chat ID are not configured for chat requests.');
