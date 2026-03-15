@@ -1,12 +1,32 @@
 
 'use server';
 
-// Define tags at the top as a constant
+import 'dotenv/config'; // Ensures .env variables are loaded for local development
+
 const TAGS = '@PRAJAPATI_KING1 @Anandyda89 @Zx_PiYUSH_02 @Satyam_ll @RITIK90608';
 const FETCH_TIMEOUT = 25000; // 25 seconds timeout for each attempt
+const RETRY_COUNT = 3; // Number of retries
+const RETRY_DELAY = 2000; // 2 seconds delay between retries
 
 /**
- * A helper function to send a request with retries. This is crucial for serverless environments
+ * A helper function to safely get an environment variable and log if it's missing.
+ * @param name The name of the environment variable.
+ * @param botName The name of the bot for logging purposes.
+ * @returns The value of the environment variable or an empty string if not found.
+ */
+function getEnvVariable(name: string, botName: string): string {
+    const value = process.env[name];
+    if (!value) {
+        console.error(`[TelegramBot] [${botName}] FATAL: Environment variable ${name} is not set. The bot cannot function. Please configure this secret in your Firebase App Hosting backend.`);
+        return '';
+    }
+    console.log(`[TelegramBot] [${botName}] INFO: Successfully loaded environment variable ${name}.`);
+    return value;
+}
+
+
+/**
+ * A robust fetch function with retries and timeout. This is crucial for serverless environments
  * where cold starts can cause initial requests to time out.
  * @param url The URL to fetch.
  * @param options The fetch options.
@@ -23,25 +43,23 @@ async function fetchWithRetry(url: string, options: RequestInit, retries: number
         try {
             console.log(`[TelegramBot] [${botName}] INFO: Attempt ${i + 1}/${retries} to send to chat ID ${chatId}.`);
             const response = await fetch(url, { ...options, signal: controller.signal });
-            clearTimeout(timeoutId); // Clear the timeout if fetch completes
+            clearTimeout(timeoutId);
 
-            // If response is OK, we are done.
             if (response.ok) {
-                return response;
+                return response; // Success
             }
 
-            // Don't retry on "client" errors (4xx), as they are likely permanent.
+            // Don't retry on client errors (4xx), as they are likely permanent.
             if (response.status >= 400 && response.status < 500) {
                 const errorBody = await response.json().catch(() => ({ description: 'Could not parse error body.' }));
-                console.error(`[TelegramBot] [${botName}] FATAL: Client error for chat ID ${chatId}. Status: ${response.status}. Body: ${JSON.stringify(errorBody)}. Not retrying.`);
-                return response; // Return the failed response to be handled by the caller
+                console.error(`[TelegramBot] [${botName}] FATAL_CLIENT_ERROR for chat ID ${chatId}. Status: ${response.status}. Body: ${JSON.stringify(errorBody)}. Not retrying.`);
+                return response;
             }
             
-            // For server errors (5xx) or other transient issues, log and prepare to retry.
-            console.warn(`[TelegramBot] [${botName}] WARN: Attempt ${i + 1} failed with status ${response.status}. Retrying in 2s...`);
+            console.warn(`[TelegramBot] [${botName}] WARN: Attempt ${i + 1} failed with server/network issue. Status: ${response.status}. Retrying in ${RETRY_DELAY / 1000}s...`);
 
         } catch (error: any) {
-            clearTimeout(timeoutId); // Clear timeout on error too
+            clearTimeout(timeoutId);
             if (error.name === 'AbortError') {
                 console.warn(`[TelegramBot] [${botName}] WARN: Attempt ${i + 1} timed out after ${FETCH_TIMEOUT / 1000}s. Retrying...`);
             } else {
@@ -49,20 +67,24 @@ async function fetchWithRetry(url: string, options: RequestInit, retries: number
             }
         }
 
-        // Wait before the next retry, but not after the last attempt.
         if (i < retries - 1) {
-            await new Promise(res => setTimeout(res, 2000)); // 2-second delay
+            await new Promise(res => setTimeout(res, RETRY_DELAY));
         }
     }
 
-    // If all retries fail, throw an error.
     throw new Error(`Failed to send message to chat ID ${chatId} after ${retries} attempts.`);
 }
 
-
+/**
+ * Sends a message to multiple Telegram chats. It handles cases where some chats might fail without stopping others.
+ * @param botToken The bot's API token.
+ * @param chatIds An array of chat IDs.
+ * @param message The message to send.
+ * @param botName A friendly name for the bot for logging.
+ */
 async function sendTelegramMessage(botToken: string | undefined, chatIds: string[], message: string, botName: string) {
     if (!botToken || chatIds.length === 0 || chatIds.every(id => !id.trim())) {
-        console.error(`[TelegramBot] [${botName}] CRITICAL: Bot token or chat IDs are not configured. This is a common production issue. Please add the required secrets to your Firebase App Hosting backend environment variables.`);
+        console.error(`[TelegramBot] [${botName}] CRITICAL: Bot token or chat IDs are empty or not configured. Cannot send message. Please check your Firebase secrets.`);
         return;
     }
 
@@ -88,21 +110,19 @@ async function sendTelegramMessage(botToken: string | undefined, chatIds: string
                         parse_mode: 'Markdown',
                     }),
                 },
-                3, // Try up to 3 times
+                RETRY_COUNT,
                 botName,
                 trimmedChatId
             );
 
             if (!response.ok) {
-                 // The error is already logged in fetchWithRetry for client errors.
-                 // We return a failure status to be safe.
-                return { status: 'failed', chatId: trimmedChatId };
+                 return { status: 'failed', chatId: trimmedChatId };
             }
             
             return { status: 'success', chatId: trimmedChatId };
 
         } catch (error: any) {
-            console.error(`[TelegramBot] [${botName}] FINAL_ERROR for chat ID ${trimmedChatId}:`, error.message);
+            console.error(`[TelegramBot] [${botName}] FINAL_ERROR for chat ID ${trimmedChatId}: ${error.message}`);
             return { status: 'failed', chatId: trimmedChatId, error: error.message };
         }
     });
@@ -115,14 +135,26 @@ async function sendTelegramMessage(botToken: string | undefined, chatIds: string
     });
 }
 
+// --- Exported Functions ---
+
+type OrderDetails = {
+    orderId: string;
+    userNumericId?: string;
+    amount: number;
+    utr: string;
+    receiverDetails: { [key: string]: string | undefined };
+};
 
 export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
-    const botToken = process.env.TELEGRAM_PAYMENT_BOT_TOKEN;
-    const chatIds = process.env.TELEGRAM_PAYMENT_CHAT_IDS?.split(',') || [];
+    console.log('[TelegramBot] [Payment] INFO: Initiating order confirmation notification.');
+    const botToken = getEnvVariable('TELEGRAM_PAYMENT_BOT_TOKEN', 'Payment');
+    const chatIdsRaw = getEnvVariable('TELEGRAM_PAYMENT_CHAT_IDS', 'Payment');
+    const chatIds = chatIdsRaw ? chatIdsRaw.split(',') : [];
 
     let receiverText = '';
     for (const [key, value] of Object.entries(details.receiverDetails)) {
         if (value) {
+            // Using backticks for monospaced font in Telegram
             receiverText += `\n${key}: \`${value}\``;
         }
     }
@@ -149,8 +181,10 @@ type ChatRequestDetails = {
 };
 
 export async function sendNewChatRequestToTelegram(details: ChatRequestDetails) {
-    const botToken = process.env.TELEGRAM_SUPPORT_BOT_TOKEN;
-    const chatIds = process.env.TELEGRAM_SUPPORT_CHAT_IDS?.split(',') || [];
+    console.log('[TelegramBot] [Support] INFO: Initiating new chat request notification.');
+    const botToken = getEnvVariable('TELEGRAM_SUPPORT_BOT_TOKEN', 'Support');
+    const chatIdsRaw = getEnvVariable('TELEGRAM_SUPPORT_CHAT_IDS', 'Support');
+    const chatIds = chatIdsRaw ? chatIdsRaw.split(',') : [];
 
     const message = `
 *New Live Chat Request!* 💬
@@ -167,11 +201,3 @@ ${TAGS}
 
     await sendTelegramMessage(botToken, chatIds, message, 'Support');
 }
-
-type OrderDetails = {
-    orderId: string;
-    userNumericId?: string;
-    amount: number;
-    utr: string;
-    receiverDetails: { [key: string]: string | undefined };
-};
