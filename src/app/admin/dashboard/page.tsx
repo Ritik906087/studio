@@ -1935,16 +1935,26 @@ function AdminDashboard() {
                 }
 
                 try {
-                    const buyOrderQuery = query(collectionGroup(firestore, 'orders'), where('orderId', '==', term), limit(1));
-                    const sellOrderQuery = query(collectionGroup(firestore, 'sellOrders'), where('orderId', '==', term), limit(1));
+                    // Fetch all orders and sellOrders and filter them client-side to avoid index requirement.
+                    // This is less performant for large datasets.
+                    const buyOrdersQuery = query(collectionGroup(firestore, 'orders'));
+                    const sellOrdersQuery = query(collectionGroup(firestore, 'sellOrders'));
 
-                    const [buySnap, sellSnap] = await Promise.all([getDocs(buyOrderQuery), getDocs(sellOrderQuery)]);
-                    
+                    const [buyOrdersSnapshot, sellOrdersSnapshot] = await Promise.all([
+                        getDocs(buyOrdersQuery),
+                        getDocs(sellOrdersQuery),
+                    ]);
+
                     let userId: string | null = null;
-                    if (!buySnap.empty) {
-                        userId = buySnap.docs[0].data().userId;
-                    } else if (!sellSnap.empty) {
-                        userId = sellSnap.docs[0].data().userId;
+
+                    const buyMatch = buyOrdersSnapshot.docs.find(doc => doc.data().orderId === term);
+                    if (buyMatch) {
+                        userId = buyMatch.data().userId;
+                    } else {
+                        const sellMatch = sellOrdersSnapshot.docs.find(doc => doc.data().orderId === term);
+                        if (sellMatch) {
+                            userId = sellMatch.data().userId;
+                        }
                     }
 
                     if (userId) {
@@ -1960,7 +1970,7 @@ function AdminDashboard() {
                     }
                 } catch (e: any) {
                     console.error("Order search error:", e);
-                    toast({ variant: 'destructive', title: 'Search Error', description: 'Could not perform order search. A database index might be required. Check browser console for details.' });
+                    toast({ variant: 'destructive', title: 'Search Error', description: 'Could not perform order search. This might be due to Firestore security rules. Check browser console for details.' });
                     setOrderIdSearchedUser(null);
                 } finally {
                     setIsSearchingOrders(false);
