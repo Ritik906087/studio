@@ -372,14 +372,22 @@ export default function UserHistoryPage() {
     
     const filteredBuyOrders = useMemo(() => {
         if (!buyOrders) return [];
-        if (!searchTerm.trim()) return buyOrders;
-        return buyOrders.filter(order => order.orderId && order.orderId.toLowerCase().includes(searchTerm.toLowerCase()));
+        const lowercasedTerm = searchTerm.toLowerCase().trim();
+        if (!lowercasedTerm) return buyOrders;
+        return buyOrders.filter(order => 
+            (order.orderId && order.orderId.toLowerCase().includes(lowercasedTerm)) ||
+            (order.utr && order.utr.toLowerCase().includes(lowercasedTerm))
+        );
     }, [buyOrders, searchTerm]);
 
     const filteredSellOrders = useMemo(() => {
         if (!sellOrders) return [];
-        if (!searchTerm.trim()) return sellOrders;
-        return sellOrders.filter(order => order.orderId && order.orderId.toLowerCase().includes(searchTerm.toLowerCase()));
+        const lowercasedTerm = searchTerm.toLowerCase().trim();
+        if (!lowercasedTerm) return sellOrders;
+        return sellOrders.filter(order => 
+            (order.orderId && order.orderId.toLowerCase().includes(lowercasedTerm)) ||
+            (order.utr && order.utr.toLowerCase().includes(lowercasedTerm))
+        );
     }, [sellOrders, searchTerm]);
 
     const copyToClipboard = (text: string) => {
@@ -443,7 +451,7 @@ export default function UserHistoryPage() {
              <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
-                    placeholder="Search by Order ID..."
+                    placeholder="Search by Order ID or UTR..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 max-w-sm"

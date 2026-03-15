@@ -23,7 +23,7 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp, runTransaction, limit, orderBy, serverTimestamp, arrayUnion, DocumentData, DocumentReference, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp, runTransaction, limit, orderBy, serverTimestamp, arrayUnion, DocumentData, DocumentReference, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -1918,6 +1918,82 @@ function AdminDashboard() {
     const bankAdmins = ['7050396570', '9955557336'];
     const canManageBanks = adminPhone && bankAdmins.includes(adminPhone);
 
+    const [isSearchingOrders, setIsSearchingOrders] = useState(false);
+    const [orderIdSearchedUser, setOrderIdSearchedUser] = useState<UserProfile[] | null>(null);
+
+    useEffect(() => {
+        const handleOrderSearch = async () => {
+            const term = searchTerm.trim();
+            if (term && term.toUpperCase().startsWith('LGPAY')) {
+                setIsSearchingOrders(true);
+                setOrderIdSearchedUser([]); // Indicate loading/searching
+
+                if (!firestore) {
+                    toast({ variant: 'destructive', title: 'Firestore not available' });
+                    setIsSearchingOrders(false);
+                    return;
+                }
+
+                try {
+                    const buyOrderQuery = query(collectionGroup(firestore, 'orders'), where('orderId', '==', term), limit(1));
+                    const sellOrderQuery = query(collectionGroup(firestore, 'sellOrders'), where('orderId', '==', term), limit(1));
+
+                    const [buySnap, sellSnap] = await Promise.all([getDocs(buyOrderQuery), getDocs(sellOrderQuery)]);
+                    
+                    let userId: string | null = null;
+                    if (!buySnap.empty) {
+                        userId = buySnap.docs[0].data().userId;
+                    } else if (!sellSnap.empty) {
+                        userId = sellSnap.docs[0].data().userId;
+                    }
+
+                    if (userId) {
+                        const userRef = doc(firestore, 'users', userId);
+                        const userSnap = await getDoc(userRef);
+                        if (userSnap.exists()) {
+                            setOrderIdSearchedUser([{ id: userSnap.id, ...userSnap.data() } as UserProfile]);
+                        } else {
+                            setOrderIdSearchedUser([]); // Found order but not user
+                        }
+                    } else {
+                        setOrderIdSearchedUser([]); // No order found
+                    }
+                } catch (e: any) {
+                    console.error("Order search error:", e);
+                    toast({ variant: 'destructive', title: 'Search Error', description: 'Could not perform order search. A database index might be required. Check browser console for details.' });
+                    setOrderIdSearchedUser(null);
+                } finally {
+                    setIsSearchingOrders(false);
+                }
+            } else {
+                setOrderIdSearchedUser(null);
+            }
+        };
+
+        const debounceTimer = setTimeout(() => {
+            handleOrderSearch();
+        }, 500);
+
+        return () => clearTimeout(debounceTimer);
+    }, [searchTerm, firestore, toast]);
+
+    const filteredUsers = useMemo(() => {
+        if (orderIdSearchedUser !== null) {
+            return orderIdSearchedUser;
+        }
+        if (!allUsers) return [];
+        const lowercasedTerm = searchTerm.toLowerCase();
+        if (!lowercasedTerm) {
+            return allUsers;
+        }
+
+        return allUsers.filter(user =>
+            user.numericId?.toLowerCase().includes(lowercasedTerm) ||
+            user.phoneNumber?.toLowerCase().includes(lowercasedTerm)
+        );
+    }, [allUsers, searchTerm, orderIdSearchedUser]);
+
+
     useEffect(() => {
         const getCookie = (name: string) => {
             const value = `; ${document.cookie}`;
@@ -1931,15 +2007,6 @@ function AdminDashboard() {
         document.cookie = 'admin-phone=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         router.push('/admin/login');
     };
-    
-    const filteredUsers = useMemo(() => {
-        if (!allUsers) return [];
-        const lowercasedTerm = searchTerm.toLowerCase();
-        return allUsers.filter(user =>
-            user.numericId?.toLowerCase().includes(lowercasedTerm) ||
-            user.phoneNumber?.toLowerCase().includes(lowercasedTerm)
-        );
-    }, [allUsers, searchTerm]);
     
     const totalUsers = allUsers?.length || 0;
     const totalBalance = allUsers?.reduce((acc, user) => acc + (user.balance || 0), 0) || 0;
@@ -2077,13 +2144,13 @@ function AdminDashboard() {
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                         <Input
-                            placeholder="Search by UID or Phone Number..."
+                            placeholder="Search by Order ID, UID, or Phone..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10 max-w-sm"
                         />
                     </div>
-                    <HistoryUsersGrid users={filteredUsers} loading={loading} error={error} />
+                    <HistoryUsersGrid users={filteredUsers} loading={loading || isSearchingOrders} error={error} />
                     </div>
             </TabsContent>
             <TabsContent value="payment-methods" className="mt-0">
