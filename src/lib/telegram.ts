@@ -3,92 +3,116 @@
 
 // Define tags at the top as a constant
 const TAGS = '@PRAJAPATI_KING1 @Anandyda89 @Zx_PiYUSH_02 @Satyam_ll @RITIK90608';
-const FETCH_TIMEOUT = 20000; // 20 seconds timeout for Telegram API requests
+const FETCH_TIMEOUT = 25000; // 25 seconds timeout for each attempt
 
-type OrderDetails = {
-    orderId: string;
-    userNumericId?: string;
-    amount: number;
-    utr: string;
-    receiverDetails: { [key: string]: string | undefined };
-};
+/**
+ * A helper function to send a request with retries. This is crucial for serverless environments
+ * where cold starts can cause initial requests to time out.
+ * @param url The URL to fetch.
+ * @param options The fetch options.
+ * @param retries The number of times to retry.
+ * @param botName The name of the bot for logging.
+ * @param chatId The chat ID for logging.
+ * @returns A Promise that resolves to the Response.
+ */
+async function fetchWithRetry(url: string, options: RequestInit, retries: number, botName: string, chatId: string): Promise<Response> {
+    for (let i = 0; i < retries; i++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-// A generic function to handle sending messages to avoid code duplication
+        try {
+            console.log(`[TelegramBot] [${botName}] INFO: Attempt ${i + 1}/${retries} to send to chat ID ${chatId}.`);
+            const response = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(timeoutId); // Clear the timeout if fetch completes
+
+            // If response is OK, we are done.
+            if (response.ok) {
+                return response;
+            }
+
+            // Don't retry on "client" errors (4xx), as they are likely permanent.
+            if (response.status >= 400 && response.status < 500) {
+                const errorBody = await response.json().catch(() => ({ description: 'Could not parse error body.' }));
+                console.error(`[TelegramBot] [${botName}] FATAL: Client error for chat ID ${chatId}. Status: ${response.status}. Body: ${JSON.stringify(errorBody)}. Not retrying.`);
+                return response; // Return the failed response to be handled by the caller
+            }
+            
+            // For server errors (5xx) or other transient issues, log and prepare to retry.
+            console.warn(`[TelegramBot] [${botName}] WARN: Attempt ${i + 1} failed with status ${response.status}. Retrying in 2s...`);
+
+        } catch (error: any) {
+            clearTimeout(timeoutId); // Clear timeout on error too
+            if (error.name === 'AbortError') {
+                console.warn(`[TelegramBot] [${botName}] WARN: Attempt ${i + 1} timed out after ${FETCH_TIMEOUT / 1000}s. Retrying...`);
+            } else {
+                console.warn(`[TelegramBot] [${botName}] WARN: Attempt ${i + 1} failed with network error: ${error.message}. Retrying...`);
+            }
+        }
+
+        // Wait before the next retry, but not after the last attempt.
+        if (i < retries - 1) {
+            await new Promise(res => setTimeout(res, 2000)); // 2-second delay
+        }
+    }
+
+    // If all retries fail, throw an error.
+    throw new Error(`Failed to send message to chat ID ${chatId} after ${retries} attempts.`);
+}
+
+
 async function sendTelegramMessage(botToken: string | undefined, chatIds: string[], message: string, botName: string) {
     if (!botToken || chatIds.length === 0 || chatIds.every(id => !id.trim())) {
-        console.error(`[TelegramBot] [${botName}] CRITICAL: Bot token or chat IDs are not configured. This is the likely reason for failure in production. Please add the required secrets to your Firebase App Hosting backend environment variables.`);
-        // Log what we have to help debugging
-        const maskedToken = botToken ? `${botToken.slice(0, 5)}...${botToken.slice(-4)}` : 'Not Provided';
-        console.error(`[TelegramBot] [${botName}] DEBUG: Bot Token Found: ${!!botToken} (${maskedToken}), Chat IDs Found: ${chatIds.length}`);
+        console.error(`[TelegramBot] [${botName}] CRITICAL: Bot token or chat IDs are not configured. This is a common production issue. Please add the required secrets to your Firebase App Hosting backend environment variables.`);
         return;
     }
 
     console.log(`[TelegramBot] [${botName}] INFO: Preparing to send message to ${chatIds.length} chat(s).`);
-
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-    
-    // Using AbortController for timeout, which is more reliable for fetch
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-    const sendPromises = chatIds.map(chatId => {
+    const sendPromises = chatIds.map(async (chatId) => {
         const trimmedChatId = chatId.trim();
         if (!trimmedChatId) {
             console.warn(`[TelegramBot] [${botName}] WARN: Skipped empty chat ID.`);
-            // Return a resolved promise for empty chat IDs
-            return Promise.resolve({ ok: false, status: 'skipped', statusText: 'Skipped empty chat ID' } as Response);
+            return { status: 'skipped', chatId: 'empty' };
         }
-        
-        console.log(`[TelegramBot] [${botName}] INFO: Sending to Chat ID: ${trimmedChatId}`);
-        return fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: trimmedChatId,
-                text: message,
-                parse_mode: 'Markdown',
-            }),
-            signal: controller.signal, // Pass the signal to the fetch request
-        });
+
+        try {
+            const response = await fetchWithRetry(
+                url,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: trimmedChatId,
+                        text: message,
+                        parse_mode: 'Markdown',
+                    }),
+                },
+                3, // Try up to 3 times
+                botName,
+                trimmedChatId
+            );
+
+            if (!response.ok) {
+                 // The error is already logged in fetchWithRetry for client errors.
+                 // We return a failure status to be safe.
+                return { status: 'failed', chatId: trimmedChatId };
+            }
+            
+            return { status: 'success', chatId: trimmedChatId };
+
+        } catch (error: any) {
+            console.error(`[TelegramBot] [${botName}] FINAL_ERROR for chat ID ${trimmedChatId}:`, error.message);
+            return { status: 'failed', chatId: trimmedChatId, error: error.message };
+        }
     });
 
-    try {
-        const results = await Promise.allSettled(sendPromises);
-
-        results.forEach((result, index) => {
-            const chatId = chatIds[index]?.trim();
-            if (!chatId) return;
-
-            if (result.status === 'rejected') {
-                // This will catch network errors and timeouts from AbortController
-                 if ((result.reason as Error).name === 'AbortError') {
-                    console.error(`[TelegramBot] [${botName}] FATAL: Request to Telegram API timed out after ${FETCH_TIMEOUT / 1000} seconds for chat ID ${chatId}. This is likely due to a serverless cold start. The increased timeout should help.`);
-                } else {
-                    console.error(`[TelegramBot] [${botName}] FATAL: Network error sending to chat ID ${chatId}:`, result.reason);
-                }
-            } else {
-                // The promise was fulfilled, but the fetch response might indicate an error
-                const response = result.value;
-                if (!response.ok) {
-                    if (response.statusText === 'Skipped empty chat ID') return; // Skip logging for intentionally skipped IDs
-                    // Try to parse the error response from Telegram
-                    response.json().then(errorBody => {
-                        console.error(`[TelegramBot] [${botName}] ERROR: Failed to send message to chat ID ${chatId}. Status: ${response.status}. Response:`, JSON.stringify(errorBody, null, 2));
-                    }).catch(() => {
-                        // If parsing fails, log the raw status
-                        console.error(`[TelegramBot] [${botName}] ERROR: Failed to send message to chat ID ${chatId}. Status: ${response.status}. Could not parse error response.`);
-                    });
-                } else {
-                    console.log(`[TelegramBot] [${botName}] SUCCESS: Sent message to chat ID ${chatId}.`);
-                }
-            }
-        });
-    } catch (e) {
-        // This catch is for Promise.allSettled itself, which should not happen.
-        console.error(`[TelegramBot] [${botName}] FATAL: An unexpected error occurred in sendTelegramMessage.`, e);
-    } finally {
-        clearTimeout(timeoutId); // Clear the timeout in all cases
-    }
+    const results = await Promise.all(sendPromises);
+    results.forEach(result => {
+        if (result.status === 'success') {
+            console.log(`[TelegramBot] [${botName}] SUCCESS: Message sent to chat ID ${result.chatId}.`);
+        }
+    });
 }
 
 
@@ -143,3 +167,11 @@ ${TAGS}
 
     await sendTelegramMessage(botToken, chatIds, message, 'Support');
 }
+
+type OrderDetails = {
+    orderId: string;
+    userNumericId?: string;
+    amount: number;
+    utr: string;
+    receiverDetails: { [key: string]: string | undefined };
+};
