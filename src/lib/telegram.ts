@@ -3,7 +3,6 @@
 
 import 'dotenv/config'; // Ensures .env variables are loaded for local development
 
-const TAGS = '@PRAJAPATI_KING1 @Anandyda89 @Zx_PiYUSH_02 @Satyam_ll @RITIK90608';
 const FETCH_TIMEOUT = 25000; // 25 seconds timeout for each attempt
 const RETRY_COUNT = 3; // Number of retries
 const RETRY_DELAY = 2000; // 2 seconds delay between retries
@@ -146,10 +145,14 @@ type OrderDetails = {
 };
 
 export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
-    console.log('[TelegramBot] [Payment] INFO: Initiating order confirmation notification.');
-    const botToken = getEnvVariable('TELEGRAM_PAYMENT_BOT_TOKEN', 'Payment');
-    const chatIdsRaw = getEnvVariable('TELEGRAM_PAYMENT_CHAT_IDS', 'Payment');
-    const chatIds = chatIdsRaw ? chatIdsRaw.split(',') : [];
+    const botName = 'Payment';
+    console.log(`[TelegramBot] [${botName}] INFO: Initiating order confirmation notification.`);
+    
+    const botToken = getEnvVariable('TELEGRAM_PAYMENT_BOT_TOKEN', botName);
+    const groupChatId = getEnvVariable('TELEGRAM_PAYMENT_CHAT_ID_GROUP', botName);
+    const personalChatId = getEnvVariable('TELEGRAM_ADMIN_CHAT_ID_PERSONAL', botName);
+    
+    const chatIds = [groupChatId, personalChatId].filter(Boolean); // Filter out empty strings
 
     let receiverText = '';
     for (const [key, value] of Object.entries(details.receiverDetails)) {
@@ -168,11 +171,9 @@ export async function sendOrderConfirmationToTelegram(details: OrderDetails) {
 *UTR:* \`${details.utr}\`
 
 *Receiver Details:*${receiverText}
-
-${TAGS}
     `;
 
-    await sendTelegramMessage(botToken, chatIds, message, 'Payment');
+    await sendTelegramMessage(botToken, chatIds, message, botName);
 }
 
 type ChatRequestDetails = {
@@ -181,10 +182,14 @@ type ChatRequestDetails = {
 };
 
 export async function sendNewChatRequestToTelegram(details: ChatRequestDetails) {
-    console.log('[TelegramBot] [Support] INFO: Initiating new chat request notification.');
-    const botToken = getEnvVariable('TELEGRAM_SUPPORT_BOT_TOKEN', 'Support');
-    const chatIdsRaw = getEnvVariable('TELEGRAM_SUPPORT_CHAT_IDS', 'Support');
-    const chatIds = chatIdsRaw ? chatIdsRaw.split(',') : [];
+    const botName = 'Support';
+    console.log(`[TelegramBot] [${botName}] INFO: Initiating new chat request notification.`);
+
+    const botToken = getEnvVariable('TELEGRAM_SUPPORT_BOT_TOKEN', botName);
+    const groupChatId = getEnvVariable('TELEGRAM_SUPPORT_CHAT_ID_GROUP', botName);
+    const personalChatId = getEnvVariable('TELEGRAM_ADMIN_CHAT_ID_PERSONAL', botName);
+
+    const chatIds = [groupChatId, personalChatId].filter(Boolean); // Filter out empty strings
 
     const message = `
 *New Live Chat Request!* 💬
@@ -195,9 +200,9 @@ A user needs help.
 *Identifier Entered:* \`${details.enteredIdentifier}\`
 
 Please check the admin panel to join the chat.
-
-${TAGS}
     `;
 
-    await sendTelegramMessage(botToken, chatIds, message, 'Support');
+    await sendTelegramMessage(botToken, chatIds, message, botName);
 }
+
+    
