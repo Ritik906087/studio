@@ -1441,12 +1441,10 @@ function ConfirmationsTabContent() {
         setOrdersLoading(true);
         setError(null);
         try {
-            // This query is much more efficient as it filters on the database server.
-            // It might require a new Firestore index. If this page shows an error,
-            // check the browser's developer console for a link to create the index.
             const q = query(
                 collectionGroup(firestore, 'orders'), 
-                where('status', 'in', ['pending_confirmation', 'in_applied'])
+                where('status', 'in', ['pending_confirmation', 'in_applied']),
+                orderBy('createdAt', 'desc')
             );
             const snapshot = await getDocs(q);
 
@@ -1460,8 +1458,6 @@ function ConfirmationsTabContent() {
 
             if (pendingOrders.length > 0) {
                 const userIds = [...new Set(pendingOrders.map(order => order.userId))];
-                // Using 'in' query is limited to 30 elements in the array.
-                // We need to chunk the userIds array.
                 const userPromises = [];
                 for (let i = 0; i < userIds.length; i += 30) {
                     const chunk = userIds.slice(i, i + 30);
