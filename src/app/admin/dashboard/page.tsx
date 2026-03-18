@@ -2162,10 +2162,12 @@ function AdminDashboard() {
                 <History className="mr-2"/>
                 History
             </TabsTrigger>
-             <TabsTrigger value="payment-methods" className="justify-start p-3">
-                <Wallet className="mr-2"/>
-                Payment Methods
-            </TabsTrigger>
+            {isMasterAdmin && (
+              <TabsTrigger value="payment-methods" className="justify-start p-3">
+                  <Wallet className="mr-2"/>
+                  Payment Methods
+              </TabsTrigger>
+            )}
           </TabsList>
           <div className="mt-4 md:mt-0">
             <TabsContent value="dashboard" className="mt-0">
@@ -2237,47 +2239,38 @@ function AdminDashboard() {
                     <HistoryUsersGrid users={filteredUsers} loading={loading || isSearchingOrders} error={error} />
                     </div>
             </TabsContent>
-            <TabsContent value="payment-methods" className="mt-0">
-                <div className="w-full max-w-2xl mx-auto">
-                    {isMasterAdmin ? (
-                        <Tabs defaultValue="bank">
-                            <TabsList className="grid w-full grid-cols-3">
-                                <TabsTrigger value="bank">
-                                    <Landmark className="mr-2" />
-                                    Bank
-                                </TabsTrigger>
-                                <TabsTrigger value="upi">
-                                    <Banknote className="mr-2" />
-                                    UPI
-                                </TabsTrigger>
-                                <TabsTrigger value="usdt">
-                                    <Wallet className="mr-2" />
-                                    USDT
-                                </TabsTrigger>
-                            </TabsList>
-                            <TabsContent value="bank" className="mt-4">
-                                <BankDetailsForm onAdd={(details) => handleAddMethod('bank', details)} />
-                            </TabsContent>
-                            <TabsContent value="upi" className="mt-4">
-                                <UpiDetailsForm onAdd={(details) => handleAddMethod('upi', details)} />
-                            </TabsContent>
-                            <TabsContent value="usdt" className="mt-4">
-                                <UsdtDetailsForm onAdd={(details) => handleAddMethod('usdt', details)} />
-                            </TabsContent>
-                        </Tabs>
-                    ) : (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Payment Methods</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-muted-foreground text-center">You do not have permission to add new payment methods.</p>
-                            </CardContent>
-                        </Card>
-                    )}
-                    <PaymentMethodsList methods={paymentMethods || []} loading={paymentMethodsLoading} onDelete={handleDeleteMethod} canDelete={isMasterAdmin}/>
-                </div>
-            </TabsContent>
+            {isMasterAdmin && (
+              <TabsContent value="payment-methods" className="mt-0">
+                  <div className="w-full max-w-2xl mx-auto">
+                      <Tabs defaultValue="bank">
+                          <TabsList className="grid w-full grid-cols-3">
+                              <TabsTrigger value="bank">
+                                  <Landmark className="mr-2" />
+                                  Bank
+                              </TabsTrigger>
+                              <TabsTrigger value="upi">
+                                  <Banknote className="mr-2" />
+                                  UPI
+                              </TabsTrigger>
+                              <TabsTrigger value="usdt">
+                                  <Wallet className="mr-2" />
+                                  USDT
+                              </TabsTrigger>
+                          </TabsList>
+                          <TabsContent value="bank" className="mt-4">
+                              <BankDetailsForm onAdd={(details) => handleAddMethod('bank', details)} />
+                          </TabsContent>
+                          <TabsContent value="upi" className="mt-4">
+                              <UpiDetailsForm onAdd={(details) => handleAddMethod('upi', details)} />
+                          </TabsContent>
+                          <TabsContent value="usdt" className="mt-4">
+                              <UsdtDetailsForm onAdd={(details) => handleAddMethod('usdt', details)} />
+                          </TabsContent>
+                      </Tabs>
+                      <PaymentMethodsList methods={paymentMethods || []} loading={paymentMethodsLoading} onDelete={handleDeleteMethod} canDelete={isMasterAdmin}/>
+                  </div>
+              </TabsContent>
+            )}
           </div>
         </Tabs>
       </main>
