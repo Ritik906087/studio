@@ -771,16 +771,19 @@ function WithdrawalsTabContent() {
         setLoading(true);
         setError(null);
         try {
-            const q = query(collectionGroup(firestore, 'sellOrders'));
+            const q = query(
+                collectionGroup(firestore, 'sellOrders'), 
+                where('status', '==', 'pending'),
+                orderBy('createdAt', 'asc')
+            );
             const sellOrdersSnapshot = await getDocs(q);
             const pendingWithdrawals = sellOrdersSnapshot.docs
                 .map(doc => ({
                     id: doc.id,
                     ...doc.data(),
-                } as SellOrder))
-                .filter(order => order.status === 'pending');
+                } as SellOrder));
     
-            setAllOrders(pendingWithdrawals.sort((a,b) => a.createdAt.seconds - b.createdAt.seconds));
+            setAllOrders(pendingWithdrawals);
         } catch (error) {
             console.error("Error fetching withdrawals:", error);
             setError(error);
@@ -1441,16 +1444,25 @@ function ConfirmationsTabContent() {
         setOrdersLoading(true);
         setError(null);
         try {
-            const q = query(
-                collectionGroup(firestore, 'orders')
+            const confirmationsQuery = query(
+                collectionGroup(firestore, 'orders'),
+                where('status', '==', 'pending_confirmation')
             );
-            const snapshot = await getDocs(q);
-
-            const pendingOrders = snapshot.docs.map(orderDoc => ({
-                id: orderDoc.id,
-                ...orderDoc.data(),
-                path: orderDoc.ref.path,
-            } as Order)).filter(order => ['pending_confirmation', 'in_applied'].includes(order.status));
+    
+            const inAppliedQuery = query(
+                collectionGroup(firestore, 'orders'),
+                where('status', '==', 'in_applied')
+            );
+            
+            const [confirmationsSnapshot, inAppliedSnapshot] = await Promise.all([
+                getDocs(confirmationsQuery),
+                getDocs(inAppliedQuery),
+            ]);
+    
+            const pendingOrders = [
+                ...confirmationsSnapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data(), path: orderDoc.ref.path } as Order)),
+                ...inAppliedSnapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data(), path: orderDoc.ref.path } as Order)),
+            ];
             
             setAllOrders(pendingOrders);
 
