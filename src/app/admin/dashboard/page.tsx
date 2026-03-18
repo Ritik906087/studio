@@ -1042,7 +1042,7 @@ function LiveChatTabContent() {
                                 <CardFooter>
                                     <Button asChild className={cn(
                                         "w-full font-bold",
-                                        isPending ? "bg-green-500 hover:bg-green-600 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
+                                        isPending ? "bg-green-500 hover:bg-green-500 text-white" : "bg-blue-500 hover:bg-blue-600 text-white"
                                     )}>
                                         <Link href={`/admin/chat/${request.id}`}>
                                             {isPending ? "JOIN CHAT" : "VIEW ACTIVE CHAT"}
@@ -1442,9 +1442,7 @@ function ConfirmationsTabContent() {
         setError(null);
         try {
             const q = query(
-                collectionGroup(firestore, 'orders'), 
-                where('status', 'in', ['pending_confirmation', 'in_applied']),
-                orderBy('createdAt', 'desc')
+                collectionGroup(firestore, 'orders')
             );
             const snapshot = await getDocs(q);
 
@@ -1452,7 +1450,7 @@ function ConfirmationsTabContent() {
                 id: orderDoc.id,
                 ...orderDoc.data(),
                 path: orderDoc.ref.path,
-            } as Order));
+            } as Order)).filter(order => ['pending_confirmation', 'in_applied'].includes(order.status));
             
             setAllOrders(pendingOrders);
 
