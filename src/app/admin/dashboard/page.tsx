@@ -66,6 +66,18 @@ type PaymentMethod = {
     usdtWalletAddress?: string;
 }
 
+type WithdrawalMethod = {
+    type: 'upi' | 'bank';
+    name: string;
+    upiId?: string;
+    bankName?: string;
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    upiHolderName?: string;
+    usdtWalletAddress?: string;
+}
+
 type Order = {
     id: string;
     path: string;
@@ -79,9 +91,10 @@ type Order = {
     verificationResult?: string;
     createdAt: Timestamp;
     user?: UserProfile;
-    paymentType?: 'bank' | 'upi' | 'usdt' | 'p2p_upi';
+    paymentType?: 'bank' | 'upi' | 'usdt' | 'p2p_upi' | 'p2p_bank';
     paymentProvider?: string;
     adminPaymentMethodId?: string;
+    sellerWithdrawalDetails?: WithdrawalMethod;
     matchedSellOrderPath?: string;
     ocrVerified?: boolean;
     ocrUtrMatch?: boolean;
@@ -1099,10 +1112,15 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
     const firestore = useFirestore();
     const { toast } = useToast();
 
-    const adminMethod = useMemo(() => {
+    const isP2P = order.paymentType === 'p2p_upi' || order.paymentType === 'p2p_bank';
+
+    const receiverDetails = useMemo(() => {
+        if (isP2P) {
+            return order.sellerWithdrawalDetails;
+        }
         if (!order.adminPaymentMethodId || !adminPaymentMethods) return null;
         return adminPaymentMethods.find(m => m.id === order.adminPaymentMethodId);
-    }, [order, adminPaymentMethods]);
+    }, [order, adminPaymentMethods, isP2P]);
 
     const handleApprove = async () => {
         if (!firestore || !order.path) return;
@@ -1336,6 +1354,52 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
                             </Dialog>
                         </div>
 
+                        {receiverDetails && (
+                            <div className="mt-4">
+                                <h3 className="font-semibold text-foreground mb-2 text-sm">Receiver Details</h3>
+                                <div className="rounded-lg border bg-secondary/50 p-3 space-y-2 text-sm">
+                                    {receiverDetails.type === 'bank' && (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Bank:</span>
+                                                <span className="font-semibold">{receiverDetails.bankName}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Holder:</span>
+                                                <span className="font-semibold">{receiverDetails.accountHolderName}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Account No:</span>
+                                                <span className="font-mono">{receiverDetails.accountNumber}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">IFSC:</span>
+                                                <span className="font-mono">{receiverDetails.ifscCode}</span>
+                                            </div>
+                                        </>
+                                    )}
+                                    {receiverDetails.type === 'upi' && (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">Name:</span>
+                                                <span className="font-semibold">{(receiverDetails as any).upiHolderName || receiverDetails.name}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-muted-foreground">UPI ID:</span>
+                                                <span className="font-mono">{receiverDetails.upiId}</span>
+                                            </div>
+                                        </>
+                                    )}
+                                    {receiverDetails.type === 'usdt' && (
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Wallet:</span>
+                                            <span className="font-mono break-all">{(receiverDetails as any).usdtWalletAddress}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="mt-4">
                             <h3 className="font-semibold text-foreground mb-2 text-sm">Automated Verification</h3>
                             <div className="rounded-lg border bg-secondary/50 p-3 space-y-2 text-sm">
@@ -1345,52 +1409,6 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
                                 {order.paymentType === 'bank' && <VerificationItem label="Account Match" isMatch={order.ocrBankAccountMatch} />}
                             </div>
                         </div>
-
-                        {adminMethod && (
-                            <div className="mt-4">
-                                <h3 className="font-semibold text-foreground mb-2 text-sm">Receiver Details</h3>
-                                <div className="rounded-lg border bg-secondary/50 p-3 space-y-2 text-sm">
-                                    {adminMethod.type === 'bank' && (
-                                        <>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Bank:</span>
-                                                <span className="font-semibold">{adminMethod.bankName}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Holder:</span>
-                                                <span className="font-semibold">{adminMethod.accountHolderName}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Account No:</span>
-                                                <span className="font-mono">{adminMethod.accountNumber}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">IFSC:</span>
-                                                <span className="font-mono">{adminMethod.ifscCode}</span>
-                                            </div>
-                                        </>
-                                    )}
-                                    {(adminMethod.type === 'upi' || order.paymentType === 'p2p_upi') && (
-                                        <>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">Name:</span>
-                                                <span className="font-semibold">{adminMethod.upiHolderName}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-muted-foreground">UPI ID:</span>
-                                                <span className="font-mono">{adminMethod.upiId}</span>
-                                            </div>
-                                        </>
-                                    )}
-                                    {adminMethod.type === 'usdt' && (
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Wallet:</span>
-                                            <span className="font-mono break-all">{adminMethod.usdtWalletAddress}</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
 
                         {order.verificationResult && (
                              <div className="flex items-start gap-2 rounded-md bg-yellow-50 border border-yellow-200 p-3">
@@ -1444,20 +1462,31 @@ function ConfirmationsTabContent() {
         setOrdersLoading(true);
         setError(null);
         try {
-            const q = query(
+            const pendingQuery = query(
                 collectionGroup(firestore, 'orders'),
-                where('status', 'in', ['pending_confirmation', 'in_applied']),
+                where('status', '==', 'pending_confirmation'),
+                orderBy('createdAt', 'desc')
+            );
+            const appliedQuery = query(
+                collectionGroup(firestore, 'orders'),
+                where('status', '==', 'in_applied'),
                 orderBy('createdAt', 'desc')
             );
             
-            const snapshot = await getDocs(q);
+            const [pendingSnapshot, appliedSnapshot] = await Promise.all([
+                getDocs(pendingQuery),
+                getDocs(appliedQuery)
+            ]);
     
-            const pendingOrders = snapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data(), path: orderDoc.ref.path } as Order));
+            const pendingOrders = pendingSnapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data(), path: orderDoc.ref.path } as Order));
+            const appliedOrders = appliedSnapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data(), path: orderDoc.ref.path } as Order));
             
-            setAllOrders(pendingOrders);
+            const combinedOrders = [...pendingOrders, ...appliedOrders].sort((a,b) => b.createdAt.seconds - a.createdAt.seconds);
 
-            if (pendingOrders.length > 0) {
-                const userIds = [...new Set(pendingOrders.map(order => order.userId))];
+            setAllOrders(combinedOrders);
+
+            if (combinedOrders.length > 0) {
+                const userIds = [...new Set(combinedOrders.map(order => order.userId))];
                 const userPromises = [];
                 for (let i = 0; i < userIds.length; i += 30) {
                     const chunk = userIds.slice(i, i + 30);
@@ -2246,7 +2275,3 @@ export default function AdminDashboardPage() {
 
     return <AdminDashboard />;
 }
-
-
-
-    
