@@ -53,22 +53,41 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
+    const fullPhoneNumber = `+91${values.phone}`;
+    const derivedEmail = `${fullPhoneNumber}@lgpay.app`;
+
     try {
-      const fullPhoneNumber = `+91${values.phone}`;
+      // First, try to sign in with the derived email. This works for new users.
       const { data, error } = await supabase.auth.signInWithPassword({
-        phone: fullPhoneNumber,
+        email: derivedEmail,
         password: values.password,
       });
 
-      if (error) throw error;
-      if (!data.session) throw new Error("Login failed, please try again.");
+      if (error) {
+        // If email sign-in fails, it might be an old user with a phone-only identity.
+        // Try to sign in with the phone number.
+        const { data: phoneData, error: phoneError } = await supabase.auth.signInWithPassword({
+          phone: fullPhoneNumber,
+          password: values.password,
+        });
 
-      toast({
-        title: "Login Successful",
-        description: "Welcome back!",
-      });
+        if (phoneError) {
+          // If both methods fail, it's likely invalid credentials.
+          throw phoneError;
+        }
 
-      router.push("/home");
+        // If phone sign-in succeeds, update the user's auth email for future logins.
+        if (phoneData.user) {
+          await supabase.auth.updateUser({ email: derivedEmail });
+        }
+        
+        if (!phoneData.session) throw new Error("Login failed, please try again.");
+        await postLoginSuccess(phoneData.session, phoneData.user.id);
+        
+      } else {
+         if (!data.session) throw new Error("Login failed, please try again.");
+         await postLoginSuccess(data.session, data.user.id);
+      }
     } catch (error: any) {
       console.error("Login failed:", error);
       let description = "Invalid credentials. Please try again.";
@@ -85,6 +104,26 @@ export function LoginForm() {
       setIsLoading(false);
     }
   }
+
+  async function postLoginSuccess(session: any, userId: string) {
+      const { error: updateError } = await supabase
+          .from('users')
+          .update({ session_id: session.access_token })
+          .eq('uid', userId);
+
+      if (updateError) {
+          console.error("Failed to update session ID:", updateError);
+          // Don't block login, just log the error.
+      }
+
+      toast({
+        title: "Login Successful",
+        description: "Welcome back!",
+      });
+
+      router.push("/home");
+  }
+
 
   return (
     <Form {...form}>

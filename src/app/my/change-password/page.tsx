@@ -23,12 +23,10 @@ export default function ChangePasswordPage() {
   const { translations } = useLanguage();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const formSchema = z.object({
-    oldPassword: z.string().min(1, { message: translations.oldPasswordRequired }),
     newPassword: z.string().min(6, { message: translations.passwordMin }),
     confirmPassword: z.string(),
   }).refine((data) => data.newPassword === data.confirmPassword, {
@@ -39,7 +37,6 @@ export default function ChangePasswordPage() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      oldPassword: "",
       newPassword: "",
       confirmPassword: "",
     },
@@ -48,35 +45,9 @@ export default function ChangePasswordPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user || !user.phone) {
-      toast({ variant: "destructive", title: "Authentication Error", description: "Please log in again." });
-      setIsLoading(false);
-      return;
-    }
-    
-    // We cannot verify old password with phone auth directly.
-    // We will attempt to sign-in to verify it.
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      phone: user.phone,
-      password: values.oldPassword
-    });
-
-    if(signInError){
-       toast({
-        variant: "destructive",
-        title: translations.passwordUpdateFailedTitle,
-        description: translations.oldPasswordIncorrect,
-      });
-      form.setError("oldPassword", { message: translations.oldPasswordIncorrect });
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password: values.newPassword });
-      if (updateError) throw updateError;
+      const { error } = await supabase.auth.updateUser({ password: values.newPassword });
+      if (error) throw error;
       
       toast({
         title: translations.passwordUpdateSuccessTitle,
@@ -115,25 +86,6 @@ export default function ChangePasswordPage() {
             <CardContent>
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                        <FormField
-                            control={form.control}
-                            name="oldPassword"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>{translations.oldPassword}</FormLabel>
-                                    <div className="relative">
-                                        <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                        <FormControl>
-                                            <Input type={showOldPassword ? "text" : "password"} placeholder={translations.enterOldPassword} className="pl-10" {...field} />
-                                        </FormControl>
-                                        <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1/2 h-auto -translate-y-1/2 p-1 text-accent/80 hover:bg-transparent hover:text-accent" onClick={() => setShowOldPassword(!showOldPassword)}>
-                                            {showOldPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                                        </Button>
-                                    </div>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
                         <FormField
                             control={form.control}
                             name="newPassword"
