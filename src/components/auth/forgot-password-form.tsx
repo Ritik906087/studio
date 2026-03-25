@@ -70,8 +70,6 @@ export function ForgotPasswordForm() {
     setIsLoading(true);
     try {
       const fullPhoneNumber = `+91${values.phone}`;
-      // Supabase uses email to send reset links, but we can trigger OTP for phone verification
-      // then update password after verification.
       const { error } = await supabase.auth.signInWithOtp({
         phone: fullPhoneNumber,
       });
