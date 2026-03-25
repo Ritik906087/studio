@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/context/language-context";
 import { Loader } from "@/components/ui/loader";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 type Step = "phone" | "reset";
 
@@ -28,6 +31,7 @@ export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const { translations } = useLanguage();
+  const router = useRouter();
   
   const phoneSchema = z.object({
     phone: z
@@ -62,30 +66,56 @@ export function ForgotPasswordForm() {
     },
   });
 
-  function onPhoneSubmit(values: z.infer<typeof phoneSchema>) {
+  async function onPhoneSubmit(values: z.infer<typeof phoneSchema>) {
     setIsLoading(true);
-    // Mock API call
-    setTimeout(() => {
+    try {
+      const fullPhoneNumber = `+91${values.phone}`;
+      // Supabase uses email to send reset links, but we can trigger OTP for phone verification
+      // then update password after verification.
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: fullPhoneNumber,
+      });
+
+      if (error) throw error;
       setPhone(values.phone);
       setStep("reset");
-      setIsLoading(false);
       toast({
         title: translations.otpSent,
         description: translations.otpSentReset.replace('{phone}', values.phone),
       });
-    }, 1500);
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
-  function onResetSubmit(values: z.infer<typeof resetSchema>) {
+  async function onResetSubmit(values: z.infer<typeof resetSchema>) {
     setIsLoading(true);
-    // Mock API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const fullPhoneNumber = `+91${phone}`;
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({ phone: fullPhoneNumber, token: values.otp, type: 'sms' });
+      if (verifyError) throw verifyError;
+      if (!data.session) throw new Error("Invalid OTP or session expired.");
+      
+      const { error: updateError } = await supabase.auth.updateUser({ password: values.password });
+      if (updateError) throw updateError;
+      
       toast({
         title: translations.passwordResetSuccess,
         description: translations.passwordResetMessage,
       });
-    }, 2000);
+      router.push('/login');
+
+    } catch (error: any) {
+      let errorMessage = error.message;
+      if (errorMessage.includes("Token has expired or is invalid")) {
+        errorMessage = "Invalid or expired OTP. Please try again.";
+      }
+      toast({ variant: 'destructive', title: 'Error', description: errorMessage });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (

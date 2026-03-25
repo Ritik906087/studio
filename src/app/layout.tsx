@@ -1,9 +1,10 @@
 
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
-import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { LanguageProvider } from '@/context/language-context';
+import { AuthProvider } from '@/hooks/use-user';
 
 export const metadata: Metadata = {
   title: "LG Pay – Smart Digital Wallet",
@@ -62,9 +63,9 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body antialiased">
-        <FirebaseClientProvider>
-          <LanguageProvider>{children}</LanguageProvider>
-        </FirebaseClientProvider>
+        <LanguageProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </LanguageProvider>
         <Toaster />
       </body>
     </html>

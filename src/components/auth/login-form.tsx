@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,11 +20,9 @@ import { useState } from "react";
 import Link from 'next/link';
 import Image from "next/image";
 import { useLanguage } from "@/context/language-context";
-import { signInWithEmailAndPassword, getAuth } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { useFirestore } from "@/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { supabase } from "@/lib/supabase";
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -31,8 +30,6 @@ export function LoginForm() {
   const { translations } = useLanguage();
   const { toast } = useToast();
   const router = useRouter();
-  const auth = getAuth();
-  const firestore = useFirestore();
 
   const formSchema = z.object({
     phone: z
@@ -57,37 +54,26 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
-    let loginSuccess = false;
     try {
-      // Firebase phone auth is complex. We'll use email/password with a fake email.
-      const email = `${values.phone}@lgpay.app`;
-      const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
-      
-      const user = userCredential.user;
-      const idToken = await user.getIdToken();
-      document.cookie = `firebase-auth-token=${idToken}; path=/; max-age=3600`; // 1 hour expiry
+      const fullPhoneNumber = `+91${values.phone}`;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        phone: fullPhoneNumber,
+        password: values.password,
+      });
 
-      if (firestore) {
-        const sessionId = Date.now().toString() + Math.random().toString(36).substring(2);
-        const userRef = doc(firestore, 'users', user.uid);
-        try {
-          await updateDoc(userRef, { sessionId });
-          localStorage.setItem('user-session-id', sessionId);
-        } catch (dbError) {
-          console.error("Failed to update session ID:", dbError);
-          // Don't fail the login if this fails, but log it.
-        }
-      }
+      if (error) throw error;
+      if (!data.session) throw new Error("Login failed, please try again.");
 
       toast({
         title: "Login Successful",
         description: "Welcome back!",
       });
-      loginSuccess = true;
+
+      router.push("/home");
     } catch (error: any) {
       console.error("Login failed:", error);
       let description = "Invalid credentials. Please try again.";
-       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+      if (error.message.includes('Invalid login credentials')) {
         description = "Incorrect phone number or password. Please check and try again, or register if you don't have an account.";
       }
       toast({
@@ -98,9 +84,6 @@ export function LoginForm() {
       form.resetField("password");
     } finally {
       setIsLoading(false);
-      if (loginSuccess) {
-        router.push("/home");
-      }
     }
   }
 

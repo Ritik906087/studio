@@ -3,9 +3,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  const userToken = request.cookies.get('firebase-auth-token');
-  const adminPhone = request.cookies.get('admin-phone'); // Check for the new cookie
+  const adminPhone = request.cookies.get('admin-phone');
   const { pathname } = request.nextUrl;
+  const supabaseAuthCookie = request.cookies.get(
+    `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL?.split('.')[0].split('//')[1]}-auth-token`
+  );
 
   // ===== Admin Auth Routes =====
   if (pathname.startsWith('/admin')) {
@@ -33,11 +35,11 @@ export function middleware(request: NextRequest) {
   const protectedRoutes = ['/home', '/my', '/order', '/rewards', '/buy', '/sell'];
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
 
-  if (userToken && isAuthRoute) {
+  if (supabaseAuthCookie && isAuthRoute) {
     return NextResponse.redirect(new URL('/home', request.url));
   }
 
-  if (!userToken && isProtectedRoute) {
+  if (!supabaseAuthCookie && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

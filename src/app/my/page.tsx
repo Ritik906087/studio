@@ -44,16 +44,15 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { getAuth, signOut } from 'firebase/auth';
+import { useUser } from '@/hooks/use-user';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
-import { doc } from 'firebase/firestore';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLanguage } from '@/context/language-context';
+import { supabase } from '@/lib/supabase';
 
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
@@ -79,16 +78,24 @@ export default function MyPage() {
   const { user, loading } = useUser();
   const router = useRouter();
   const { toast } = useToast();
-  const firestore = useFirestore();
   const [currency, setCurrency] = useState<'LGB' | 'INR'>('LGB');
   const { language, setLanguage, translations } = useLanguage();
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
-  const userProfileRef = React.useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
-
-  const { data: userProfile, loading: profileLoading } = useDoc<{ displayName: string; photoURL?: string; balance: number; holdBalance: number; numericId: string; claimedUserRewards?: string[] }>(userProfileRef);
+  useEffect(() => {
+    async function fetchProfile() {
+      if (user) {
+        setProfileLoading(true);
+        const { data, error } = await supabase.from('users').select('*').eq('uid', user.id).single();
+        if (data) {
+          setUserProfile(data);
+        }
+        setProfileLoading(false);
+      }
+    }
+    fetchProfile();
+  }, [user]);
 
   const actionItems = [
     { icon: Wallet, label: translations.collection, href: "/my/collection" },
@@ -110,11 +117,8 @@ export default function MyPage() {
   };
 
   const handleLogout = async () => {
-    const auth = getAuth();
     try {
-      await signOut(auth);
-      // Clear the auth token cookie
-      document.cookie = 'firebase-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      await supabase.auth.signOut();
       toast({ title: 'Logged out successfully' });
       router.push('/login');
     } catch (error) {
@@ -190,7 +194,7 @@ export default function MyPage() {
                 <div className="flex justify-between text-sm text-white/70 items-center">
                     <span className="flex items-baseline gap-1">
                         <span className="text-xs">{translations.hold}</span>
-                        {profileLoading ? <Skeleton className="h-4 w-10 bg-slate-700"/> : <span>≈ {(userProfile?.holdBalance || 0).toFixed(2)}</span>}
+                        {profileLoading ? <Skeleton className="h-4 w-10 bg-slate-700"/> : <span>≈ {(userProfile?.hold_balance || 0).toFixed(2)}</span>}
                     </span>
                     <span className="text-xs">1LG≈ 1INR</span>
                 </div>
