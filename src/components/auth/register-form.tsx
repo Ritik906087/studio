@@ -114,7 +114,10 @@ export function RegisterForm() {
                 phoneNumber: values.phone,
                 displayName: `User${values.phone.slice(-4)}`,
                 photoURL: defaultAvatarUrl,
-                inviterUid: inviterData?.uid || null
+                inviterUid: inviterData?.uid || null,
+                balance: 0,
+                hold_balance: 0,
+                created_at: new Date().toISOString(),
             });
 
         if (profileError) {
@@ -136,6 +139,11 @@ export function RegisterForm() {
     } catch (error: any) {
       console.error("Registration failed:", error);
       let description = error.message || "An unexpected error occurred. Please try again.";
+       if (error.message.includes("User already registered")) {
+          description = "An account with this phone number already exists. Please log in instead.";
+      } else if (error.message.includes("email rate limit exceeded")) {
+          description = "Registration is temporarily unavailable due to high traffic. Please try again in a few minutes.";
+      }
       toast({
         variant: "destructive",
         title: "Registration Failed",
@@ -300,3 +308,5 @@ export function RegisterForm() {
     </Form>
   );
 }
+
+    
