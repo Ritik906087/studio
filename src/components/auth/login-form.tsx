@@ -53,51 +53,31 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
-    const fullPhoneNumber = `+91${values.phone}`;
     const derivedEmail = `91${values.phone}@lgpay.app`;
 
     try {
-      // First, try to sign in with the derived email. This works for new users.
       const { data, error } = await supabase.auth.signInWithPassword({
         email: derivedEmail,
         password: values.password,
       });
 
       if (error) {
-        // If email sign-in fails, it might be an old user with a phone-only identity.
-        // Try to sign in with the phone number.
-        const { data: phoneData, error: phoneError } = await supabase.auth.signInWithPassword({
-          phone: fullPhoneNumber,
-          password: values.password,
-        });
-
-        if (phoneError) {
-          // If both methods fail, it's likely invalid credentials.
-          throw phoneError;
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error("Incorrect phone number or password. Please check and try again, or register if you don't have an account.");
         }
-
-        // If phone sign-in succeeds, update the user's auth email for future logins.
-        if (phoneData.user) {
-          await supabase.auth.updateUser({ email: derivedEmail });
-        }
-        
-        if (!phoneData.session) throw new Error("Login failed, please try again.");
-        await postLoginSuccess(phoneData.session, phoneData.user.id);
-        
-      } else {
-         if (!data.session) throw new Error("Login failed, please try again.");
-         await postLoginSuccess(data.session, data.user.id);
+        throw error;
       }
+
+      if (!data.session) throw new Error("Login failed, please try again.");
+      
+      await postLoginSuccess(data.session, data.user.id);
+
     } catch (error: any) {
       console.error("Login failed:", error);
-      let description = "Invalid credentials. Please try again.";
-      if (error.message.includes('Invalid login credentials')) {
-        description = "Incorrect phone number or password. Please check and try again, or register if you don't have an account.";
-      }
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: description,
+        description: error.message,
       });
       form.resetField("password");
     } finally {
@@ -106,22 +86,12 @@ export function LoginForm() {
   }
 
   async function postLoginSuccess(session: any, userId: string) {
-      const { error: updateError } = await supabase
-          .from('users')
-          .update({ session_id: session.access_token })
-          .eq('uid', userId);
+    toast({
+      title: "Login Successful",
+      description: "Welcome back!",
+    });
 
-      if (updateError) {
-          console.error("Failed to update session ID:", updateError);
-          // Don't block login, just log the error.
-      }
-
-      toast({
-        title: "Login Successful",
-        description: "Welcome back!",
-      });
-
-      router.push("/home");
+    router.push("/home");
   }
 
 
