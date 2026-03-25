@@ -9,9 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ChevronLeft, Copy, Upload, Loader2, Info, Send, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useCollection, useDoc, useUser, useFirestore, useStorage } from '@/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
-import { doc, getDoc, updateDoc, serverTimestamp, collection, Timestamp, runTransaction } from 'firebase/firestore';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -36,6 +34,9 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { sendOrderConfirmationToTelegram } from '@/lib/telegram';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
+import type { PostgrestError } from '@supabase/supabase-js';
 
 
 type AdminPaymentMethod = {
@@ -66,7 +67,7 @@ type Order = {
     amount: number;
     baseAmount: number;
     status: string;
-    createdAt: Timestamp;
+    created_at: string;
     orderId: string;
     paymentType: 'bank' | 'upi' | 'usdt' | 'p2p_upi' | 'p2p_bank';
     paymentProvider: string;
@@ -75,6 +76,7 @@ type Order = {
     sellerWithdrawalDetails?: WithdrawalMethod;
     matchedSellOrderId?: string;
     matchedSellOrderPath?: string;
+    submittedAt?: string;
 };
 
 type UserProfile = {
@@ -121,14 +123,13 @@ function PaymentDetailsContent() {
     const pathname = usePathname();
     const { toast } = useToast();
     const { user } = useUser();
-    const firestore = useFirestore();
 
     const orderId = params.orderId as string;
     const type = searchParams.get('type') as Order['paymentType'];
     const provider = searchParams.get('provider');
 
     const [utr, setUtr] = useState('');
-    const [screenshotDataUrl, setScreenshotDataUrl] = useState<string | null>(null);
+    const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [isUpdatingProvider, setIsUpdatingProvider] = useState(false);
     const [isChangeDialogOpen, setIsChangeDialogOpen] = useState(false);
@@ -141,6 +142,11 @@ function PaymentDetailsContent() {
     const [cancelReason, setCancelReason] = useState('');
     const [otherReason, setOtherReason] = useState('');
     const [isCancelling, setIsCancelling] = useState(false);
+    
+    const [loading, setLoading] = useState(true);
+    const [order, setOrder] = useState<Order | null>(null);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [allPaymentMethods, setAllPaymentMethods] = useState<AdminPaymentMethod[]>([]);
 
     const isUSDT = type === 'usdt';
 
@@ -152,110 +158,18 @@ function PaymentDetailsContent() {
         "Other reasons"
     ];
 
-    const paymentMethodsQuery = useMemo(() => firestore ? collection(firestore, 'paymentMethods') : null, [firestore]);
-    const { data: allPaymentMethods, loading: allPaymentMethodsLoading } = useCollection<AdminPaymentMethod>(paymentMethodsQuery);
-
-
-    const orderRef = useMemo(() => {
-        if (!firestore || !user || !orderId) return null;
-        return doc(firestore, 'users', user.uid, 'orders', orderId);
-    }, [firestore, user, orderId]);
-
-    const { data: order, loading: orderLoading } = useDoc<Order>(orderRef);
-    
-    const userProfileRef = useMemo(() => {
-        if (!user || !firestore) return null;
-        return doc(firestore, 'users', user.uid);
-    }, [user, firestore]);
-
-    const { data: userProfile, loading: profileLoading } = useDoc<UserProfile>(userProfileRef);
-
-    const verifiedBuyUpiMethods = useMemo(() => {
-        if (!userProfile?.paymentMethods) return [];
-        return userProfile.paymentMethods.filter(pm => 
-            ['MobiKwik', 'Freecharge'].includes(pm.name)
-        );
-    }, [userProfile]);
-
-    const paymentTargetDetails = useMemo(() => {
-        if (orderLoading) return null;
-
-        if (type === 'p2p_upi' || type === 'p2p_bank') {
-            if (order && order.sellerWithdrawalDetails) {
-                return order.sellerWithdrawalDetails;
-            }
-            return null;
-        }
-
-        if (!allPaymentMethods || allPaymentMethods.length === 0 || !type) return null;
-        return allPaymentMethods.find(m => m.type === type);
-    }, [order, orderLoading, type, allPaymentMethods]);
-
-    useEffect(() => {
-        if (orderRef && paymentTargetDetails?.id && order && !order.adminPaymentMethodId && type !== 'p2p_upi' && type !== 'p2p_bank') {
-            updateDoc(orderRef, { adminPaymentMethodId: paymentTargetDetails.id })
-                .catch(err => console.error("Failed to set admin payment method ID on order", err));
-        }
-    }, [orderRef, paymentTargetDetails, order, type]);
-
     const handleCancelOrder = useCallback(async (isAutoCancel = false, reason = "Order expired") => {
-        if (!orderRef || !firestore) return;
-
-        // Fetch the latest order data inside the callback
-        const currentOrderSnap = await getDoc(orderRef);
-        if (!currentOrderSnap.exists() || currentOrderSnap.data()?.status !== 'pending_payment') {
-            // If it's already cancelled/processed, just navigate away if it's an auto-cancel
-            if (isAutoCancel && currentOrderSnap.exists()) {
-                router.push(`/order/${orderId}`);
-            }
-            return;
-        }
-
+        if (!order || !user) return;
+        
         setIsCancelling(true);
-
         try {
-            await runTransaction(firestore, async (transaction) => {
-                const buyOrderSnap = await transaction.get(orderRef);
-                if (!buyOrderSnap.exists() || buyOrderSnap.data()?.status !== 'pending_payment') {
-                    return; // Another process might have handled it
-                }
-                const buyOrderData = buyOrderSnap.data();
-
-                if (buyOrderData.paymentType === 'p2p_upi' && buyOrderData.matchedSellOrderPath) {
-                    const sellOrderRef = doc(firestore, buyOrderData.matchedSellOrderPath);
-                    const sellOrderSnap = await transaction.get(sellOrderRef);
-
-                    if (sellOrderSnap.exists()) {
-                        const sellOrderData = sellOrderSnap.data();
-                        
-                        const newRemainingAmount = (sellOrderData.remainingAmount || 0) + buyOrderData.baseAmount;
-                        
-                        let newSellOrderStatus = 'partially_filled';
-                        if (newRemainingAmount >= sellOrderData.amount) {
-                            newSellOrderStatus = 'pending';
-                        }
-
-                        const updatedMatchedBuyOrders = (sellOrderData.matchedBuyOrders || []).map((matched: any) => {
-                            if (matched.buyOrderId === orderId) {
-                                return { ...matched, status: isAutoCancel ? 'failed' : 'cancelled' };
-                            }
-                            return matched;
-                        });
-                        
-                        transaction.update(sellOrderRef, {
-                            remainingAmount: newRemainingAmount,
-                            status: newSellOrderStatus,
-                            matchedBuyOrders: updatedMatchedBuyOrders
-                        });
-                    }
-                }
-
-                transaction.update(orderRef, {
-                    status: isAutoCancel ? 'failed' : 'cancelled',
-                    cancellationReason: isAutoCancel ? 'Order timed out' : reason,
-                });
+            const { error } = await supabase.rpc('cancel_buy_order', {
+                p_order_id: order.id,
+                p_cancellation_reason: isAutoCancel ? 'Order timed out' : reason,
             });
 
+            if (error) throw error;
+            
             if (!isAutoCancel) {
                 toast({ title: 'Order Cancelled' });
                 router.push('/order');
@@ -271,8 +185,46 @@ function PaymentDetailsContent() {
             setIsCancelling(false);
             setIsCancelDialogOpen(false);
         }
-    }, [firestore, orderRef, router, toast, orderId]);
-    
+    }, [order, user, router, toast]);
+
+    useEffect(() => {
+        if (!user || !orderId) return;
+
+        async function fetchData() {
+            setLoading(true);
+            const orderPromise = supabase.from('orders').select('*').eq('id', orderId).eq('userId', user.id).single();
+            const profilePromise = supabase.from('users').select('paymentMethods, numericId').eq('uid', user.id).single();
+            const adminMethodsPromise = supabase.from('payment_methods').select('*');
+
+            const [orderResult, profileResult, adminMethodsResult] = await Promise.all([orderPromise, profilePromise, adminMethodsPromise]);
+
+            if (orderResult.error || !orderResult.data) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Order not found.' });
+                router.push('/order');
+                return;
+            }
+            setOrder(orderResult.data as Order);
+
+            if (profileResult.data) {
+                setUserProfile(profileResult.data as UserProfile);
+            }
+            if (adminMethodsResult.data) {
+                setAllPaymentMethods(adminMethodsResult.data as AdminPaymentMethod[]);
+            }
+            setLoading(false);
+        }
+        fetchData();
+    }, [user, orderId, router, toast]);
+
+    const paymentTargetDetails = useMemo(() => {
+        if (loading) return null;
+        if (type === 'p2p_upi' || type === 'p2p_bank') {
+            return order?.sellerWithdrawalDetails || null;
+        }
+        if (!allPaymentMethods.length || !type) return null;
+        return allPaymentMethods.find(m => m.type === type);
+    }, [order, loading, type, allPaymentMethods]);
+
     const handleConfirmCancellation = async () => {
         let finalReason = cancelReason;
         if (cancelReason === 'Other reasons') {
@@ -290,10 +242,9 @@ function PaymentDetailsContent() {
     };
 
     const handlePaymentMethodChange = async (newProvider: string) => {
-        if (!orderRef) return;
+        if (!order) return;
         
         const isVerified = userProfile?.paymentMethods?.some(pm => pm.name === newProvider);
-
         if (!isVerified) {
             setMethodToVerify(newProvider);
             setIsChangeDialogOpen(false);
@@ -303,7 +254,8 @@ function PaymentDetailsContent() {
 
         setIsUpdatingProvider(true);
         try {
-            await updateDoc(orderRef, { paymentProvider: newProvider });
+            const { error } = await supabase.from('orders').update({ paymentProvider: newProvider }).eq('id', order.id);
+            if (error) throw error;
             
             const newSearchParams = new URLSearchParams(searchParams.toString());
             newSearchParams.set('provider', newProvider);
@@ -325,12 +277,12 @@ function PaymentDetailsContent() {
             return;
         }
 
-        if (!order || !order.createdAt) {
+        if (!order || !order.created_at) {
             setTimeLeft(0);
             return;
         }
 
-        const createdAt = order.createdAt.toDate();
+        const createdAt = new Date(order.created_at);
         const expiryTime = new Date(createdAt.getTime() + 10 * 60 * 1000); // 10 minutes
 
         const interval = setInterval(() => {
@@ -352,33 +304,33 @@ function PaymentDetailsContent() {
 
     const details = useMemo(() => {
         if (!paymentTargetDetails) return null;
-
-        if (paymentTargetDetails.type === 'bank') {
+        
+        const target = paymentTargetDetails as any;
+        if (target.type === 'bank') {
             return {
-                'Bank Name': paymentTargetDetails.bankName,
-                'Account Holder': paymentTargetDetails.accountHolderName,
-                'Account Number': paymentTargetDetails.accountNumber,
-                'IFSC Code': paymentTargetDetails.ifscCode,
+                'Bank Name': target.bankName,
+                'Account Holder': target.accountHolderName,
+                'Account Number': target.accountNumber,
+                'IFSC Code': target.ifscCode,
             };
         }
-        if (paymentTargetDetails.type === 'upi') {
+        if (target.type === 'upi') {
             const detailsObj: { [key: string]: string | undefined } = {
-                'UPI ID': paymentTargetDetails.upiId,
+                'UPI ID': target.upiId,
             };
-            if (paymentTargetDetails.upiHolderName) {
-                detailsObj['Recipient Name'] = paymentTargetDetails.upiHolderName;
+            const recipientName = target.upiHolderName || target.name;
+            if (recipientName) {
+                detailsObj['Recipient Name'] = recipientName;
             }
             return detailsObj;
         }
-        if (paymentTargetDetails.type === 'usdt') {
-            return {
-                'USDT Address (TRC20)': (paymentTargetDetails as any).usdtWalletAddress,
-            }
+        if (target.type === 'usdt') {
+            return { 'USDT Address (TRC20)': target.usdtWalletAddress };
         }
         return null;
-    }, [paymentTargetDetails, order]);
+    }, [paymentTargetDetails]);
 
-    const copyToClipboard = (text: string) => {
+    const copyToClipboard = (text: string | undefined) => {
         if (!text) return;
         navigator.clipboard.writeText(text).then(() => {
             toast({ title: 'Copied to clipboard!' });
@@ -394,30 +346,18 @@ function PaymentDetailsContent() {
                     title: 'File is too large',
                     description: 'Please upload an image smaller than 950KB.'
                 });
-                if(fileInputRef.current) {
-                    fileInputRef.current.value = "";
-                }
-                setScreenshotDataUrl(null);
+                e.target.value = "";
+                setScreenshotFile(null);
                 return;
             }
-            
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const url = e.target?.result as string;
-                setScreenshotDataUrl(url);
-            };
-            reader.readAsDataURL(file);
-
-            toast({
-                title: 'Screenshot selected!',
-                description: 'The payment proof is attached and ready to submit.',
-            });
+            setScreenshotFile(file);
+            toast({ title: 'Screenshot selected!', description: 'Ready to submit.' });
         }
     };
     
     const handleConfirm = async () => {
         if (isUSDT) {
-            if (!utr || utr.length < 50) { // A loose validation for TxHash
+            if (!utr || utr.length < 50) {
                 toast({ variant: 'destructive', title: 'Invalid Transaction Hash', description: 'Please provide a valid TxID.' });
                 return;
             }
@@ -427,13 +367,11 @@ function PaymentDetailsContent() {
                 return;
             }
         }
-        
-        if (!screenshotDataUrl) {
+        if (!screenshotFile) {
             toast({ variant: 'destructive', title: 'Missing Screenshot', description: 'Please upload your payment proof screenshot.' });
             return;
         }
-        
-        if (!orderRef || !user || !firestore) {
+        if (!order || !user) {
             toast({ variant: 'destructive', title: 'Error', description: 'Could not initialize. Please try again.' });
             return;
         }
@@ -441,43 +379,22 @@ function PaymentDetailsContent() {
         setIsConfirming(true);
     
         try {
-            await runTransaction(firestore, async (transaction) => {
-                // --- READ PHASE ---
-                const buyOrderDoc = await transaction.get(orderRef);
-                if (!buyOrderDoc.exists()) {
-                    throw new Error("Order not found.");
-                }
-                const buyOrderData = buyOrderDoc.data() as Order;
+            const fileExt = screenshotFile.name.split('.').pop();
+            const filePath = `${user.id}/${order.id}/${Date.now()}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage.from('payment-proofs').upload(filePath, screenshotFile);
+            if (uploadError) throw uploadError;
 
-                let sellOrderRef: any = null;
-                let sellOrderDoc: any = null;
-                if ((buyOrderData.paymentType === 'p2p_upi' || buyOrderData.paymentType === 'p2p_bank') && buyOrderData.matchedSellOrderPath) {
-                    sellOrderRef = doc(firestore, buyOrderData.matchedSellOrderPath);
-                    sellOrderDoc = await transaction.get(sellOrderRef);
-                }
+            const { data: { publicUrl } } = supabase.storage.from('payment-proofs').getPublicUrl(filePath);
 
-                // --- WRITE PHASE ---
-                const updateData: any = {
-                    utr,
-                    status: 'pending_confirmation',
-                    submittedAt: serverTimestamp(),
-                    screenshotURL: screenshotDataUrl
-                };
-                transaction.update(orderRef, updateData);
-    
-                if (sellOrderRef && sellOrderDoc?.exists()) {
-                    const sellOrderData = sellOrderDoc.data();
-                    const updatedMatchedBuyOrders = (sellOrderData.matchedBuyOrders || []).map((bo: any) => {
-                        if (bo.buyOrderId === orderId) {
-                            return { ...bo, status: 'pending_confirmation', utr: utr };
-                        }
-                        return bo;
-                    });
-                    transaction.update(sellOrderRef, { matchedBuyOrders: updatedMatchedBuyOrders });
-                }
+            const { error: rpcError } = await supabase.rpc('submit_buy_order_proof', {
+                p_order_id: order.id,
+                p_utr: utr,
+                p_screenshot_url: publicUrl,
             });
+
+            if (rpcError) throw rpcError;
     
-            if (order && userProfile && details) {
+            if (userProfile && details) {
                 try {
                     const receiverDetailsForTg = Object.fromEntries(
                         Object.entries(details).map(([key, value]) => [key, String(value)])
@@ -496,14 +413,20 @@ function PaymentDetailsContent() {
 
             toast({ title: 'Payment Submitted!', description: 'Your proof is under review.' });
             router.push(`/order/${orderId}`);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error submitting payment proof: ", error);
-            toast({ variant: 'destructive', title: 'Submission Failed', description: 'Failed to save order details.' });
+            toast({ variant: 'destructive', title: 'Submission Failed', description: error.message || 'Failed to save order details.' });
             setIsConfirming(false);
         }
     };
+    
+    const verifiedBuyUpiMethods = useMemo(() => {
+        if (!userProfile?.paymentMethods) return [];
+        return userProfile.paymentMethods.filter(pm => 
+            ['MobiKwik', 'Freecharge'].includes(pm.name)
+        );
+    }, [userProfile]);
 
-    const loading = allPaymentMethodsLoading || orderLoading || profileLoading;
     const currentProviderDetails = provider ? paymentMethodDetails[provider] : null;
     
     const usdtAmount = useMemo(() => {
@@ -641,8 +564,8 @@ function PaymentDetailsContent() {
                                <Label>Upload Screenshot</Label>
                                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isConfirming} accept="image/*" />
                                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming}>
-                                  {screenshotDataUrl ? (
-                                      <Image src={screenshotDataUrl} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
+                                  {screenshotFile ? (
+                                      <Image src={URL.createObjectURL(screenshotFile)} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
                                   ) : (
                                       <>
                                           <Upload className="h-4 w-4"/>
@@ -681,7 +604,7 @@ function PaymentDetailsContent() {
                         </AlertDialogContent>
                     </AlertDialog>
 
-                    <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || !utr || !screenshotDataUrl}>
+                    <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || !utr || !screenshotFile}>
                         {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
                     </Button>
                 </footer>
@@ -882,8 +805,8 @@ function PaymentDetailsContent() {
                              <Label>Upload Screenshot</Label>
                              <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isConfirming || isUpdatingProvider} accept="image/*" />
                              <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming || isUpdatingProvider}>
-                                {screenshotDataUrl ? (
-                                    <Image src={screenshotDataUrl} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
+                                {screenshotFile ? (
+                                    <Image src={URL.createObjectURL(screenshotFile)} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
                                 ) : (
                                     <>
                                         <Upload className="h-4 w-4"/>
@@ -923,7 +846,7 @@ function PaymentDetailsContent() {
                 </AlertDialog>
 
 
-                <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isUpdatingProvider || !utr || !screenshotDataUrl}>
+                <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isUpdatingProvider || !utr || !screenshotFile}>
                     {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
                 </Button>
             </footer>
@@ -935,7 +858,7 @@ function PaymentDetailsContent() {
                 </DialogHeader>
                 <div className="p-4 space-y-3">
                   {verifiedBuyUpiMethods.map((method) => {
-                      const details = paymentMethodDetails[method.name];
+                      const details = paymentMethodDetails[method.name as keyof typeof paymentMethodDetails];
                       if (!details) return null;
                       return (
                           <button 
@@ -1045,3 +968,5 @@ export default function ConfirmPage() {
     </Suspense>
   )
 }
+
+    

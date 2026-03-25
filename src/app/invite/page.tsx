@@ -1,13 +1,12 @@
+
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
-import { useUser, useFirestore, useDoc } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { doc } from 'firebase/firestore';
 import { Loader } from '@/components/ui/loader';
 import { UserPlus, Clipboard, Send, X } from 'lucide-react';
 import {
@@ -17,7 +16,8 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 
 // SVG for WhatsApp Icon
 const WhatsAppIcon = () => (
@@ -53,17 +53,27 @@ type UserProfile = {
 
 export default function InvitePage() {
   const { user } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   
   const [isShareSheetOpen, setIsShareSheetOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
-  const userProfileRef = useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
-
-  const { data: userProfile, loading: profileLoading } = useDoc<UserProfile>(userProfileRef);
+  useEffect(() => {
+    async function fetchProfile() {
+      if (!user) {
+        setProfileLoading(false);
+        return;
+      };
+      setProfileLoading(true);
+      const { data, error } = await supabase.from('users').select('numericId').eq('uid', user.id).single();
+      if (data) {
+        setUserProfile(data);
+      }
+      setProfileLoading(false);
+    }
+    fetchProfile();
+  }, [user]);
 
   const getShareDetails = () => {
     if (!userProfile?.numericId) {
@@ -227,3 +237,5 @@ export default function InvitePage() {
     </>
   );
 }
+
+    

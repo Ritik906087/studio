@@ -32,12 +32,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Wallet, ArrowDownUp, Loader2, Info } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useUser, useFirestore, useCollection, useDoc } from '@/firebase';
-import { addDoc, collection, serverTimestamp, query, where, runTransaction, doc, getDocs, collectionGroup, orderBy, limit, arrayUnion, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
   PhonePe: {
@@ -65,11 +65,6 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
 const purchaseConfig = {
     "100": 5, "200": 6, "300": 7, "400": 5, "500": 6, "600": 5, "700": 4, "800": 3, "1000": 4,
     "2000": 3, "3000": 3, "4000": 5, "5000": 4, "6000": 3, "7000": 2, "8000": 3, "10000": 2
-};
-
-const removalConfig = {
-    "100": 2, "200": 3, "300": 3, "400": 2, "500": 3, "600": 4, "700": 2, "800": 1, "1000": 2,
-    "2000": 1, "3000": 1, "4000": 3, "5000": 2, "6000": 1, "7000": 1, "8000": 1, "10000": 1
 };
 
 const generateOptionsFromConfig = (config: Record<string, number>) => {
@@ -226,7 +221,6 @@ export default function BuyPage() {
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { user } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
 
   const [isInProgressDialogOpen, setIsInProgressDialogOpen] = useState(false);
@@ -235,24 +229,23 @@ export default function BuyPage() {
   
   const [allOptions, setAllOptions] = useState(() => [...allPurchaseOptions]);
 
-  const userProfileRef = useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
-  const { data: userProfile } = useDoc<{ paymentMethods?: { name: string; upiId: string }[] }>(userProfileRef);
-
+  const [userProfile, setUserProfile] = useState<{ paymentMethods?: { name: string; upiId: string }[] } | null>(null);
   const [verifiedBuyUpiMethods, setVerifiedBuyUpiMethods] = useState<{name: string, upiId: string}[]>([]);
 
-  const inProgressBuyOrdersQuery = useMemo(() => {
-    if (!user || !firestore) return null;
-    return query(
-        collection(firestore, 'users', user.uid, 'orders'),
-        where('status', 'in', ['pending_payment', 'pending_confirmation'])
-    );
-  }, [user, firestore]);
+  useEffect(() => {
+    async function fetchUserData() {
+        if (!user) return;
+        const { data: profile, error: profileError } = await supabase.from('users').select('paymentMethods').eq('uid', user.id).single();
+        if (profile) setUserProfile(profile);
 
-  const { data: inProgressBuyOrders } = useCollection(inProgressBuyOrdersQuery);
-  
+        const { data: orders, error: ordersError } = await supabase.from('orders').select('*').in('status', ['pending_payment', 'pending_confirmation']);
+        if (orders && orders.length > 0) {
+            setInProgressOrder(orders[0]);
+        }
+    }
+    fetchUserData();
+  }, [user]);
+
   useEffect(() => {
     const removalInterval = setInterval(() => {
         setAllOptions(prevOptions => {
@@ -290,139 +283,34 @@ export default function BuyPage() {
   }, []); 
 
 const createOrder = async (provider: string, orderAmount: number) => {
-    if (!user || !firestore) return;
+    if (!user) return;
     setIsCreatingOrder(true);
-    let newBuyOrderId: string | null = null;
     
     const bonusPercentage = activeTab === 'bank' ? 5 : activeTab === 'upi' ? 6 : (activeTab === 'usdt' ? 0 : 0);
-    const finalAmount = orderAmount + (orderAmount * (bonusPercentage / 100));
-    let finalPaymentType: 'upi' | 'bank' | 'usdt' | 'p2p_upi' | 'p2p_bank' = activeTab;
+    const finalPaymentType: 'upi' | 'bank' | 'usdt' | 'p2p_upi' | 'p2p_bank' = activeTab;
 
     try {
-        let sellOrderCandidateDoc: any = null;
-
-        if (activeTab === 'upi' || activeTab === 'bank') {
-            const allSellOrdersSnapshot = await getDocs(collectionGroup(firestore, 'sellOrders'));
-            
-            const allCandidates = allSellOrdersSnapshot.docs
-                .map(doc => ({ ref: doc.ref, data: doc.data() }))
-                .filter(({ data }) => 
-                    ['pending', 'partially_filled'].includes(data.status) &&
-                    data.userId !== user.uid && 
-                    data.remainingAmount >= orderAmount &&
-                    data.withdrawalMethod?.type === activeTab
-                );
-
-            sellOrderCandidateDoc = allCandidates
-                .sort((a, b) => {
-                    const remainderA = a.data.remainingAmount - orderAmount;
-                    const remainderB = b.data.remainingAmount - orderAmount;
-                    if (remainderA !== remainderB) {
-                        return remainderA - remainderB;
-                    }
-                    return a.data.createdAt.seconds - b.data.createdAt.seconds;
-                })[0];
-        }
-
-
-        await runTransaction(firestore, async (transaction) => {
-            const newOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
-            newBuyOrderId = newOrderRef.id;
-            const buyOrderDisplayId = `LGPAY${Date.now()}`;
-            let p2pMatchFound = false;
-
-            if (sellOrderCandidateDoc) {
-                const sellOrderRef = sellOrderCandidateDoc.ref;
-                const sellOrderDoc = await transaction.get(sellOrderRef);
-
-                if (sellOrderDoc.exists()) {
-                    const sellOrderData = sellOrderDoc.data();
-                    
-                    const isStatusValid = ['pending', 'partially_filled'].includes(sellOrderData.status);
-                    const isAmountSufficient = sellOrderData.remainingAmount >= orderAmount;
-                    const isNotOwnOrder = sellOrderData.userId !== user.uid;
-                    const isTypeMatch = sellOrderData.withdrawalMethod?.type === activeTab;
-
-                    if (isStatusValid && isAmountSufficient && isNotOwnOrder && isTypeMatch) {
-                        p2pMatchFound = true;
-                        finalPaymentType = activeTab === 'upi' ? 'p2p_upi' : 'p2p_bank';
-
-                        const newRemainingAmount = sellOrderData.remainingAmount - orderAmount;
-                        const newSellOrderStatus = newRemainingAmount > 0 ? 'partially_filled' : 'processing';
-
-                        const buyOrderData = {
-                            userId: user.uid,
-                            amount: finalAmount,
-                            baseAmount: orderAmount,
-                            bonusPercentage: bonusPercentage,
-                            orderId: buyOrderDisplayId,
-                            status: 'pending_payment',
-                            paymentProvider: provider,
-                            sellerWithdrawalDetails: sellOrderData.withdrawalMethod,
-                            sellerId: sellOrderData.userId,
-                            paymentType: finalPaymentType,
-                            createdAt: serverTimestamp(),
-                            matchedSellOrderId: sellOrderDoc.id,
-                            matchedSellOrderPath: sellOrderRef.path,
-                        };
-                        transaction.set(newOrderRef, buyOrderData);
-
-                        const matchedBuyOrderData = {
-                            buyOrderId: newBuyOrderId,
-                            buyerOrderId: buyOrderDisplayId,
-                            buyerId: user.uid,
-                            amount: orderAmount,
-                            status: 'pending_payment',
-                            createdAt: Timestamp.now()
-                        };
-
-                        transaction.update(sellOrderRef, {
-                            remainingAmount: newRemainingAmount,
-                            status: newSellOrderStatus,
-                            matchedBuyOrders: arrayUnion(matchedBuyOrderData)
-                        });
-                    }
-                }
-            }
-
-            if (!p2pMatchFound) {
-                finalPaymentType = activeTab;
-                const adminMethodsQuery = query(collection(firestore, "paymentMethods"), where("type", "==", finalPaymentType), limit(1));
-                const adminMethodsSnapshot = await getDocs(adminMethodsQuery);
-
-                if (adminMethodsSnapshot.empty) {
-                    throw new Error("ADMIN_UNAVAILABLE");
-                }
-                
-                const buyOrderData = {
-                    userId: user.uid,
-                    amount: finalAmount,
-                    baseAmount: orderAmount,
-                    bonusPercentage: bonusPercentage,
-                    orderId: buyOrderDisplayId,
-                    status: 'pending_payment',
-                    paymentProvider: provider,
-                    paymentType: finalPaymentType,
-                    adminPaymentMethodId: adminMethodsSnapshot.docs[0].id,
-                    createdAt: serverTimestamp(),
-                };
-                transaction.set(newOrderRef, buyOrderData);
-            }
+        const { data, error } = await supabase.rpc('create_buy_order', {
+            p_user_id: user.id,
+            p_amount: orderAmount,
+            p_bonus_percentage: bonusPercentage,
+            p_payment_provider: provider,
+            p_payment_type: finalPaymentType
         });
+        
+        if (error) throw error;
+        
+        const { order_id: newBuyOrderId, matched_payment_type } = data;
 
         if (newBuyOrderId) {
-            router.push(`/buy/confirm/${newBuyOrderId}?type=${finalPaymentType}&provider=${provider}`);
+            router.push(`/buy/confirm/${newBuyOrderId}?type=${matched_payment_type}&provider=${provider}`);
         } else {
             throw new Error("Order creation failed unexpectedly.");
         }
 
     } catch (error: any) {
         console.error('Error creating order: ', error);
-        if(error.message === "ADMIN_UNAVAILABLE") {
-            toast({ variant: 'destructive', title: 'Service Unavailable', description: 'Admin payment methods are not configured. Please try again later.' });
-        } else {
-            toast({ variant: 'destructive', title: 'Could not create order.', description: 'Please try again.' });
-        }
+        toast({ variant: 'destructive', title: 'Could not create order.', description: error.message || 'Please try again.' });
     } finally {
         setIsCreatingOrder(false);
     }
@@ -430,13 +318,12 @@ const createOrder = async (provider: string, orderAmount: number) => {
 
 
   const handleBuyClick = (option: { amount: number }) => {
-     if (!user || !firestore) {
+     if (!user) {
       toast({ variant: 'destructive', title: 'Please log in to continue.' });
       return;
     }
 
-    if (inProgressBuyOrders && inProgressBuyOrders.length > 0) {
-        setInProgressOrder(inProgressBuyOrders[0]);
+    if (inProgressOrder) {
         setIsInProgressDialogOpen(true);
         return;
     }
@@ -608,3 +495,5 @@ const createOrder = async (provider: string, orderAmount: number) => {
     </div>
   );
 }
+
+    

@@ -26,14 +26,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
-import React, { useEffect, useState, useCallback } from 'react';
-import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
-import { doc, getDoc, collection, query, where, Timestamp, updateDoc, runTransaction } from 'firebase/firestore';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 
 const GlassCard = ({ children, className }: { children: React.ReactNode, className?: string }) => (
   <Card className={cn("border bg-white rounded-2xl shadow-sm", className)}>
@@ -84,12 +83,12 @@ const faqs = [
     }
 ]
 
-const Countdown = ({ expiryTimestamp, onExpire }: { expiryTimestamp: Timestamp, onExpire?: () => void }) => {
+const Countdown = ({ expiryTimestamp, onExpire }: { expiryTimestamp: string, onExpire?: () => void }) => {
     const [timeLeft, setTimeLeft] = useState('');
     const [isExpired, setIsExpired] = useState(false);
 
     useEffect(() => {
-        const expiryTime = expiryTimestamp.toDate().getTime();
+        const expiryTime = new Date(expiryTimestamp).getTime();
 
         const interval = setInterval(() => {
             const now = new Date().getTime();
@@ -134,7 +133,7 @@ const InProgressOrderCard = ({ order, onExpire }: { order: any, onExpire: (order
     let buttonText = "View";
     let buttonLink = "/order";
     let statusText = order.status.replace('_', ' ');
-    let expiryTimestamp: Timestamp | undefined;
+    let expiryTimestamp: string | undefined;
 
     const isUSDT = isBuy && order.paymentType === 'usdt';
     const displayAmount = isUSDT ? (order.amount / 110).toFixed(2) : order.amount.toFixed(2);
@@ -144,13 +143,13 @@ const InProgressOrderCard = ({ order, onExpire }: { order: any, onExpire: (order
         if (order.status === 'pending_payment') {
             buttonText = "Complete Payment";
             buttonLink = `/buy/confirm/${order.id}?type=${order.paymentType}&provider=${order.paymentProvider}`;
-            expiryTimestamp = new Timestamp(order.createdAt.seconds + 10 * 60, order.createdAt.nanoseconds);
+            expiryTimestamp = new Date(new Date(order.created_at).getTime() + 10 * 60000).toISOString();
         } else if (order.status === 'pending_confirmation') {
             buttonText = "View Order";
             buttonLink = `/order/${order.id}`;
             statusText = "Confirmation";
             if (order.submittedAt) { 
-                expiryTimestamp = new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds);
+                expiryTimestamp = new Date(new Date(order.submittedAt).getTime() + 30 * 60000).toISOString();
             }
         } else if (order.status === 'in_applied') {
             buttonText = "View Status";
@@ -206,34 +205,39 @@ export default function HomePage() {
   );
   
   const { user } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
+  
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [inProgressBuyOrders, setInProgressBuyOrders] = useState<any[]>([]);
+  const [inProgressSellOrders, setInProgressSellOrders] = useState<any[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(true);
 
-  const userProfileRef = React.useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
+  const fetchOrders = useCallback(async () => {
+    if (!user) {
+        setOrdersLoading(false);
+        return;
+    }
+    setOrdersLoading(true);
+    const [buyRes, sellRes] = await Promise.all([
+        supabase.from('orders').select('*').in('status', ['pending_payment', 'pending_confirmation', 'in_applied']),
+        supabase.from('sell_orders').select('*').in('status', ['pending', 'partially_filled', 'processing'])
+    ]);
 
-  const { data: userProfile } = useDoc(userProfileRef);
+    if (buyRes.data) setInProgressBuyOrders(buyRes.data);
+    if (sellRes.data) setInProgressSellOrders(sellRes.data);
+    setOrdersLoading(false);
+  }, [user]);
 
- const buyOrdersQuery = React.useMemo(() => {
-    if (!user || !firestore) return null;
-    return query(
-        collection(firestore, 'users', user.uid, 'orders'),
-        where('status', 'in', ['pending_payment', 'pending_confirmation', 'in_applied'])
-    );
-  }, [user, firestore]);
-
-  const sellOrdersQuery = React.useMemo(() => {
-    if (!user || !firestore) return null;
-    return query(
-        collection(firestore, 'users', user.uid, 'sellOrders'),
-        where('status', 'in', ['pending', 'partially_filled', 'processing'])
-    );
-  }, [user, firestore]);
-
-  const { data: inProgressBuyOrders, loading: buyOrdersLoading } = useCollection(buyOrdersQuery);
-  const { data: inProgressSellOrders, loading: sellOrdersLoading } = useCollection(sellOrdersQuery);
+  useEffect(() => {
+    async function fetchProfile() {
+      if (user) {
+        const { data } = await supabase.from('users').select('*').eq('uid', user.id).single();
+        setUserProfile(data);
+      }
+    }
+    fetchProfile();
+    fetchOrders();
+  }, [user, fetchOrders]);
 
   const carouselImages = [
     "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260311_141545_291.jpg?alt=media&token=515ee5d5-47e8-4d02-887f-5318a98ae4e1",
@@ -241,35 +245,20 @@ export default function HomePage() {
     "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/IMG_20260311_141536_642.jpg?alt=media&token=184c0b41-bb13-4721-bf91-7aa4391eeac3"
   ];
   
-  const ordersLoading = buyOrdersLoading || sellOrdersLoading;
-  const hasInProgressOrders = (inProgressBuyOrders && inProgressBuyOrders.length > 0) || (inProgressSellOrders && inProgressSellOrders.length > 0);
+  const hasInProgressOrders = inProgressBuyOrders.length > 0 || inProgressSellOrders.length > 0;
 
   const handleOrderExpire = useCallback(async (orderId: string, type: 'buy' | 'sell', status: string) => {
-    if (!firestore || !user) return;
+    if (!user) return;
 
-    if (type === 'buy') {
-      const orderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
-      const orderSnap = await getDoc(orderRef);
-      if (!orderSnap.exists()) return;
-      const orderData = orderSnap.data();
-
-      // Only update if the status hasn't changed by another process/tab
-      if (orderData.status === status) {
-        if (status === 'pending_payment') {
-          await updateDoc(orderRef, {
-            status: 'failed',
-            cancellationReason: 'Order timed out.',
-          });
-          toast({ variant: 'destructive', title: 'Order Timeout' });
-        } else if (status === 'pending_confirmation') {
-          await updateDoc(orderRef, {
-            status: 'in_applied',
-          });
-          toast({ title: 'Order is now In Applied', description: 'Please wait for admin review.' });
+    if (type === 'buy' && status === 'pending_confirmation') {
+        const { error } = await supabase.from('orders').update({ status: 'in_applied' }).eq('id', orderId).eq('status', 'pending_confirmation');
+        if (!error) {
+            toast({ title: 'Order Under Review', description: 'System is busy. Please wait for admin review.' });
+            fetchOrders();
         }
-      }
     }
-  }, [firestore, user, toast]);
+    // Sell order expiry is handled differently, often by matching or admin action
+  }, [user, toast, fetchOrders]);
 
 
   return (
@@ -367,7 +356,7 @@ export default function HomePage() {
                             <TabsTrigger value="sell" className="flex-1 rounded-none data-[state=active]:bg-background data-[state=active]:shadow-none">Sell Orders</TabsTrigger>
                         </TabsList>
                         <TabsContent value="buy" className="p-3 space-y-3">
-                           {inProgressBuyOrders && inProgressBuyOrders.length > 0 ? (
+                           {inProgressBuyOrders.length > 0 ? (
                                 inProgressBuyOrders.map((order: any) => (
                                     <InProgressOrderCard key={order.id} order={{...order, type: 'buy'}} onExpire={handleOrderExpire} />
                                 ))
@@ -376,7 +365,7 @@ export default function HomePage() {
                            )}
                         </TabsContent>
                          <TabsContent value="sell" className="p-3 space-y-3">
-                           {inProgressSellOrders && inProgressSellOrders.length > 0 ? (
+                           {inProgressSellOrders.length > 0 ? (
                                 inProgressSellOrders.map((order: any) => (
                                     <InProgressOrderCard key={order.id} order={{...order, type: 'sell'}} onExpire={handleOrderExpire} />
                                 ))

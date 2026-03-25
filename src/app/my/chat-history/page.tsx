@@ -1,12 +1,10 @@
 
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, MessageSquare, Paperclip } from 'lucide-react';
 import Link from 'next/link';
-import { useUser, useFirestore, useCollection, useDoc } from '@/firebase';
-import { collection, query, where, orderBy, Timestamp, doc } from 'firebase/firestore';
 import {
   Accordion,
   AccordionContent,
@@ -18,6 +16,10 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Loader } from '@/components/ui/loader';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
+import { Timestamp } from 'firebase/firestore';
+
 
 type Attachment = {
   name: string;
@@ -36,38 +38,38 @@ type Message = {
 type ChatRequest = {
     id: string;
     status: 'pending' | 'active' | 'closed';
-    createdAt: Timestamp;
+    created_at: string;
     chatHistory: Message[];
 };
 
 export default function ChatHistoryPage() {
     const { user, loading: authLoading } = useUser();
-    const firestore = useFirestore();
+    const [userProfile, setUserProfile] = useState<{ photoURL?: string, displayName?: string } | null>(null);
+    const [closedChats, setClosedChats] = useState<ChatRequest[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(true);
 
-    const userProfileRef = useMemo(() => {
-        if (!user || !firestore) return null;
-        return doc(firestore, 'users', user.uid);
-      }, [user, firestore]);
-    
-    const { data: userProfile } = useDoc<{ photoURL?: string, displayName?: string }>(userProfileRef);
+    useEffect(() => {
+        async function fetchData() {
+            if (!user) {
+                setHistoryLoading(false);
+                return;
+            };
 
-    const chatHistoryQuery = useMemo(() => {
-        if (!user || !firestore) return null;
-        // The composite query with orderBy requires a custom index.
-        // To avoid this, we fetch based on filters and sort on the client.
-        return query(
-            collection(firestore, 'chatRequests'),
-            where('userId', '==', user.uid),
-            where('status', '==', 'closed')
-        );
-    }, [user, firestore]);
+            setHistoryLoading(true);
+            const profilePromise = supabase.from('users').select('photoURL, displayName').eq('uid', user.id).single();
+            const chatsPromise = supabase.from('chatRequests').select('*').eq('userId', user.id).eq('status', 'closed');
 
-    const { data: unsortedClosedChats, loading: historyLoading } = useCollection<ChatRequest>(chatHistoryQuery);
+            const [profileResult, chatsResult] = await Promise.all([profilePromise, chatsPromise]);
 
-    const closedChats = useMemo(() => {
-        if (!unsortedClosedChats) return [];
-        return [...unsortedClosedChats].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
-    }, [unsortedClosedChats]);
+            if (profileResult.data) setUserProfile(profileResult.data);
+            if (chatsResult.data) {
+                const sorted = chatsResult.data.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                setClosedChats(sorted);
+            }
+            setHistoryLoading(false);
+        }
+        fetchData();
+    }, [user]);
 
     const loading = authLoading || historyLoading;
 
@@ -100,8 +102,8 @@ export default function ChatHistoryPage() {
                              <AccordionItem key={chat.id} value={chat.id} className="border-none rounded-2xl bg-white shadow-sm overflow-hidden">
                                 <AccordionTrigger className="p-4 text-left hover:no-underline">
                                     <div className="flex flex-col">
-                                        <span className="font-bold">Chat from {chat.createdAt.toDate().toLocaleDateString()}</span>
-                                        <span className="text-xs text-muted-foreground">{chat.createdAt.toDate().toLocaleTimeString()}</span>
+                                        <span className="font-bold">Chat from {new Date(chat.created_at).toLocaleDateString()}</span>
+                                        <span className="text-xs text-muted-foreground">{new Date(chat.created_at).toLocaleTimeString()}</span>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
@@ -154,3 +156,5 @@ export default function ChatHistoryPage() {
         </div>
     );
 }
+
+    
