@@ -91,7 +91,7 @@ export function LoginForm() {
       description: "Welcome back!",
     });
 
-    router.push("/home");
+    router.refresh();
   }
 
 
