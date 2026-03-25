@@ -54,7 +54,7 @@ export function LoginForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     const fullPhoneNumber = `+91${values.phone}`;
-    const derivedEmail = `${fullPhoneNumber}@lgpay.app`;
+    const derivedEmail = `91${values.phone}@lgpay.app`;
 
     try {
       // First, try to sign in with the derived email. This works for new users.

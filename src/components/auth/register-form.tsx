@@ -75,7 +75,7 @@ export function RegisterForm() {
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     setIsLoading(true);
     try {
-        const email = `+91${values.phone}@lgpay.app`;
+        const email = `91${values.phone}@lgpay.app`;
 
         const { data, error: signUpError } = await supabase.auth.signUp({
             email: email,
