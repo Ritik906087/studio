@@ -1,8 +1,7 @@
 
-
 'use client';
 
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
@@ -11,11 +10,9 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useDoc, useCollection, useFirestore } from '@/firebase';
 import { useParams, useRouter } from 'next/navigation';
 import { ChevronLeft, Copy, Loader2, Search, X, Download, Check } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { doc, collection, query, orderBy, Timestamp, limit } from 'firebase/firestore';
 import {
   Table,
   TableBody,
@@ -37,6 +34,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
+import { supabase } from '@/lib/supabase';
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
@@ -56,7 +54,7 @@ type Order = {
   status: string;
   utr?: string;
   screenshotURL?: string;
-  createdAt: Timestamp;
+  createdAt: string;
   paymentType: 'bank' | 'upi';
   paymentProvider?: string;
   adminPaymentMethodId?: string;
@@ -69,8 +67,8 @@ type SellOrder = {
   status: string;
   utr?: string;
   withdrawalMethod: { name: string, upiId: string };
-  createdAt: Timestamp;
-  completedAt?: Timestamp;
+  createdAt: string;
+  completedAt?: string;
   failureReason?: string;
 };
 
@@ -78,7 +76,7 @@ type RewardTransaction = {
     id: string;
     description: string;
     amount: number;
-    createdAt: Timestamp;
+    createdAt: string;
 }
 
 type AdminPaymentMethod = {
@@ -100,7 +98,7 @@ const DetailItem = ({ label, value }: { label: string, value?: string | number }
 );
 
 const CancelledReceipt = React.forwardRef<HTMLDivElement, { order: SellOrder }>(({ order }, ref) => {
-    const transactionDate = order.createdAt.toDate();
+    const transactionDate = new Date(order.createdAt);
     const receiptDate = transactionDate.toLocaleString('en-IN', {
         day: '2-digit',
         month: 'short',
@@ -152,7 +150,7 @@ const CancelledReceipt = React.forwardRef<HTMLDivElement, { order: SellOrder }>(
 CancelledReceipt.displayName = 'CancelledReceipt';
 
 const SuccessfulReceipt = React.forwardRef<HTMLDivElement, { order: SellOrder }>(({ order }, ref) => {
-    const transactionDate = order.completedAt ? order.completedAt.toDate() : order.createdAt.toDate();
+    const transactionDate = order.completedAt ? new Date(order.completedAt) : new Date(order.createdAt);
     const receiptDate = transactionDate.toLocaleString('en-IN', {
         day: '2-digit',
         month: 'short',
@@ -317,7 +315,7 @@ const PaymentDetailsDialog = ({ order, orderType, adminPaymentMethods }: { order
                     <div className="py-2 max-h-[60vh] overflow-y-auto">
                         <DetailItem label="Amount" value={`₹${order.amount.toFixed(2)}`} />
                         <DetailItem label="Status" value={order.status.replace('_', ' ')} />
-                        <DetailItem label="Date" value={order.createdAt.toDate().toLocaleString()} />
+                        <DetailItem label="Date" value={new Date(order.createdAt).toLocaleString()} />
                         {orderType === 'buy' ? renderBuyDetails() : renderSellDetails()}
                     </div>
                      <DialogFooter className="sm:justify-end gap-2">
@@ -346,29 +344,53 @@ const PaymentDetailsDialog = ({ order, orderType, adminPaymentMethods }: { order
 export default function UserHistoryPage() {
     const params = useParams();
     const userId = params.userId as string;
-    const firestore = useFirestore();
     const { toast } = useToast();
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Fetch User
-    const userRef = useMemo(() => firestore && userId ? doc(firestore, 'users', userId) : null, [firestore, userId]);
-    const { data: user, loading: userLoading } = useDoc<UserProfile>(userRef);
+    const [user, setUser] = useState<UserProfile | null>(null);
+    const [buyOrders, setBuyOrders] = useState<Order[]>([]);
+    const [sellOrders, setSellOrders] = useState<SellOrder[]>([]);
+    const [rewardTransactions, setRewardTransactions] = useState<RewardTransaction[]>([]);
+    const [adminPaymentMethods, setAdminPaymentMethods] = useState<AdminPaymentMethod[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    // Fetch Buy Orders
-    const ordersQuery = useMemo(() => firestore && userId ? query(collection(firestore, 'users', userId, 'orders'), orderBy('createdAt', 'desc'), limit(25)) : null, [firestore, userId]);
-    const { data: buyOrders, loading: ordersLoading } = useCollection<Order>(ordersQuery);
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [userRes, buyRes, sellRes, rewardRes, paymentMethodRes] = await Promise.all([
+                supabase.from('users').select('*').eq('id', userId).single(),
+                supabase.from('orders').select('*').eq('userId', userId).order('created_at', { ascending: false }).limit(25),
+                supabase.from('sell_orders').select('*').eq('userId', userId).order('created_at', { ascending: false }).limit(25),
+                supabase.from('transactions').select('*').eq('userId', userId).order('created_at', { ascending: false }).limit(50),
+                supabase.from('payment_methods').select('*')
+            ]);
 
-    // Fetch Sell Orders
-    const sellOrdersQuery = useMemo(() => firestore && userId ? query(collection(firestore, 'users', userId, 'sellOrders'), orderBy('createdAt', 'desc'), limit(25)) : null, [firestore, userId]);
-    const { data: sellOrders, loading: sellOrdersLoading } = useCollection<SellOrder>(sellOrdersQuery);
+            if (userRes.error) throw userRes.error;
+            setUser(userRes.data);
 
-    // Fetch Reward Transactions
-    const transactionsQuery = useMemo(() => firestore && userId ? query(collection(firestore, 'users', userId, 'transactions'), orderBy('createdAt', 'desc'), limit(50)) : null, [firestore, userId]);
-    const { data: rewardTransactions, loading: rewardsLoading } = useCollection<RewardTransaction>(transactionsQuery);
+            if (buyRes.error) throw buyRes.error;
+            setBuyOrders(buyRes.data);
 
-    // Fetch Admin Payment Methods
-    const paymentMethodsQuery = useMemo(() => firestore ? collection(firestore, "paymentMethods") : null, [firestore]);
-    const { data: adminPaymentMethods, loading: paymentMethodsLoading } = useCollection<AdminPaymentMethod>(paymentMethodsQuery);
+            if (sellRes.error) throw sellRes.error;
+            setSellOrders(sellRes.data);
+
+            if (rewardRes.error) throw rewardRes.error;
+            setRewardTransactions(rewardRes.data);
+
+            if (paymentMethodRes.error) throw paymentMethodRes.error;
+            setAdminPaymentMethods(paymentMethodRes.data);
+
+        } catch (error: any) {
+            console.error("Error fetching user history:", error);
+            toast({ variant: 'destructive', title: 'Error fetching data', description: error.message });
+        } finally {
+            setLoading(false);
+        }
+    }, [userId, toast]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
     
     const filteredBuyOrders = useMemo(() => {
         if (!buyOrders) return [];
@@ -395,8 +417,6 @@ export default function UserHistoryPage() {
           toast({ title: 'UID Copied!' });
         });
     };
-
-    const loading = userLoading || ordersLoading || sellOrdersLoading || paymentMethodsLoading || rewardsLoading;
 
      if (loading) {
         return (
@@ -477,7 +497,7 @@ export default function UserHistoryPage() {
                                     <TableCell className="font-mono text-xs break-all">{order.orderId}</TableCell>
                                     <TableCell>₹{order.amount.toFixed(2)}</TableCell>
                                     <TableCell className="capitalize">{order.status.replace('_', ' ')}</TableCell>
-                                    <TableCell className="text-xs">{order.createdAt.toDate().toLocaleDateString()}</TableCell>
+                                    <TableCell className="text-xs">{new Date(order.createdAt).toLocaleDateString()}</TableCell>
                                     <TableCell className="text-right">
                                         <PaymentDetailsDialog order={order} orderType="buy" adminPaymentMethods={adminPaymentMethods || []} />
                                     </TableCell>
@@ -511,7 +531,7 @@ export default function UserHistoryPage() {
                                     <TableCell className="font-mono text-xs break-all">{order.orderId}</TableCell>
                                     <TableCell>₹{order.amount.toFixed(2)}</TableCell>
                                     <TableCell className="capitalize">{order.status}</TableCell>
-                                    <TableCell className="text-xs">{order.createdAt.toDate().toLocaleDateString()}</TableCell>
+                                    <TableCell className="text-xs">{new Date(order.createdAt).toLocaleDateString()}</TableCell>
                                     <TableCell className="text-right">
                                         <PaymentDetailsDialog order={order} orderType="sell" adminPaymentMethods={[]} />
                                     </TableCell>
@@ -542,7 +562,7 @@ export default function UserHistoryPage() {
                                 <TableRow key={tx.id}>
                                     <TableCell>{tx.description}</TableCell>
                                     <TableCell>₹{tx.amount.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right text-xs">{tx.createdAt.toDate().toLocaleString()}</TableCell>
+                                    <TableCell className="text-right text-xs">{new Date(tx.createdAt).toLocaleString()}</TableCell>
                                 </TableRow>
                             )) : (
                                 <TableRow>
@@ -556,5 +576,3 @@ export default function UserHistoryPage() {
         </main>
     )
 }
-
-    

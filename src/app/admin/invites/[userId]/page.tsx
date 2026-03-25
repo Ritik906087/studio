@@ -1,14 +1,11 @@
 
-
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { useDoc, useCollection, useFirestore } from '@/firebase';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { ChevronLeft, Loader2, Users } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { doc, collection, query, where } from 'firebase/firestore';
 import {
   Table,
   TableBody,
@@ -19,6 +16,8 @@ import {
 } from '@/components/ui/table';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
@@ -37,19 +36,26 @@ type Order = {
 
 // Component for a single invited user row
 const InvitedUserRow = ({ user }: { user: UserProfile }) => {
-    const firestore = useFirestore();
+    const [totalOrderAmount, setTotalOrderAmount] = useState(0);
+    const [ordersLoading, setOrdersLoading] = useState(true);
 
-    const ordersQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'users', user.id, 'orders'), where('status', '==', 'completed'));
-    }, [firestore, user.id]);
-
-    const { data: orders, loading: ordersLoading } = useCollection<Order>(ordersQuery);
-
-    const totalOrderAmount = useMemo(() => {
-        if (!orders) return 0;
-        return orders.reduce((sum, order) => sum + order.amount, 0);
-    }, [orders]);
+    useEffect(() => {
+        const fetchOrders = async () => {
+            setOrdersLoading(true);
+            const { data, error } = await supabase
+                .from('orders')
+                .select('amount')
+                .eq('userId', user.id)
+                .eq('status', 'completed');
+            
+            if (data) {
+                const total = data.reduce((sum, order) => sum + order.amount, 0);
+                setTotalOrderAmount(total);
+            }
+            setOrdersLoading(false);
+        };
+        fetchOrders();
+    }, [user.id]);
 
     return (
         <TableRow>
@@ -80,20 +86,37 @@ const InvitedUserRow = ({ user }: { user: UserProfile }) => {
 export default function UserInvitesPage() {
     const params = useParams();
     const inviterId = params.userId as string;
-    const firestore = useFirestore();
+    const { toast } = useToast();
     
-    // Fetch the inviter's profile
-    const inviterRef = useMemo(() => firestore && inviterId ? doc(firestore, 'users', inviterId) : null, [firestore, inviterId]);
-    const { data: inviter, loading: inviterLoading } = useDoc<UserProfile>(inviterRef);
+    const [inviter, setInviter] = useState<UserProfile | null>(null);
+    const [invitedUsers, setInvitedUsers] = useState<UserProfile[]>([]);
+    const [loading, setLoading] = useState(true);
     
-    // Fetch users invited by the inviter
-    const invitedUsersQuery = useMemo(() => {
-        if (!firestore || !inviterId) return null;
-        return query(collection(firestore, 'users'), where('inviterUid', '==', inviterId));
-    }, [firestore, inviterId]);
-    const { data: invitedUsers, loading: invitedUsersLoading } = useCollection<UserProfile>(invitedUsersQuery);
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const [inviterRes, invitedRes] = await Promise.all([
+                    supabase.from('users').select('*').eq('id', inviterId).single(),
+                    supabase.from('users').select('*').eq('inviterUid', inviterId)
+                ]);
 
-    const loading = inviterLoading || invitedUsersLoading;
+                if (inviterRes.error) throw inviterRes.error;
+                setInviter(inviterRes.data);
+
+                if (invitedRes.error) throw invitedRes.error;
+                setInvitedUsers(invitedRes.data);
+            } catch (error: any) {
+                console.error("Error fetching invites data:", error);
+                toast({ variant: 'destructive', title: 'Failed to load data', description: error.message });
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [inviterId, toast]);
+
 
     if (loading) {
         return (

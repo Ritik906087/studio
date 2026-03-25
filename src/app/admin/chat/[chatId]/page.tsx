@@ -3,19 +3,19 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { useDoc, useFirestore } from '@/firebase';
 import { useParams, useRouter } from 'next/navigation';
 import { Clock, Send, Paperclip, X, ChevronLeft } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { doc, updateDoc, Timestamp, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Loader } from '@/components/ui/loader';
+import { supabase } from '@/lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 type Attachment = {
   name: string;
@@ -37,17 +37,17 @@ type ChatRequest = {
     userNumericId?: string;
     enteredIdentifier: string;
     status: 'pending' | 'active' | 'closed';
-    createdAt: Timestamp;
+    createdAt: string;
     chatHistory: Message[];
     agentId?: string;
-    agentJoinedAt?: Timestamp;
+    agentJoinedAt?: string;
 }
 
-const CountdownTimer = ({ expiryTimestamp, className }: { expiryTimestamp: Timestamp, className?: string }) => {
+const CountdownTimer = ({ expiryTimestamp, className }: { expiryTimestamp: string, className?: string }) => {
     const [timeLeft, setTimeLeft] = useState('');
 
     useEffect(() => {
-        const expiryTime = expiryTimestamp.toDate().getTime();
+        const expiryTime = new Date(expiryTimestamp).getTime();
 
         const interval = setInterval(() => {
             const now = new Date().getTime();
@@ -84,7 +84,6 @@ export default function AdminChatPage() {
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
-    const firestore = useFirestore();
 
     const chatId = params.chatId as string;
     
@@ -94,8 +93,37 @@ export default function AdminChatPage() {
     const chatContentRef = useRef<HTMLDivElement>(null);
     const adminFileInputRef = useRef<HTMLInputElement>(null);
 
-    const liveRequestRef = useMemo(() => firestore && chatId ? doc(firestore, 'chatRequests', chatId) : null, [firestore, chatId]);
-    const { data: liveRequest, loading } = useDoc<ChatRequest>(liveRequestRef);
+    const [liveRequest, setLiveRequest] = useState<ChatRequest | null>(null);
+    const [loading, setLoading] = useState(true);
+    
+    useEffect(() => {
+        if (!chatId) return;
+
+        const fetchChat = async () => {
+            setLoading(true);
+            const { data, error } = await supabase.from('chatRequests').select('*').eq('id', chatId).single();
+            if (error) {
+                toast({ variant: 'destructive', title: 'Error fetching chat.' });
+                console.error(error);
+            } else {
+                setLiveRequest(data as ChatRequest);
+            }
+            setLoading(false);
+        };
+
+        fetchChat();
+
+        const channel = supabase.channel(`public:chatRequests:id=eq.${chatId}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'chatRequests', filter: `id=eq.${chatId}` }, (payload) => {
+            setLiveRequest(payload.new as ChatRequest);
+          })
+          .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+
+    }, [chatId, toast]);
     
     const isJoined = liveRequest?.status === 'active';
 
@@ -106,10 +134,11 @@ export default function AdminChatPage() {
     }, [liveRequest?.chatHistory]);
 
     const handleJoinChat = async () => {
-        if (!liveRequestRef) return;
+        if (!chatId) return;
         setIsUpdating(true);
         try {
-            await updateDoc(liveRequestRef, { status: 'active', agentId: 'admin', agentJoinedAt: serverTimestamp() });
+            const { error } = await supabase.from('chatRequests').update({ status: 'active', agentId: 'admin', agentJoinedAt: new Date().toISOString() }).eq('id', chatId);
+            if (error) throw error;
             toast({ title: 'Chat Joined!', description: "You can now chat with the user." });
         } catch (e) {
             toast({ variant: 'destructive', title: 'Failed to join chat' });
@@ -119,10 +148,11 @@ export default function AdminChatPage() {
     };
     
     const handleCloseChat = async () => {
-        if (!liveRequestRef) return;
+        if (!chatId) return;
         setIsUpdating(true);
         try {
-            await updateDoc(liveRequestRef, { status: 'closed' });
+            const { error } = await supabase.from('chatRequests').update({ status: 'closed' }).eq('id', chatId);
+            if (error) throw error;
             toast({ title: `Chat closed` });
             router.push('/admin/dashboard');
         } catch (e) {
@@ -149,7 +179,7 @@ export default function AdminChatPage() {
     };
     
     const handleAdminSendMessage = async () => {
-        if (!liveRequestRef || (!newMessage.trim() && !attachment)) return;
+        if (!liveRequest || (!newMessage.trim() && !attachment)) return;
         
         const message: Message = {
             text: newMessage.trim(),
@@ -162,10 +192,11 @@ export default function AdminChatPage() {
             message.attachment = attachment;
         }
 
+        const newHistory = [...(liveRequest.chatHistory || []), message];
+
         try {
-            await updateDoc(liveRequestRef, {
-                chatHistory: arrayUnion(message)
-            });
+            const { error } = await supabase.from('chatRequests').update({ chatHistory: newHistory }).eq('id', chatId);
+            if (error) throw error;
             setNewMessage('');
             setAttachment(null);
         } catch (e) {
@@ -195,7 +226,7 @@ export default function AdminChatPage() {
         );
     }
     
-    const expiryTimestamp = new Timestamp(liveRequest.createdAt.seconds + 10 * 60, liveRequest.createdAt.nanoseconds);
+    const expiryTimestamp = new Date(new Date(liveRequest.createdAt).getTime() + 10 * 60000).toISOString();
 
     return (
        <div className="flex flex-col h-screen bg-muted/40">

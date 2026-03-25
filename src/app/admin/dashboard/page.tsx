@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -13,7 +12,6 @@ import {
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { useCollection, useDoc, useFirestore } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { LogOut, Users, LayoutDashboard, Wallet, Eye, Search, Landmark, Banknote, Trash2, Clock, History, CheckCircle, Download, XCircle, MessageSquare, Send, Paperclip, X, FileClock, AlertCircle, FileWarning, MessageCircleQuestion, Video, Image as ImageIcon, Loader2, RefreshCw, Copy } from 'lucide-react';
@@ -24,7 +22,6 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { collection, addDoc, doc, deleteDoc, collectionGroup, query, where, getDocs, updateDoc, Timestamp, runTransaction, limit, orderBy, serverTimestamp, arrayUnion, DocumentData, DocumentReference, getDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -39,6 +36,8 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Loader } from '@/components/ui/loader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { supabase } from '@/lib/supabase';
+import type { PostgrestError } from '@supabase/supabase-js';
 
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
@@ -81,16 +80,15 @@ type WithdrawalMethod = {
 
 type Order = {
     id: string;
-    path: string;
     userId: string;
     orderId: string;
     amount: number;
     status: 'pending_confirmation' | 'in_applied';
-    submittedAt?: Timestamp;
+    submittedAt?: string;
     utr?: string;
     screenshotURL?: string;
     verificationResult?: string;
-    createdAt: Timestamp;
+    createdAt: string;
     user?: UserProfile;
     paymentType?: 'bank' | 'upi' | 'usdt' | 'p2p_upi' | 'p2p_bank';
     paymentProvider?: string;
@@ -121,8 +119,8 @@ type SellOrder = {
         accountNumber?: string;
         ifscCode?: string;
     };
-    createdAt: Timestamp;
-    completedAt?: Timestamp;
+    createdAt: string;
+    completedAt?: string;
     failureReason?: string;
 }
 
@@ -147,10 +145,10 @@ type ChatRequest = {
     userNumericId?: string;
     enteredIdentifier: string;
     status: 'pending' | 'active' | 'closed';
-    createdAt: Timestamp;
+    createdAt: string;
     chatHistory: Message[];
     agentId?: string;
-    agentJoinedAt?: Timestamp;
+    agentJoinedAt?: string;
 }
 
 type Report = {
@@ -165,7 +163,7 @@ type Report = {
     message: string;
     screenshotURL?: string;
     videoURL?: string;
-    createdAt: Timestamp;
+    createdAt: string;
     status: 'pending' | 'resolved';
     resolutionMessage?: string;
 }
@@ -175,7 +173,7 @@ type Feedback = {
     userId: string;
     userNumericId: string;
     message: string;
-    createdAt: Timestamp;
+    createdAt: string;
 }
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
@@ -197,11 +195,11 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
   },
 };
 
-const CountdownTimer = ({ expiryTimestamp, className }: { expiryTimestamp: Timestamp, className?: string }) => {
+const CountdownTimer = ({ expiryTimestamp, className }: { expiryTimestamp: string, className?: string }) => {
     const [timeLeft, setTimeLeft] = useState('');
 
     useEffect(() => {
-        const expiryTime = expiryTimestamp.toDate().getTime();
+        const expiryTime = new Date(expiryTimestamp).getTime();
 
         const interval = setInterval(() => {
             const now = new Date().getTime();
@@ -297,7 +295,7 @@ function UsersGrid({ users, loading, error }: { users: UserProfile[], loading: b
                 <CardHeader>
                     <CardTitle className="text-destructive">Error Fetching Users</CardTitle>
                     <CardDescription className="text-destructive/80">
-                        Could not retrieve user data. Your current Firestore security rules may be blocking this query. For this feature to work, an admin must have read access to the 'users' collection.
+                        Could not retrieve user data. Your current RLS policies may be blocking this query.
                     </CardDescription>
                 </CardHeader>
             </Card>
@@ -602,11 +600,9 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
     const [showRejectionUI, setShowRejectionUI] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
     const [isRejecting, setIsRejecting] = useState(false);
-    const firestore = useFirestore();
     const { toast } = useToast();
     const receiptRef = useRef<HTMLDivElement>(null);
 
-    // This is the user's destination account (either bank or UPI).
     const withdrawalDetails = order.withdrawalMethod;
     const isBankWithdrawal = withdrawalDetails?.type === 'bank';
 
@@ -617,12 +613,17 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
         }
         setIsConfirming(true);
         try {
-            const orderRef = doc(firestore, 'users', order.userId, 'sellOrders', order.id);
-            await updateDoc(orderRef, {
-                status: 'completed',
-                utr: utr,
-                completedAt: serverTimestamp(),
-            });
+            const { error } = await supabase
+                .from('sell_orders')
+                .update({
+                    status: 'completed',
+                    utr: utr,
+                    completed_at: new Date().toISOString(),
+                })
+                .eq('id', order.id);
+
+            if (error) throw error;
+
             toast({ title: 'Withdrawal Confirmed!', description: `Order ${order.orderId} marked as completed.` });
             setOpen(false);
             onProcessed();
@@ -641,21 +642,17 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
         }
         setIsRejecting(true);
         try {
-            const orderRef = doc(firestore, 'users', order.userId, 'sellOrders', order.id);
-            const userRef = doc(firestore, 'users', order.userId);
+            const { data: user, error: userError } = await supabase.from('users').select('balance').eq('id', order.userId).single();
+            if (userError || !user) throw userError || new Error("User not found");
 
-            await runTransaction(firestore, async (transaction) => {
-                const userDoc = await transaction.get(userRef);
-                if (!userDoc.exists()) {
-                    throw new Error("User not found");
-                }
-                const newBalance = userDoc.data().balance + order.amount;
-                transaction.update(orderRef, {
-                    status: 'failed',
-                    failureReason: rejectionReason,
-                });
-                transaction.update(userRef, { balance: newBalance });
+            const { error: rpcError } = await supabase.rpc('reject_sell_order', {
+                p_order_id: order.id,
+                p_user_id: order.userId,
+                p_rejection_reason: rejectionReason,
+                p_refund_amount: order.amount
             });
+
+            if (rpcError) throw rpcError;
 
             toast({ title: 'Withdrawal Rejected', description: `Order ${order.orderId} has been rejected and amount refunded.` });
             setOpen(false);
@@ -683,7 +680,7 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
             const html2canvas = (await import('html2canvas')).default;
             const canvas = await html2canvas(receiptRef.current, {
                 backgroundColor: '#ffffff',
-                scale: 2, // Higher scale for better resolution
+                scale: 2,
             });
             const dataUrl = canvas.toDataURL('image/png');
             const link = document.createElement('a');
@@ -702,7 +699,6 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
 
     return (
         <>
-            {/* Hidden receipt for capturing */}
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
                 <PaymentReceipt ref={receiptRef} order={order} utr={utr} />
             </div>
@@ -715,7 +711,7 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
                         <DialogTitle>Process Withdrawal</DialogTitle>
                         <div className="flex justify-between items-center text-sm pt-2">
                             <CardDescription>Order ID: <span className="break-all">{order.orderId}</span></CardDescription>
-                            <CountdownTimer expiryTimestamp={new Timestamp(order.createdAt.seconds + 30 * 60, order.createdAt.nanoseconds)} />
+                            <CountdownTimer expiryTimestamp={new Date(new Date(order.createdAt).getTime() + 30 * 60000).toISOString()} />
                         </div>
                     </DialogHeader>
                     {showRejectionUI ? (
@@ -780,37 +776,29 @@ function ProcessWithdrawalDialog({ order, onProcessed }: { order: SellOrder, onP
 }
 
 function WithdrawalsTabContent() {
-    const firestore = useFirestore();
     const [searchTerm, setSearchTerm] = useState('');
     const [allOrders, setAllOrders] = useState<SellOrder[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<any>(null);
+    const [error, setError] = useState<PostgrestError | null>(null);
 
     const fetchWithdrawals = useCallback(async () => {
-        if (!firestore) return;
         setLoading(true);
         setError(null);
-        try {
-            const q = query(
-                collectionGroup(firestore, 'sellOrders'), 
-                where('status', '==', 'pending'),
-                orderBy('createdAt', 'desc')
-            );
-            const sellOrdersSnapshot = await getDocs(q);
-            const pendingWithdrawals = sellOrdersSnapshot.docs
-                .map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                } as SellOrder));
-    
-            setAllOrders(pendingWithdrawals);
-        } catch (error) {
+        
+        const { data, error } = await supabase
+            .from('sell_orders')
+            .select('*')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+
+        if (error) {
             console.error("Error fetching withdrawals:", error);
             setError(error);
-        } finally {
-            setLoading(false);
+        } else {
+            setAllOrders(data as SellOrder[]);
         }
-    }, [firestore]);
+        setLoading(false);
+    }, []);
 
 
     useEffect(() => {
@@ -835,7 +823,7 @@ function WithdrawalsTabContent() {
                 <CardHeader>
                     <CardTitle className="text-destructive">Error Fetching Withdrawals</CardTitle>
                     <CardDescription className="text-destructive/80">
-                        Could not retrieve withdrawal data. This might be due to Firestore security rules or a missing database index.
+                        Could not retrieve withdrawal data. This might be due to RLS policies or a database issue.
                     </CardDescription>
                 </CardHeader>
                  <CardContent>
@@ -960,30 +948,43 @@ function HistoryUsersGrid({ users, loading, error }: { users: UserProfile[], loa
 }
 
 function LiveChatTabContent() {
-    const firestore = useFirestore();
     const [searchTerm, setSearchTerm] = useState('');
+    const [liveChatRequests, setLiveChatRequests] = useState<ChatRequest[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<PostgrestError | null>(null);
 
-    const chatRequestsQuery = useMemo(() => {
-        if (!firestore) return null;
-        // Fetch last 50 requests to avoid performance issues and missing indexes on large collections
-        return query(collection(firestore, 'chatRequests'), orderBy('createdAt', 'desc'), limit(50));
-    }, [firestore]);
+    useEffect(() => {
+        const fetchChats = async () => {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('chatRequests')
+                .select('*')
+                .in('status', ['pending', 'active'])
+                .order('created_at', { ascending: false })
+                .limit(50);
+            
+            if (error) setError(error);
+            else setLiveChatRequests(data as ChatRequest[]);
+            setLoading(false);
+        };
+        fetchChats();
 
-    const { data: allChatRequests, loading, error } = useCollection<ChatRequest>(chatRequestsQuery);
-    
-    const liveChatRequests = useMemo(() => {
-        if (!allChatRequests) return [];
-        // Filter for pending and active chats on the client
-        return allChatRequests.filter(req => ['pending', 'active'].includes(req.status));
-    }, [allChatRequests]);
+        const channel = supabase.channel('public:chatRequests')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'chatRequests' }, () => {
+            fetchChats();
+          })
+          .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
 
     const sortedAndFilteredRequests = useMemo(() => {
         const sorted = [...liveChatRequests].sort((a, b) => {
-            // 'pending' should come before 'active'
             if (a.status === 'pending' && b.status !== 'pending') return -1;
             if (a.status !== 'pending' && b.status === 'pending') return 1;
-            // For requests with the same status, newer ones first
-            return b.createdAt.seconds - a.createdAt.seconds;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         });
 
         if (!searchTerm.trim()) {
@@ -1011,7 +1012,7 @@ function LiveChatTabContent() {
                 <CardHeader>
                     <CardTitle className="text-destructive">Error Fetching Chat Requests</CardTitle>
                     <CardDescription className="text-destructive/80">
-                        Could not retrieve chat data. This can be caused by Firestore security rules. Please check your console for more details.
+                        Could not retrieve chat data.
                     </CardDescription>
                 </CardHeader>
                  <CardContent>
@@ -1052,10 +1053,10 @@ function LiveChatTabContent() {
                                         <div>
                                             <CardTitle className="text-base">{isPending ? "New Chat Request" : "Active Chat"}</CardTitle>
                                             <CardDescription>
-                                                {new Date(request.createdAt.toDate()).toLocaleString()}
+                                                {new Date(request.createdAt).toLocaleString()}
                                             </CardDescription>
                                         </div>
-                                        {isPending && <CountdownTimer expiryTimestamp={new Timestamp(request.createdAt.seconds + 10 * 60, request.createdAt.nanoseconds)} />}
+                                        {isPending && <CountdownTimer expiryTimestamp={new Date(new Date(request.createdAt).getTime() + 10 * 60000).toISOString()} />}
                                     </div>
                                 </CardHeader>
                                 <CardContent className="flex-grow space-y-2 text-sm">
@@ -1116,7 +1117,6 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
     const [isRejecting, setIsRejecting] = useState(false);
     const [showRejectionUI, setShowRejectionUI] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
-    const firestore = useFirestore();
     const { toast } = useToast();
 
     const isP2P = order.paymentType === 'p2p_upi' || order.paymentType === 'p2p_bank';
@@ -1136,120 +1136,17 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
     };
 
     const handleApprove = async () => {
-        if (!firestore || !order.path) return;
+        if (!order.id || !order.userId) return;
         setIsApproving(true);
-        const userRef = doc(firestore, 'users', order.userId);
-        const orderRef = doc(firestore, order.path);
 
         try {
-            await runTransaction(firestore, async (transaction) => {
-                // --- READ PHASE ---
-                const buyerDoc = await transaction.get(userRef);
-                if (!buyerDoc.exists()) {
-                    throw new Error("User not found to update balance.");
-                }
-                const buyerData = buyerDoc.data() as UserProfile;
-
-                const buyerOrderDoc = await transaction.get(orderRef);
-                if (!buyerOrderDoc.exists()) throw new Error("Buy order not found.");
-                const buyerOrderData = buyerOrderDoc.data() as Order;
-    
-                let sellOrderRef: DocumentReference | null = null;
-                let sellOrderDoc: DocumentData | null = null;
-                if (buyerOrderData.paymentType === 'p2p_upi' && buyerOrderData.matchedSellOrderPath) {
-                    sellOrderRef = doc(firestore, buyerOrderData.matchedSellOrderPath);
-                    sellOrderDoc = await transaction.get(sellOrderRef);
-                }
-
-                let l1InviterDoc: DocumentData | null = null;
-                let l1InviterRef: DocumentReference | null = null;
-                let l2InviterDoc: DocumentData | null = null;
-                let l2InviterRef: DocumentReference | null = null;
-    
-                if (buyerData.inviterUid) {
-                    l1InviterRef = doc(firestore, 'users', buyerData.inviterUid);
-                    l1InviterDoc = await transaction.get(l1InviterRef);
-    
-                    if (l1InviterDoc.exists()) {
-                        const l1InviterData = l1InviterDoc.data() as UserProfile;
-                        if (l1InviterData.inviterUid) {
-                            l2InviterRef = doc(firestore, 'users', l1InviterData.inviterUid);
-                            l2InviterDoc = await transaction.get(l2InviterRef);
-                        }
-                    }
-                }
-                
-                // --- WRITE PHASE ---
-    
-                // 1. Update buyer's balance and order status
-                const newBalance = (buyerData.balance || 0) + order.amount;
-                transaction.update(userRef, { balance: newBalance });
-                transaction.update(orderRef, { status: 'completed' });
-    
-                // 2. Handle P2P Seller Order
-                if (sellOrderRef && sellOrderDoc && sellOrderDoc.exists()) {
-                    const sellOrderData = sellOrderDoc.data();
-                    
-                    const updatedMatchedBuyOrders = (sellOrderData.matchedBuyOrders || []).map((bo: any) => {
-                        if (bo.buyOrderId === buyerOrderDoc.id) {
-                            return { 
-                                ...bo, 
-                                status: 'completed', 
-                                utr: buyerOrderData.utr,
-                            };
-                        }
-                        return bo;
-                    });
-                    
-                    const isAllMatchedOrdersDone = updatedMatchedBuyOrders.every(
-                        (bo: any) => bo.status === 'completed' || bo.status === 'failed' || bo.status === 'cancelled'
-                    );
-                    
-                    const newSellOrderStatus = (sellOrderData.remainingAmount === 0 && isAllMatchedOrdersDone)
-                        ? 'completed'
-                        : sellOrderData.status;
-
-                    transaction.update(sellOrderRef, {
-                        matchedBuyOrders: updatedMatchedBuyOrders,
-                        status: newSellOrderStatus,
-                        ...(newSellOrderStatus === 'completed' && { completedAt: serverTimestamp() })
-                    });
-                }
-    
-                // 3. Handle Level 1 Inviter Bonus
-                if (l1InviterRef && l1InviterDoc && l1InviterDoc.exists()) {
-                    const l1Bonus = order.amount * 0.02;
-                    const l1NewBalance = (l1InviterDoc.data().balance || 0) + l1Bonus;
-                    transaction.update(l1InviterRef, { balance: l1NewBalance });
-    
-                    const l1RewardTxRef = doc(collection(firestore, 'users', buyerData.inviterUid!, 'transactions'));
-                    transaction.set(l1RewardTxRef, {
-                        userId: buyerData.inviterUid,
-                        amount: l1Bonus,
-                        description: `Level 1 bonus from user ${order.user?.numericId || order.userId}`,
-                        createdAt: serverTimestamp(),
-                        type: 'team_bonus',
-                        orderId: `LGPAYI${Date.now()}`
-                    });
-    
-                    // 4. Handle Level 2 Inviter Bonus
-                    if (l2InviterRef && l2InviterDoc && l2InviterDoc.exists()) {
-                        const l2Bonus = order.amount * 0.01;
-                        const l2NewBalance = (l2InviterDoc.data().balance || 0) + l2Bonus;
-                        transaction.update(l2InviterRef, { balance: l2NewBalance });
-    
-                        const l2RewardTxRef = doc(collection(firestore, 'users', l1InviterDoc.data().inviterUid!, 'transactions'));
-                        transaction.set(l2RewardTxRef, {
-                            userId: l1InviterDoc.data().inviterUid,
-                            amount: l2Bonus,
-                            description: `Level 2 bonus from user ${order.user?.numericId || order.userId}`,
-                            createdAt: serverTimestamp(),
-                            type: 'team_bonus',
-                            orderId: `LGPAYI${Date.now() + 1}`
-                        });
-                    }
-                }
+            const { error } = await supabase.rpc('approve_buy_order', {
+                p_order_id: order.id,
+                p_user_id: order.userId
             });
+
+            if (error) throw error;
+            
             toast({ title: "Payment Approved!", description: `${order.amount} LGB added to user's balance. Bonuses have been distributed.`});
             setOpen(false);
             onProcessed();
@@ -1266,58 +1163,15 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
             toast({ variant: 'destructive', title: 'Reason Required', description: 'Please provide a reason for rejection.' });
             return;
         }
-        if (!firestore || !order.path) return;
+        if (!order.id) return;
         setIsRejecting(true);
-        const orderRef = doc(firestore, order.path);
     
         try {
-            await runTransaction(firestore, async (transaction) => {
-                // --- READ PHASE ---
-                const buyerOrderDoc = await transaction.get(orderRef);
-                if (!buyerOrderDoc.exists()) throw new Error("Buy order not found.");
-                
-                const buyerOrderData = buyerOrderDoc.data() as Order;
-                
-                let sellOrderRef: DocumentReference | null = null;
-                let sellOrderDoc: DocumentData | null = null;
-                if (buyerOrderData.paymentType === 'p2p_upi' && buyerOrderData.matchedSellOrderPath) {
-                    sellOrderRef = doc(firestore, buyerOrderData.matchedSellOrderPath);
-                    sellOrderDoc = await transaction.get(sellOrderRef);
-                }
-
-                // --- WRITE PHASE ---
-    
-                // 1. Update buyer order
-                transaction.update(orderRef, {
-                    status: 'failed',
-                    rejectionReason: rejectionReason,
-                });
-    
-                // 2. If it's a P2P order, handle seller side
-                if (sellOrderRef && sellOrderDoc && sellOrderDoc.exists()) {
-                    const sellOrderData = sellOrderDoc.data();
-                    
-                    const newRemainingAmount = (sellOrderData.remainingAmount || 0) + buyerOrderData.amount;
-                    
-                    let newSellOrderStatus = 'partially_filled';
-                    if (newRemainingAmount >= sellOrderData.amount) {
-                        newSellOrderStatus = 'pending';
-                    }
-    
-                    const updatedMatchedBuyOrders = (sellOrderData.matchedBuyOrders || []).map((bo: any) => {
-                        if (bo.buyOrderId === buyerOrderDoc.id) {
-                            return { ...bo, status: 'failed' };
-                        }
-                        return bo;
-                    });
-    
-                    transaction.update(sellOrderRef, {
-                        remainingAmount: newRemainingAmount,
-                        status: newSellOrderStatus,
-                        matchedBuyOrders: updatedMatchedBuyOrders
-                    });
-                }
+            const { error } = await supabase.rpc('reject_buy_order', {
+                p_order_id: order.id,
+                p_rejection_reason: rejectionReason
             });
+            if (error) throw error;
     
             toast({ title: 'Payment Rejected' });
             setOpen(false);
@@ -1471,113 +1325,68 @@ function ProcessConfirmationDialog({ order, onProcessed, adminPaymentMethods }: 
 }
 
 function ConfirmationsTabContent() {
-    const firestore = useFirestore();
     const [allOrders, setAllOrders] = useState<Order[]>([]);
-    const [usersMap, setUsersMap] = useState<Map<string, UserProfile>>(new Map());
     const [adminPaymentMethods, setAdminPaymentMethods] = useState<PaymentMethod[]>([]);
     
     const [ordersLoading, setOrdersLoading] = useState(true);
     const [methodsLoading, setMethodsLoading] = useState(true);
 
-    const [error, setError] = useState<any>(null);
+    const [error, setError] = useState<PostgrestError | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
     const fetchConfirmations = useCallback(async () => {
-        if (!firestore) return;
         setOrdersLoading(true);
         setError(null);
         try {
-            const pendingQuery = query(
-                collectionGroup(firestore, 'orders'),
-                where('status', '==', 'pending_confirmation'),
-                orderBy('createdAt', 'desc')
-            );
-            const appliedQuery = query(
-                collectionGroup(firestore, 'orders'),
-                where('status', '==', 'in_applied'),
-                orderBy('createdAt', 'desc')
-            );
+            const { data, error } = await supabase
+                .from('orders')
+                .select('*, users(*)')
+                .in('status', ['pending_confirmation', 'in_applied'])
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
             
-            const [pendingSnapshot, appliedSnapshot] = await Promise.all([
-                getDocs(pendingQuery),
-                getDocs(appliedQuery)
-            ]);
-    
-            const pendingOrders = pendingSnapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data(), path: orderDoc.ref.path } as Order));
-            const appliedOrders = appliedSnapshot.docs.map(orderDoc => ({ id: orderDoc.id, ...orderDoc.data(), path: orderDoc.ref.path } as Order));
-            
-            const combinedOrders = [...pendingOrders, ...appliedOrders].sort((a,b) => b.createdAt.seconds - a.createdAt.seconds);
-
-            setAllOrders(combinedOrders);
-
-            if (combinedOrders.length > 0) {
-                const userIds = [...new Set(combinedOrders.map(order => order.userId))];
-                const userPromises = [];
-                for (let i = 0; i < userIds.length; i += 30) {
-                    const chunk = userIds.slice(i, i + 30);
-                    const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', chunk));
-                    userPromises.push(getDocs(usersQuery));
-                }
-                const userSnapshots = await Promise.all(userPromises);
-
-                const newUsersData: UserProfile[] = userSnapshots.flatMap(snapshot => 
-                    snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile))
-                );
-
-                const newUsersMap = new Map<string, UserProfile>();
-                newUsersData.forEach(user => newUsersMap.set(user.id, user));
-                setUsersMap(newUsersMap);
-            } else {
-                setUsersMap(new Map());
-            }
-
+            setAllOrders(data as Order[]);
         } catch (err: any) {
             console.error("Error fetching confirmations:", err);
             setError(err);
         } finally {
             setOrdersLoading(false);
         }
-    }, [firestore]);
+    }, []);
 
     useEffect(() => {
         fetchConfirmations();
+
+        const channel = supabase.channel('public:orders')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchConfirmations)
+            .subscribe();
+        
+        return () => {
+            supabase.removeChannel(channel);
+        }
     }, [fetchConfirmations]);
     
     useEffect(() => {
-        if (!firestore) return;
         setMethodsLoading(true);
-        getDocs(collection(firestore, 'paymentMethods'))
-            .then((snapshot) => {
-                const methodsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentMethod));
-                setAdminPaymentMethods(methodsData);
-            })
-            .catch((err) => {
-                console.error("Error fetching payment methods:", err);
-            })
-            .finally(() => {
-                setMethodsLoading(false);
-            });
-    }, [firestore]);
+        supabase.from('payment_methods').select('*').then(({ data, error }) => {
+            if (error) console.error("Error fetching payment methods:", error);
+            else setAdminPaymentMethods(data as PaymentMethod[]);
+            setMethodsLoading(false);
+        });
+    }, []);
 
-
-    const ordersWithUserData = useMemo(() => {
-        // Data is now pre-sorted by `createdAt` from Firestore
-        return allOrders.map(order => ({
-            ...order,
-            user: usersMap.get(order.userId)
-        }));
-    }, [allOrders, usersMap]);
 
     const filteredOrders = useMemo(() => {
-        if (!ordersWithUserData) return [];
-        if (!searchTerm) return ordersWithUserData;
+        if (!allOrders) return [];
+        if (!searchTerm) return allOrders;
         const lowercasedTerm = searchTerm.toLowerCase();
-        return ordersWithUserData.filter(order =>
+        return allOrders.filter(order =>
             order.orderId.toLowerCase().includes(lowercasedTerm) ||
             order.user?.numericId?.toLowerCase().includes(lowercasedTerm) ||
             order.utr?.toLowerCase().includes(lowercasedTerm)
         );
-    }, [ordersWithUserData, searchTerm]);
+    }, [allOrders, searchTerm]);
     
     const loading = ordersLoading || methodsLoading;
 
@@ -1587,8 +1396,7 @@ function ConfirmationsTabContent() {
                 <CardHeader>
                     <CardTitle className="text-destructive">Error Fetching Confirmations</CardTitle>
                     <CardDescription className="text-destructive/80">
-                        Could not retrieve pending payments. This might be due to Firestore security rules or a network issue.
-                        If you see an error in the browser console about a missing index, please click the link in the error to create it in Firebase.
+                        Could not retrieve pending payments. This might be due to RLS policies or a network issue.
                     </CardDescription>
                 </CardHeader>
                  <CardContent>
@@ -1641,7 +1449,7 @@ function ConfirmationsTabContent() {
                                     <div>
                                         {order.status === 'pending_confirmation' && order.submittedAt ? (
                                             <CountdownTimer 
-                                                expiryTimestamp={new Timestamp(order.submittedAt.seconds + 30 * 60, order.submittedAt.nanoseconds)} 
+                                                expiryTimestamp={new Date(new Date(order.submittedAt).getTime() + 30 * 60000).toISOString()} 
                                             />
                                         ) : order.status === 'in_applied' ? (
                                             <div className="flex items-center gap-1.5 text-xs font-semibold text-orange-600">
@@ -1684,7 +1492,6 @@ function ReviewReportDialog({ report, onResolved }: { report: Report; onResolved
     const [open, setOpen] = useState(false);
     const [resolutionMessage, setResolutionMessage] = useState('');
     const [isResolving, setIsResolving] = useState(false);
-    const firestore = useFirestore();
     const { toast } = useToast();
 
     const handleResolve = async () => {
@@ -1692,14 +1499,16 @@ function ReviewReportDialog({ report, onResolved }: { report: Report; onResolved
             toast({ variant: 'destructive', title: 'Resolution message is required.' });
             return;
         }
-        if (!firestore) return;
         setIsResolving(true);
         try {
-            const reportRef = doc(firestore, 'reports', report.id);
-            await updateDoc(reportRef, {
-                status: 'resolved',
-                resolutionMessage: resolutionMessage,
-            });
+            const { error } = await supabase
+                .from('reports')
+                .update({
+                    status: 'resolved',
+                    resolutionMessage: resolutionMessage,
+                })
+                .eq('id', report.id);
+            if (error) throw error;
             toast({ title: 'Report Resolved' });
             setOpen(false);
             onResolved();
@@ -1775,28 +1584,23 @@ function ReviewReportDialog({ report, onResolved }: { report: Report; onResolved
 }
 
 function ReportsTabContent() {
-    const firestore = useFirestore();
-
     const [reports, setReports] = useState<Report[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<any>(null);
+    const [error, setError] = useState<PostgrestError | null>(null);
 
     const fetchReports = useCallback(async () => {
-        if (!firestore) return;
         setLoading(true);
         setError(null);
         try {
-            const q = query(collection(firestore, "reports"));
-            const snapshot = await getDocs(q);
-            const fetchedReports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report));
-            fetchedReports.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
-            setReports(fetchedReports);
-        } catch (e) {
+            const { data, error } = await supabase.from("reports").select('*').order('created_at', { ascending: false });
+            if (error) throw error;
+            setReports(data as Report[]);
+        } catch (e: any) {
             setError(e);
         } finally {
             setLoading(false);
         }
-    }, [firestore]);
+    }, []);
 
     useEffect(() => {
         fetchReports();
@@ -1817,7 +1621,7 @@ function ReportsTabContent() {
                 <CardHeader>
                     <CardTitle className="text-destructive">Error Fetching Reports</CardTitle>
                     <CardDescription className="text-destructive/80">
-                        Could not retrieve report data. This might be due to Firestore security rules or a missing database index.
+                        Could not retrieve report data. This might be due to RLS policies.
                     </CardDescription>
                 </CardHeader>
                  <CardContent>
@@ -1865,7 +1669,7 @@ function ReportsTabContent() {
                                 <TableCell className="font-mono text-xs">{report.caseId}</TableCell>
                                 <TableCell className="font-mono text-xs break-all">{report.displayOrderId}</TableCell>
                                 <TableCell className="max-w-[200px] truncate">{report.problemType}</TableCell>
-                                <TableCell>{new Date(report.createdAt.toDate()).toLocaleString()}</TableCell>
+                                <TableCell>{new Date(report.createdAt).toLocaleString()}</TableCell>
                                 <TableCell>
                                     <span className={cn(
                                         "px-2 py-1 rounded-full text-xs font-semibold",
@@ -1887,14 +1691,20 @@ function ReportsTabContent() {
 }
 
 function FeedbackTabContent() {
-    const firestore = useFirestore();
+    const [feedbackItems, setFeedbackItems] = useState<Feedback[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<PostgrestError | null>(null);
 
-    const feedbackQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, "feedback"), orderBy('createdAt', 'desc'));
-    }, [firestore]);
-
-    const { data: feedbackItems, loading, error } = useCollection<Feedback>(feedbackQuery);
+    useEffect(() => {
+        async function fetchFeedback() {
+            setLoading(true);
+            const { data, error } = await supabase.from('feedback').select('*').order('created_at', { ascending: false });
+            if (error) setError(error);
+            else setFeedbackItems(data as Feedback[]);
+            setLoading(false);
+        }
+        fetchFeedback();
+    }, []);
 
     if (loading) {
         return <div className="flex justify-center p-8"><Loader size="md" /></div>;
@@ -1948,7 +1758,7 @@ function FeedbackTabContent() {
                             <TableRow key={item.id}>
                                 <TableCell className="font-mono text-xs">{item.userNumericId}</TableCell>
                                 <TableCell className="max-w-[400px] whitespace-pre-wrap">{item.message}</TableCell>
-                                <TableCell className="text-right text-xs">{new Date(item.createdAt.toDate()).toLocaleString()}</TableCell>
+                                <TableCell className="text-right text-xs">{new Date(item.createdAt).toLocaleString()}</TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
@@ -1960,88 +1770,54 @@ function FeedbackTabContent() {
 
 function AdminDashboard() {
     const router = useRouter();
-    const firestore = useFirestore();
     const { toast } = useToast();
     
-    const usersQuery = useMemo(() => firestore ? query(collection(firestore, "users"), orderBy('createdAt', 'desc')) : null, [firestore]);
-    const { data: allUsers, loading, error } = useCollection<UserProfile>(usersQuery);
-    
-    const paymentMethodsQuery = useMemo(() => firestore ? collection(firestore, "paymentMethods") : null, [firestore]);
-    const { data: paymentMethods, loading: paymentMethodsLoading } = useCollection<PaymentMethod>(paymentMethodsQuery);
+    const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<any>(null);
+
+    const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+    const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [isMasterAdmin, setIsMasterAdmin] = useState(false);
     const [isSearchingOrders, setIsSearchingOrders] = useState(false);
     const [orderIdSearchedUser, setOrderIdSearchedUser] = useState<UserProfile[] | null>(null);
+    
+    const fetchUsers = useCallback(async () => {
+        setLoading(true);
+        const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
+        if (error) setError(error);
+        else setAllUsers(data as UserProfile[]);
+        setLoading(false);
+    }, []);
+
+    const fetchPaymentMethods = useCallback(async () => {
+        setPaymentMethodsLoading(true);
+        const { data, error } = await supabase.from('payment_methods').select('*');
+        if (!error) setPaymentMethods(data as PaymentMethod[]);
+        setPaymentMethodsLoading(false);
+    }, []);
+
+    useEffect(() => {
+        fetchUsers();
+        fetchPaymentMethods();
+    }, [fetchUsers, fetchPaymentMethods]);
 
     useEffect(() => {
         const handleOrderSearch = async () => {
             const term = searchTerm.trim();
             if (term && term.toUpperCase().startsWith('LGPAY')) {
                 setIsSearchingOrders(true);
-                setOrderIdSearchedUser([]); // Indicate loading/searching
-
-                if (!firestore) {
-                    toast({ variant: 'destructive', title: 'Firestore not available' });
-                    setIsSearchingOrders(false);
-                    return;
-                }
+                setOrderIdSearchedUser([]);
 
                 try {
-                    const buyOrdersQuery = query(collectionGroup(firestore, 'orders'));
-                    const sellOrdersQuery = query(collectionGroup(firestore, 'sellOrders'));
-
-                    const [buyOrdersSnapshot, sellOrdersSnapshot] = await Promise.all([
-                        getDocs(buyOrdersQuery),
-                        getDocs(sellOrdersQuery),
-                    ]);
-                    
-                    const foundUserIds = new Set<string>();
-
-                    const matchingBuyOrders = buyOrdersSnapshot.docs.filter(doc => doc.data().orderId === term);
-                    for (const buyDoc of matchingBuyOrders) {
-                        const buyData = buyDoc.data();
-                        foundUserIds.add(buyData.userId);
-                        if (buyData.matchedSellOrderPath) {
-                            const sellMatch = sellOrdersSnapshot.docs.find(doc => doc.ref.path === buyData.matchedSellOrderPath);
-                            if (sellMatch) {
-                                foundUserIds.add(sellMatch.data().userId);
-                            }
-                        }
-                    }
-
-                    const matchingSellOrders = sellOrdersSnapshot.docs.filter(doc => doc.data().orderId === term);
-                    for (const sellDoc of matchingSellOrders) {
-                        const sellData = sellDoc.data();
-                        foundUserIds.add(sellData.userId);
-                        if (Array.isArray(sellData.matchedBuyOrders)) {
-                            sellData.matchedBuyOrders.forEach((bo: any) => {
-                                if (bo.buyerId) foundUserIds.add(bo.buyerId);
-                            });
-                        }
-                    }
-
-                    const userIds = Array.from(foundUserIds);
-
-                    if (userIds.length > 0) {
-                        const userProfilePromises = [];
-                        for (let i = 0; i < userIds.length; i += 30) {
-                            const chunk = userIds.slice(i, i + 30);
-                            const usersQuery = query(collection(firestore, 'users'), where('__name__', 'in', chunk));
-                            userProfilePromises.push(getDocs(usersQuery));
-                        }
-                        
-                        const userSnapshots = await Promise.all(userProfilePromises);
-                        const usersData = userSnapshots.flatMap(snapshot =>
-                            snapshot.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))
-                        );
-                        setOrderIdSearchedUser(usersData);
-                    } else {
-                        setOrderIdSearchedUser([]); // No order found
-                    }
+                    const { data: users, error } = await supabase.rpc('find_users_by_order_id', { p_order_id: term });
+                    if (error) throw error;
+                    setOrderIdSearchedUser(users as UserProfile[]);
                 } catch (e: any) {
                     console.error("Order search error:", e);
-                    toast({ variant: 'destructive', title: 'Search Error', description: 'Could not perform order search. This might be due to Firestore security rules. Check browser console for details.' });
+                    toast({ variant: 'destructive', title: 'Search Error', description: 'Could not perform order search.' });
                     setOrderIdSearchedUser(null);
                 } finally {
                     setIsSearchingOrders(false);
@@ -2056,7 +1832,7 @@ function AdminDashboard() {
         }, 500);
 
         return () => clearTimeout(debounceTimer);
-    }, [searchTerm, firestore, toast]);
+    }, [searchTerm, toast]);
 
     const filteredUsers = useMemo(() => {
         if (orderIdSearchedUser !== null) {
@@ -2096,23 +1872,25 @@ function AdminDashboard() {
     const totalBalance = allUsers?.reduce((acc, user) => acc + (user.balance || 0), 0) || 0;
 
     const handleAddMethod = async (type: 'bank' | 'upi' | 'usdt', details: any) => {
-        if (!firestore) return;
         try {
-            await addDoc(collection(firestore, 'paymentMethods'), { type, ...details });
+            const { error } = await supabase.from('payment_methods').insert({ type, ...details });
+            if (error) throw error;
             toast({ title: `${type.toUpperCase()} method added successfully.`});
-        } catch (error) {
+            fetchPaymentMethods();
+        } catch (error: any) {
             console.error(error);
             toast({ variant: 'destructive', title: `Error adding ${type} method.`});
         }
     };
 
     const handleDeleteMethod = async (id: string) => {
-        if (!firestore) return;
         if (!confirm('Are you sure you want to delete this payment method?')) return;
         try {
-            await deleteDoc(doc(firestore, 'paymentMethods', id));
+            const { error } = await supabase.from('payment_methods').delete().eq('id', id);
+            if (error) throw error;
             toast({ title: 'Payment method deleted.' });
-        } catch (error) {
+            fetchPaymentMethods();
+        } catch (error: any) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Error deleting payment method.'});
         }

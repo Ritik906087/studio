@@ -14,8 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { LifeBuoy, UserPlus, AlertTriangle, Send, ChevronLeft, Paperclip, Image as ImageIcon, X, Clock, Volume2, VolumeX, Sparkles, History } from 'lucide-react';
 import { useLanguage } from '@/context/language-context';
-import { useUser, useFirestore, useDoc, useCollection } from '@/firebase';
-import { doc, collection, query, where, orderBy, limit, Timestamp, updateDoc, arrayUnion } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { escalateToHuman } from '@/ai/flows/help-chat-flow';
@@ -37,6 +36,8 @@ import {
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader } from '@/components/ui/loader';
+import { supabase } from '@/lib/supabase';
+
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
@@ -60,7 +61,7 @@ type Message = {
 type ChatRequest = {
     id: string;
     status: 'pending' | 'active' | 'closed';
-    createdAt: Timestamp;
+    created_at: string;
     chatHistory: Message[];
 };
 
@@ -75,7 +76,6 @@ const formatTime = (seconds: number) => {
 export default function HelpPage() {
   const { translations } = useLanguage();
   const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   
   const [uid, setUid] = useState('');
@@ -95,6 +95,11 @@ export default function HelpPage() {
 
   const [isSoundOn, setIsSoundOn] = useState(true);
   const [guestChatId, setGuestChatId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<{ numericId?: string, displayName?: string, photoURL?: string } | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+
+  const [activeRequest, setActiveRequest] = useState<ChatRequest | null>(null);
+  const [chatLoading, setChatLoading] = useState(true);
 
   // Audio Context Refs
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -149,61 +154,81 @@ export default function HelpPage() {
       setTimeout(() => playBeep({frequency: 750, duration: 0.12, volume: 0.10, type: "sine"}), 120);
   };
 
-
-  const userProfileRef = useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
-
-  const { data: userProfile, loading: profileLoading } = useDoc<{ numericId?: string, displayName?: string, photoURL?: string }>(userProfileRef);
-
-  const allUserChatRequestsQuery = useMemo(() => {
-    if (!user || !firestore) return null;
-    const q = query(
-        collection(firestore, 'chatRequests'),
-        where('userId', '==', user.uid),
-    );
-    return q;
-  }, [user, firestore]);
-
-  const { data: allUserChatRequests, loading: chatRequestsLoading } = useCollection<ChatRequest>(allUserChatRequestsQuery);
-  
-  const loggedInActiveRequest = useMemo(() => {
-      if (!allUserChatRequests || allUserChatRequests.length === 0) return null;
-      // Sort client-side to avoid needing a composite index
-      return allUserChatRequests
-        .filter(req => ['pending', 'active'].includes(req.status))
-        .sort((a, b) => b.createdAt.seconds - a.createdAt.seconds)[0];
-  }, [allUserChatRequests]);
-
-  const guestChatRequestRef = useMemo(() => {
-    if (!firestore || !guestChatId || user) return null;
-    return doc(firestore, 'chatRequests', guestChatId);
-  }, [firestore, guestChatId, user]);
-
-  const { data: guestChatRequest, loading: guestChatLoading } = useDoc<ChatRequest>(guestChatRequestRef);
-
-  const activeRequest = useMemo(() => {
-    if (user) {
-        return loggedInActiveRequest;
+  useEffect(() => {
+    async function fetchProfile() {
+      if (user) {
+        setProfileLoading(true);
+        const { data, error } = await supabase.from('users').select('numericId, displayName, photoURL').eq('uid', user.id).single();
+        if (data) setUserProfile(data);
+        setProfileLoading(false);
+      } else {
+        setProfileLoading(false);
+      }
     }
-    if (guestChatRequest && ['pending', 'active'].includes(guestChatRequest.status)) {
-        return guestChatRequest;
+    fetchProfile();
+  }, [user]);
+
+  useEffect(() => {
+    setChatLoading(true);
+    let subscription: any;
+
+    async function fetchInitialChat() {
+      let chatId = null;
+      let query: any;
+
+      if (user) {
+        const { data, error } = await supabase
+          .from('chatRequests')
+          .select('*')
+          .eq('userId', user.id)
+          .in('status', ['pending', 'active'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (data) {
+          setActiveRequest(data as ChatRequest);
+          chatId = data.id;
+        }
+      } else {
+        const savedGuestChatId = sessionStorage.getItem(GUEST_CHAT_ID_KEY);
+        if (savedGuestChatId) {
+          const { data, error } = await supabase
+            .from('chatRequests')
+            .select('*')
+            .eq('id', savedGuestChatId)
+            .in('status', ['pending', 'active'])
+            .single();
+          if (data) {
+            setActiveRequest(data as ChatRequest);
+            chatId = data.id;
+          }
+        }
+      }
+      setChatLoading(false);
+
+      if (chatId) {
+        subscription = supabase
+          .channel(`public:chatRequests:id=eq.${chatId}`)
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chatRequests', filter: `id=eq.${chatId}` },
+            payload => {
+              setActiveRequest(payload.new as ChatRequest);
+            }
+          ).subscribe();
+      }
     }
-    return null;
-  }, [user, loggedInActiveRequest, guestChatRequest]);
 
-  const activeChatRequestRef = useMemo(() => {
-    if (!firestore || !activeRequest) return null;
-    return doc(firestore, 'chatRequests', activeRequest.id);
-  }, [firestore, activeRequest]);
-
-  const { data: liveChat } = useDoc<ChatRequest>(activeChatRequestRef);
+    fetchInitialChat();
+    return () => {
+      if (subscription) {
+        supabase.removeChannel(subscription);
+      }
+    };
+  }, [user]);
 
   const isWaitingForAgent = activeRequest?.status === 'pending';
-  const isAgentActive = liveChat?.status === 'active';
-
-  const displayedMessages = liveChat?.chatHistory || [];
+  const isAgentActive = activeRequest?.status === 'active';
+  const displayedMessages = activeRequest?.chatHistory || [];
   const prevMessagesCount = useRef(displayedMessages?.length ?? 0);
 
   // Load from storage
@@ -213,30 +238,20 @@ export default function HelpPage() {
         if (savedSoundPref !== null) {
             setIsSoundOn(JSON.parse(savedSoundPref));
         }
-
-        let currentChatId: string | null = null;
-        if (!user) {
-            const savedGuestChatId = sessionStorage.getItem(GUEST_CHAT_ID_KEY);
-            if (savedGuestChatId) {
-                setGuestChatId(savedGuestChatId);
-                currentChatId = savedGuestChatId;
-            }
-        }
         
-        if (activeRequest || currentChatId) {
+        if (activeRequest) {
             autoUnlockAudio();
         }
 
     } catch (error) {
         console.error("Failed to load data from storage:", error);
     }
-  }, [user, activeRequest]);
-
+  }, [activeRequest]);
 
    // Countdown Timer Logic
   useEffect(() => {
-    if (isWaitingForAgent && activeRequest?.createdAt && !isAgentActive) {
-        const createdAt = activeRequest.createdAt.toDate();
+    if (isWaitingForAgent && activeRequest?.created_at && !isAgentActive) {
+        const createdAt = new Date(activeRequest.created_at);
         const expiryTime = new Date(createdAt.getTime() + 10 * 60 * 1000);
 
         const interval = setInterval(() => {
@@ -257,14 +272,12 @@ export default function HelpPage() {
     }
   }, [isWaitingForAgent, activeRequest, isAgentActive]);
 
-
   useEffect(() => {
     if (user && userProfile?.numericId) {
       setUid(userProfile.numericId);
     }
   }, [user, userProfile]);
 
-  // Combined useEffect for scrolling and sound
   useEffect(() => {
     if (chatContainerRef.current) {
         chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
@@ -281,7 +294,6 @@ export default function HelpPage() {
         prevMessagesCount.current = displayedMessages.length;
     }
   }, [displayedMessages]);
-
 
   const handleSoundToggle = () => {
     const newSoundState = !isSoundOn;
@@ -319,7 +331,7 @@ export default function HelpPage() {
 
     setEnteredIdentifier(identifier);
     setIsVerifying(true);
-    autoUnlockAudio(); // Unlock audio on first user interaction
+    autoUnlockAudio();
 
     const initialHistory: Message[] = [{
         text: 'User has started a support session. Please wait for an agent to connect.',
@@ -329,20 +341,23 @@ export default function HelpPage() {
     }];
     
     const result = await escalateToHuman({
-        uid: user?.uid,
+        uid: user?.id,
         enteredIdentifier: identifier,
         chatHistory: initialHistory
     });
 
     setIsVerifying(false);
     
-    if (!result.success) {
+    if (!result.success || !result.chatId) {
       toast({
         variant: 'destructive',
         title: 'Failed to Start Chat',
         description: result.error || 'Could not create a support request. Please try again.',
       });
     } else {
+        const { data } = await supabase.from('chatRequests').select('*').eq('id', result.chatId).single();
+        if(data) setActiveRequest(data as ChatRequest);
+        
         if (!user && result.chatId) {
             sessionStorage.setItem(GUEST_CHAT_ID_KEY, result.chatId);
             setGuestChatId(result.chatId);
@@ -351,9 +366,9 @@ export default function HelpPage() {
   };
 
     const handleSendMessage = async () => {
-        if ((!currentMessage.trim() && !attachment) || !isAgentActive) return;
+        if ((!currentMessage.trim() && !attachment) || !isAgentActive || !activeRequest) return;
         
-        playSendSound(); // Play sound on send action
+        playSendSound();
 
         const messagePayload: Message = {
             text: currentMessage.trim(),
@@ -362,33 +377,32 @@ export default function HelpPage() {
             userName: userProfile?.displayName || 'You',
         };
 
-        if (!firestore || !activeRequest) {
-            setIsSending(false);
-            return;
-        }
-        setIsSending(true);
-        const requestRef = doc(firestore, 'chatRequests', activeRequest.id);
         if (attachment) {
             messagePayload.attachment = attachment;
         }
+        
+        const newHistory = [...(activeRequest.chatHistory || []), messagePayload];
+        
+        setIsSending(true);
 
-        try {
-            await updateDoc(requestRef, { chatHistory: arrayUnion(messagePayload) });
+        const { error } = await supabase
+          .from('chatRequests')
+          .update({ chatHistory: newHistory })
+          .eq('id', activeRequest.id);
+
+        if (error) {
+            toast({ variant: 'destructive', title: 'Could not send message', description: error.message });
+        } else {
             setCurrentMessage('');
             setAttachment(null);
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Could not send message', description: error.message });
-        } finally {
-            setIsSending(false);
         }
+        setIsSending(false);
     };
     
     const handleCloseChat = async () => {
-        if (firestore && activeRequest) {
-            const requestRef = doc(firestore, 'chatRequests', activeRequest.id);
-            try {
-                await updateDoc(requestRef, { status: 'closed' });
-            } catch (error: any) {
+        if (activeRequest) {
+            const { error } = await supabase.from('chatRequests').update({ status: 'closed' }).eq('id', activeRequest.id);
+            if (error) {
                 toast({ variant: 'destructive', title: 'Could not close server chat', description: error.message });
             }
         }
@@ -397,6 +411,7 @@ export default function HelpPage() {
             sessionStorage.removeItem(GUEST_CHAT_ID_KEY);
             setGuestChatId(null);
         }
+        setActiveRequest(null);
         toast({ title: 'Chat Closed' });
     };
 
@@ -424,7 +439,7 @@ export default function HelpPage() {
     }
   };
 
-  const loading = authLoading || (user && chatRequestsLoading) || (!user && guestChatId ? guestChatLoading : false);
+  const loading = authLoading || chatLoading;
 
   if (loading) {
     return (
