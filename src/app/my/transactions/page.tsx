@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -10,8 +10,8 @@ import { Copy, ChevronLeft, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, query, where, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { Loader } from '@/components/ui/loader';
 import { Button } from '@/components/ui/button';
 
@@ -22,7 +22,7 @@ type Order = {
   amount: number;
   status: 'pending_payment' | 'processing' | 'completed' | 'cancelled' | 'failed';
   utr?: string;
-  createdAt: Timestamp;
+  createdAt: string;
   cancellationReason?: string;
 };
 
@@ -32,7 +32,7 @@ type SellOrder = {
   amount: number;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   utr?: string;
-  createdAt: Timestamp;
+  createdAt: string;
   failureReason?: string;
 };
 
@@ -42,7 +42,7 @@ type RewardTransaction = {
     amount: number;
     description: string;
     type: 'team_bonus' | 'daily_task' | 'new_user_reward';
-    createdAt: Timestamp;
+    createdAt: string;
 }
 
 type CombinedTransaction = (Order | SellOrder | RewardTransaction) & { transactionType: 'buy' | 'sell' | 'invite' };
@@ -90,7 +90,7 @@ const BuyTransactionCard = React.memo(({ transaction }: { transaction: Order }) 
           )}
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Time</span>
-            <span className="font-mono text-muted-foreground text-xs">{transaction.createdAt.toDate().toLocaleString()}</span>
+            <span className="font-mono text-muted-foreground text-xs">{new Date(transaction.createdAt).toLocaleString()}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Order Number</span>
@@ -144,7 +144,7 @@ const SellTransactionCard = React.memo(({ transaction }: { transaction: SellOrde
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-muted-foreground">Time</span>
-                        <span className="font-mono text-muted-foreground text-xs">{transaction.createdAt.toDate().toLocaleString()}</span>
+                        <span className="font-mono text-muted-foreground text-xs">{new Date(transaction.createdAt).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between items-center">
                         <span className="text-muted-foreground">Order Number</span>
@@ -183,7 +183,7 @@ const InviteTransactionCard = React.memo(({ transaction }: { transaction: Reward
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Time</span>
-            <span className="font-mono text-muted-foreground text-xs">{transaction.createdAt.toDate().toLocaleString()}</span>
+            <span className="font-mono text-muted-foreground text-xs">{new Date(transaction.createdAt).toLocaleString()}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Order Number</span>
@@ -202,54 +202,36 @@ InviteTransactionCard.displayName = 'InviteTransactionCard';
 
 export default function AllTransactionsPage() {
     const { user } = useUser();
-    const firestore = useFirestore();
+    const [allTransactions, setAllTransactions] = useState<CombinedTransaction[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    // Fetch Buy Orders
-    const buyOrdersQuery = useMemo(() => {
-        if (!user || !firestore) return null;
-        return query(
-            collection(firestore, 'users', user.uid, 'orders'),
-            orderBy('createdAt', 'desc'),
-            limit(100)
-        );
-    }, [user, firestore]);
+    useEffect(() => {
+      async function fetchTransactions() {
+        if (!user) {
+          setLoading(false);
+          return;
+        }
 
-    // Fetch Sell Orders
-    const sellOrdersQuery = useMemo(() => {
-        if (!user || !firestore) return null;
-        return query(
-            collection(firestore, 'users', user.uid, 'sellOrders'),
-            orderBy('createdAt', 'desc'),
-            limit(100)
-        );
-    }, [user, firestore]);
+        setLoading(true);
+        const [buyRes, sellRes, inviteRes] = await Promise.all([
+          supabase.from('orders').select('*').eq('userId', user.id).order('created_at', { ascending: false }).limit(100),
+          supabase.from('sell_orders').select('*').eq('userId', user.id).order('created_at', { ascending: false }).limit(100),
+          supabase.from('transactions').select('*').eq('userId', user.id).eq('type', 'team_bonus').limit(100)
+        ]);
 
-    // Fetch Invite Rewards
-    const inviteRewardsQuery = useMemo(() => {
-        if (!user || !firestore) return null;
-        return query(
-            collection(firestore, 'users', user.uid, 'transactions'),
-            where('type', '==', 'team_bonus'),
-            limit(100)
-        );
-    }, [user, firestore]);
-
-    const { data: buyOrders, loading: buyLoading } = useCollection<Order>(buyOrdersQuery);
-    const { data: sellOrders, loading: sellLoading } = useCollection<SellOrder>(sellOrdersQuery);
-    const { data: inviteRewards, loading: inviteLoading } = useCollection<RewardTransaction>(inviteRewardsQuery);
-
-    const allTransactions = useMemo(() => {
-        const buys: CombinedTransaction[] = (buyOrders || []).map(o => ({ ...o, transactionType: 'buy' }));
-        const sells: CombinedTransaction[] = (sellOrders || []).map(o => ({ ...o, transactionType: 'sell' }));
-        const invites: CombinedTransaction[] = (inviteRewards || []).map(o => ({ ...o, transactionType: 'invite' }));
+        const buys: CombinedTransaction[] = (buyRes.data || []).map(o => ({ ...o, transactionType: 'buy' }));
+        const sells: CombinedTransaction[] = (sellRes.data || []).map(o => ({ ...o, transactionType: 'sell' }));
+        const invites: CombinedTransaction[] = (inviteRes.data || []).map(o => ({ ...o, transactionType: 'invite' }));
 
         const combined = [...buys, ...sells, ...invites];
+        combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         
-        return combined.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
-    }, [buyOrders, sellOrders, inviteRewards]);
+        setAllTransactions(combined);
+        setLoading(false);
+      }
+      fetchTransactions();
+    }, [user]);
 
-    const loading = buyLoading || sellLoading || inviteLoading;
-    
     return (
         <div className="text-foreground min-h-screen">
             <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">

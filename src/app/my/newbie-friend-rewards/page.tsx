@@ -8,10 +8,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ChevronLeft, Gift, CircleDollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { useUser, useFirestore, useCollection, useDoc } from '@/firebase';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { doc, runTransaction, collection, query, where, arrayUnion, serverTimestamp, addDoc, getDocs, Timestamp } from 'firebase/firestore';
 import {
   Accordion,
   AccordionContent,
@@ -69,30 +69,47 @@ const FriendItem = ({ friend, status, progress, goal }: { friend: FriendProfile,
 
 export default function NewbieFriendRewardsPage() {
     const { user, loading: userLoading } = useUser();
-    const firestore = useFirestore();
     const { toast } = useToast();
-    const router = useRouter();
 
     const [isClaiming, setIsClaiming] = useState(false);
     const [friendPurchaseStats, setFriendPurchaseStats] = useState<Record<string, number>>({});
     const [loadingStats, setLoadingStats] = useState(true);
     
-    const userProfileRef = useMemo(() => {
-        if (!user || !firestore) return null;
-        return doc(firestore, 'users', user.uid);
-    }, [user, firestore]);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [profileLoading, setProfileLoading] = useState(true);
 
-    const { data: userProfile, loading: profileLoading } = useDoc<UserProfile>(userProfileRef);
-    
-    const invitedUsersQuery = useMemo(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users'), where('inviterUid', '==', user.uid));
-    }, [user, firestore]);
+    const [invitedFriends, setInvitedFriends] = useState<FriendProfile[]>([]);
+    const [friendsLoading, setFriendsLoading] = useState(true);
 
-    const { data: invitedFriends, loading: friendsLoading } = useCollection<FriendProfile>(invitedUsersQuery);
+    useEffect(() => {
+        async function fetchProfile() {
+            if(!user) {
+                setProfileLoading(false);
+                return;
+            }
+            const { data } = await supabase.from('users').select('balance, claimedNewbieFriendRewards').eq('id', user.id).single();
+            setUserProfile(data as UserProfile);
+            setProfileLoading(false);
+        }
+        fetchProfile();
+    }, [user]);
+
+    useEffect(() => {
+        async function fetchInvitedFriends() {
+            if(!user) {
+                setFriendsLoading(false);
+                return;
+            }
+            const { data } = await supabase.from('users').select('id, uid, numericId, claimedUserRewards').eq('inviterUid', user.uid);
+            setInvitedFriends(data || []);
+            setFriendsLoading(false);
+        }
+        fetchInvitedFriends();
+    }, [user]);
+
     
     useEffect(() => {
-        if (!invitedFriends || invitedFriends.length === 0 || !firestore) {
+        if (!invitedFriends || invitedFriends.length === 0) {
             setLoadingStats(false);
             return;
         }
@@ -101,20 +118,23 @@ export default function NewbieFriendRewardsPage() {
             setLoadingStats(true);
             const stats: Record<string, number> = {};
             for (const friend of invitedFriends) {
-                const ordersQuery = query(
-                    collection(firestore, 'users', friend.id, 'orders'),
-                    where('status', '==', 'completed')
-                );
-                const ordersSnapshot = await getDocs(ordersQuery);
-                const totalPurchase = ordersSnapshot.docs.reduce((sum, doc) => sum + doc.data().amount, 0);
-                stats[friend.id] = totalPurchase;
+                const { data: ordersData, error } = await supabase
+                    .from('orders')
+                    .select('amount')
+                    .eq('userId', friend.id)
+                    .eq('status', 'completed');
+
+                if (ordersData) {
+                    const totalPurchase = ordersData.reduce((sum, doc) => sum + doc.amount, 0);
+                    stats[friend.id] = totalPurchase;
+                }
             }
             setFriendPurchaseStats(stats);
             setLoadingStats(false);
         };
 
         fetchStats();
-    }, [invitedFriends, firestore]);
+    }, [invitedFriends]);
     
     const friendStats = useMemo(() => {
         if (!invitedFriends) return { done: [], undone: [], received: [] };
@@ -150,44 +170,22 @@ export default function NewbieFriendRewardsPage() {
     const doneFriendsCount = friendStats.done.length + friendStats.received.length;
 
     const handleReceiveRewards = async () => {
-        if (!user || !firestore || !userProfileRef || friendStats.done.length === 0) return;
+        if (!user || friendStats.done.length === 0) return;
         
         setIsClaiming(true);
-        const claimableFriends = friendStats.done;
-        const totalRewardToClaim = claimableFriends.length * FRIEND_REWARD_AMOUNT;
-        const friendUidsToClaim = claimableFriends.map(f => f.id);
+        const { error } = await supabase.rpc('claim_newbie_friend_rewards', {
+            p_user_id: user.id,
+            p_claimable_friends: friendStats.done.map(f => f.id),
+            p_reward_amount: FRIEND_REWARD_AMOUNT
+        });
 
-        try {
-            await runTransaction(firestore, async (transaction) => {
-                const userDoc = await transaction.get(userProfileRef);
-                if (!userDoc.exists()) throw new Error("User not found");
-
-                const currentData = userDoc.data() as UserProfile;
-                const newBalance = (currentData.balance || 0) + totalRewardToClaim;
-                const newClaimedFriends = arrayUnion(...friendUidsToClaim);
-
-                transaction.update(userProfileRef, {
-                    balance: newBalance,
-                    claimedNewbieFriendRewards: newClaimedFriends,
-                });
-            });
-
-            await addDoc(collection(firestore, 'users', user.uid, 'transactions'), {
-                userId: user.uid,
-                amount: totalRewardToClaim,
-                description: `Newbie friend bonus for ${claimableFriends.length} friends.`,
-                createdAt: serverTimestamp(),
-                type: 'new_user_reward',
-                orderId: `LGPAYNF${Date.now()}`
-            });
-
-            toast({ title: "Rewards Claimed!", description: `₹${totalRewardToClaim} has been added to your balance.` });
-
-        } catch (error: any) {
+        if (error) {
             toast({ variant: 'destructive', title: "Claim Failed", description: error.message });
-        } finally {
-            setIsClaiming(false);
+        } else {
+            const totalRewardToClaim = friendStats.done.length * FRIEND_REWARD_AMOUNT;
+            toast({ title: "Rewards Claimed!", description: `₹${totalRewardToClaim} has been added to your balance.` });
         }
+        setIsClaiming(false);
     };
     
     const loading = userLoading || profileLoading || friendsLoading || loadingStats;

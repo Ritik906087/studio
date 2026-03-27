@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Card,
@@ -17,8 +17,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ChevronLeft, Info, Wallet, Landmark } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { doc, addDoc, collection, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -71,19 +71,27 @@ export default function SellPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useUser();
-  const firestore = useFirestore();
 
   const [amount, setAmount] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<WithdrawalMethod | null>(null);
   const [isAmountValid, setIsAmountValid] = useState(true);
   const [isSelling, setIsSelling] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  
+  useEffect(() => {
+    async function fetchProfile() {
+      if(!user) {
+        setProfileLoading(false);
+        return;
+      }
+      const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
+      setUserProfile(data as UserProfile);
+      setProfileLoading(false);
+    }
+    fetchProfile();
+  }, [user]);
 
-  const userProfileRef = useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
-
-  const { data: userProfile, loading: profileLoading } = useDoc<UserProfile>(userProfileRef);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -117,46 +125,19 @@ export default function SellPage() {
         return;
     }
     
-    if (!user || !firestore || !userProfileRef) return;
+    if (!user) return;
 
     setIsSelling(true);
 
     try {
-        await runTransaction(firestore, async (transaction) => {
-            const userProfileSnap = await transaction.get(userProfileRef);
-            if (!userProfileSnap.exists()) {
-                throw "User profile does not exist!";
-            }
-
-            const profileData = userProfileSnap.data() as UserProfile;
-            const currentBalance = profileData.balance;
-
-            if (currentBalance < sellAmount) {
-                throw "Insufficient balance.";
-            }
-
-            const newBalance = currentBalance - sellAmount;
-            
-            const sellOrdersRef = collection(firestore, 'users', user.uid, 'sellOrders');
-            const newSellOrderRef = doc(sellOrdersRef); // Auto-generate ID
-            
-            const orderId = `LGPAY${Date.now()}`;
-
-            transaction.set(newSellOrderRef, {
-                userId: user.uid,
-                orderId: orderId,
-                amount: sellAmount,
-                remainingAmount: sellAmount, // For P2P matching
-                withdrawalMethod: selectedMethod,
-                status: 'pending',
-                createdAt: serverTimestamp(),
-                userNumericId: profileData.numericId,
-                userPhoneNumber: profileData.phoneNumber
-            });
-
-            transaction.update(userProfileRef, { balance: newBalance });
+        const { error } = await supabase.rpc('create_sell_order', {
+            p_user_id: user.id,
+            p_amount: sellAmount,
+            p_withdrawal_method: selectedMethod,
         });
 
+        if (error) throw error;
+        
         toast({
             title: 'Sell Order Placed!',
             description: `Your request to sell ${sellAmount} LGB is being processed.`,
@@ -165,7 +146,7 @@ export default function SellPage() {
 
     } catch (error: any) {
         console.error('Sell transaction failed:', error);
-        toast({ variant: 'destructive', title: 'Sell Failed', description: error.toString() });
+        toast({ variant: 'destructive', title: 'Sell Failed', description: error.message });
     } finally {
         setIsSelling(false);
     }

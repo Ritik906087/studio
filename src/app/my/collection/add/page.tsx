@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Landmark } from "lucide-react";
 import Link from "next/link";
@@ -17,9 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult, signOut } from "firebase/auth";
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { doc, runTransaction } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { Loader } from "@/components/ui/loader";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -43,13 +42,8 @@ export default function AddCollectionPage() {
   const [isUpiDialogOpen, setIsUpiDialogOpen] = useState(false);
   const [isBankDialogOpen, setIsBankDialogOpen] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
-  const [isOtpSending, setIsOtpSending] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
   const [upiId, setUpiId] = useState("");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [countdown, setCountdown] = useState(0);
 
   // Bank form state
   const [accountHolderName, setAccountHolderName] = useState('');
@@ -58,89 +52,37 @@ export default function AddCollectionPage() {
   const [ifscCode, setIfscCode] = useState('');
 
   const { toast } = useToast();
-  const auth = getAuth();
   const { user } = useUser();
-  const firestore = useFirestore();
+  const [userProfile, setUserProfile] = useState<{phoneNumber: string} | null>(null);
 
-  const userProfileRef = useMemo(() => user ? doc(firestore, 'users', user.uid) : null, [user, firestore]);
-  const { data: userProfile } = useDoc<{ phoneNumber: string }>(userProfileRef);
-
-  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
-  const confirmationResult = useRef<ConfirmationResult | null>(null);
+  useEffect(() => {
+    async function fetchProfile() {
+      if(user) {
+        const {data} = await supabase.from('users').select('phoneNumber').eq('id', user.id).single();
+        setUserProfile(data);
+      }
+    }
+    fetchProfile();
+  }, [user]);
 
   const specialBankUsers = ['7050396570', '7307081891', '9798630209', '9965567336', '9199604613', '9955557336'];
   const showBankOption = userProfile?.phoneNumber && specialBankUsers.includes(userProfile.phoneNumber);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (countdown > 0) {
-      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [countdown]);
   
-  const setupRecaptcha = () => {
-    if (!recaptchaVerifier.current) {
-        recaptchaVerifier.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
-            'size': 'invisible',
-            'callback': (response: any) => {},
-            'expired-callback': () => {}
-        });
-    }
-    return recaptchaVerifier.current;
-  }
 
   const handleUpiLinkClick = (method: PaymentMethod) => {
     setSelectedMethod(method);
     setIsUpiDialogOpen(true);
-    setOtpSent(false);
-    setPhone("");
-    setOtp("");
     setUpiId("");
-    setCountdown(0);
   };
   
   const handleBankLinkClick = () => {
     setIsBankDialogOpen(true);
-    setOtpSent(false);
-    setPhone("");
-    setOtp("");
     setAccountHolderName('');
     setBankName('');
     setAccountNumber('');
     setIfscCode('');
-    setCountdown(0);
   }
 
-  const handleSendOtp = async () => {
-    if (!phone || phone.length < 10) {
-      toast({ variant: "destructive", title: "Invalid Phone Number" });
-      return;
-    }
-    setIsOtpSending(true);
-    try {
-        const verifier = setupRecaptcha();
-        const fullPhoneNumber = `+91${phone}`;
-        const result = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
-        confirmationResult.current = result;
-        setOtpSent(true);
-        setCountdown(59);
-        toast({
-            title: "OTP Sent!",
-            description: `OTP sent to ${fullPhoneNumber}.`,
-        });
-    } catch (error) {
-        console.error("OTP send error:", error);
-        toast({
-            variant: "destructive",
-            title: "Failed to send OTP",
-            description: "Please try again later.",
-        });
-    } finally {
-        setIsOtpSending(false);
-    }
-  };
-  
   const validateUpi = (upi: string, methodName: string): boolean => {
     const upiLower = upi.toLowerCase();
     const upiRegexMap: { [key: string]: RegExp } = {
@@ -162,61 +104,48 @@ export default function AddCollectionPage() {
         toast({ variant: "destructive", title: "You are not logged in.", description: "Please log in and try again." });
         return;
     }
-    const originalUserUid = user.uid;
-
-    if (!otp) {
-        toast({ variant: "destructive", title: "Missing OTP", description: "Please enter OTP." });
-        return;
-    }
 
     setIsLinking(true);
     try {
-      if (!confirmationResult.current) {
-        throw new Error("OTP has not been sent yet. Please send OTP first.");
-      }
+        const { data: userProfile, error: fetchError } = await supabase
+            .from('users')
+            .select('paymentMethods')
+            .eq('id', user.id)
+            .single();
+
+        if(fetchError) throw fetchError;
+
+        const currentMethods = userProfile?.paymentMethods || [];
+        const isDuplicate = currentMethods.some((pm: any) => (pm.upiId && pm.upiId === methodData.upiId) || (pm.accountNumber && pm.accountNumber === methodData.accountNumber));
+        if (isDuplicate) {
+            throw new Error(methodData.type === 'upi' ? "This UPI ID is already linked." : "This Bank Account is already linked.");
+        }
+        
+        const updatedMethods = [...currentMethods, methodData];
+
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ paymentMethods: updatedMethods })
+            .eq('id', user.id);
+        
+        if (updateError) throw updateError;
       
-      await confirmationResult.current.confirm(otp);
-      
-      if (firestore) {
-          const userProfileRefForUpdate = doc(firestore, 'users', originalUserUid);
-
-          await runTransaction(firestore, async (transaction) => {
-              const userDoc = await transaction.get(userProfileRefForUpdate);
-              if (!userDoc.exists()) {
-                  throw new Error("Your user profile could not be found.");
-              }
-
-              const currentMethods = userDoc.data().paymentMethods || [];
-              const isDuplicate = currentMethods.some((pm: any) => (pm.upiId && pm.upiId === methodData.upiId) || (pm.accountNumber && pm.accountNumber === methodData.accountNumber));
-              if (isDuplicate) {
-                  throw new Error(methodData.type === 'upi' ? "This UPI ID is already linked." : "This Bank Account is already linked.");
-              }
-
-              const updatedMethods = [...currentMethods, methodData];
-              
-              transaction.set(userProfileRefForUpdate, {
-                  paymentMethods: updatedMethods
-              }, { merge: true });
-          });
-      }
-
       toast({
         title: "Success!",
-        description: `${methodData.name} has been linked successfully. Please log in again.`,
+        description: `${methodData.name} has been linked successfully.`,
       });
-      
-      await signOut(auth);
-      document.cookie = 'firebase-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-      window.location.href = '/login';
+      setIsUpiDialogOpen(false);
+      setIsBankDialogOpen(false);
 
     } catch (error: any) {
        console.error("Linking error:", error);
        toast({
         variant: "destructive",
         title: "Failed to link method",
-        description: error.message || "The verification code is incorrect or another error occurred.",
+        description: error.message || "An unexpected error occurred.",
       });
-       setIsLinking(false);
+    } finally {
+        setIsLinking(false);
     }
   };
 
@@ -250,7 +179,6 @@ export default function AddCollectionPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-secondary">
-      <div id="recaptcha-container"></div>
       <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
           <Link href="/my/collection">
@@ -334,25 +262,12 @@ export default function AddCollectionPage() {
             </DialogHeader>
             <div className="grid gap-6 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="phone">Enter your {selectedMethod.name} registered number</Label>
-                <Input id="phone" type="tel" placeholder="Phone Number" className="h-12 text-base" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={10} />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="otp">OTP</Label>
-                <div className="relative flex items-center">
-                  <Input id="otp" placeholder="Verification Code" className="h-12 pr-28 text-base" value={otp} onChange={(e) => setOtp(e.target.value)} disabled={!otpSent} />
-                   <Button type="button" variant="secondary" className={cn("absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30", (isOtpSending || countdown > 0) && "px-2")} onClick={handleSendOtp} disabled={isOtpSending || countdown > 0}>
-                    {isOtpSending ? <Loader size="xs" /> : (countdown > 0 ? `${countdown}s` : (otpSent ? "Resend" : "Send"))}
-                  </Button>
-                </div>
-              </div>
-              <div className="grid gap-2">
                  <Label htmlFor="upiId">Enter your {selectedMethod.name} UPI</Label>
                 <Input id="upiId" placeholder="yourname@upi" className="h-12 text-base" value={upiId} onChange={(e) => setUpiId(e.target.value)} type="text" />
               </div>
             </div>
             <DialogFooter className="sm:justify-center">
-              <Button type="submit" onClick={handleUpiFormSubmit} className="w-full h-12 rounded-full btn-gradient font-bold text-base" disabled={isLinking || !otpSent || !otp || !upiId}>
+              <Button type="submit" onClick={handleUpiFormSubmit} className="w-full h-12 rounded-full btn-gradient font-bold text-base" disabled={isLinking || !upiId}>
                 {isLinking && <Loader size="xs" className="mr-2" />}
                 Link
               </Button>
@@ -385,23 +300,10 @@ export default function AddCollectionPage() {
                     <Label>IFSC Code</Label>
                     <Input placeholder="IFSC Code" className="h-12" value={ifscCode} onChange={e => setIfscCode(e.target.value)} />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="bank-phone">Enter Your Registered Phone Number</Label>
-                    <Input id="bank-phone" type="tel" placeholder="Phone Number" className="h-12" value={phone} onChange={e => setPhone(e.target.value)} maxLength={10} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="bank-otp">OTP</Label>
-                    <div className="relative flex items-center">
-                      <Input id="bank-otp" placeholder="Verification Code" className="h-12 pr-28" value={otp} onChange={e => setOtp(e.target.value)} disabled={!otpSent} />
-                      <Button type="button" variant="secondary" className={cn("absolute right-1.5 h-auto rounded-md bg-accent/20 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/30", (isOtpSending || countdown > 0) && "px-2")} onClick={handleSendOtp} disabled={isOtpSending || countdown > 0}>
-                        {isOtpSending ? <Loader size="xs" /> : (countdown > 0 ? `${countdown}s` : (otpSent ? "Resend" : "Send"))}
-                      </Button>
-                    </div>
-                  </div>
                 </div>
             </ScrollArea>
             <DialogFooter className="sm:justify-center p-6 pt-4 border-t">
-              <Button type="submit" onClick={handleBankFormSubmit} className="w-full h-12 rounded-full btn-gradient font-bold text-base" disabled={isLinking || !otpSent || !otp || !accountNumber}>
+              <Button type="submit" onClick={handleBankFormSubmit} className="w-full h-12 rounded-full btn-gradient font-bold text-base" disabled={isLinking || !accountNumber}>
                 {isLinking && <Loader size="xs" className="mr-2" />}
                 Link Bank Account
               </Button>

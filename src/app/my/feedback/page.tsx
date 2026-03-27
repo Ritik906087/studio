@@ -1,13 +1,13 @@
 
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { addDoc, collection, serverTimestamp, doc } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader } from '@/components/ui/loader';
@@ -21,34 +21,39 @@ export default function FeedbackPage() {
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
 
-  const userProfileRef = useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
-  const { data: userProfile } = useDoc<UserProfile>(userProfileRef);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    async function fetchProfile() {
+      if (user) {
+        const { data } = await supabase.from('users').select('numericId').eq('id', user.id).single();
+        if (data) setUserProfile(data);
+      }
+    }
+    fetchProfile();
+  }, [user]);
 
   const handleSubmit = async () => {
     if (!message.trim()) {
       toast({ variant: 'destructive', title: 'Please enter your feedback.' });
       return;
     }
-    if (!user || !firestore || !userProfile) {
+    if (!user || !userProfile) {
       toast({ variant: 'destructive', title: 'You must be logged in to submit feedback.' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(firestore, 'feedback'), {
-        userId: user.uid,
+      const { error } = await supabase.from('feedback').insert({
+        userId: user.id,
         userNumericId: userProfile.numericId,
         message: message,
-        createdAt: serverTimestamp(),
       });
+      if (error) throw error;
       toast({ title: 'Feedback Submitted', description: 'Thank you for your suggestion!' });
       setMessage('');
       router.push('/my');

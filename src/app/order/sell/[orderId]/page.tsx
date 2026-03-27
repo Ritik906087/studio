@@ -1,11 +1,10 @@
 
-
 'use client';
 
-import React, { useMemo, Suspense, useState, useCallback } from 'react';
+import React, { useMemo, Suspense, useState, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useDoc, useUser, useFirestore } from '@/firebase';
-import { doc, Timestamp, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, Copy } from 'lucide-react';
@@ -27,14 +26,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-
 type SellOrder = {
     id: string;
     orderId: string;
     amount: number;
     remainingAmount: number;
     status: 'pending' | 'partially_filled' | 'completed' | 'failed' | 'processing';
-    createdAt: Timestamp;
+    created_at: string;
     matchedBuyOrders?: MatchedBuyOrder[];
 };
 
@@ -43,7 +41,7 @@ type MatchedBuyOrder = {
     buyerId: string;
     amount: number;
     status: 'pending_payment' | 'pending_confirmation' | 'completed' | 'failed' | 'cancelled';
-    createdAt: Timestamp;
+    created_at: string;
     buyerOrderId?: string;
     utr?: string;
 };
@@ -96,7 +94,7 @@ const MatchedOrderCard = ({ order }: { order: MatchedBuyOrder }) => {
           )}
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Time</span>
-            <span className="font-mono text-muted-foreground text-xs">{order.createdAt.toDate().toLocaleString()}</span>
+            <span className="font-mono text-muted-foreground text-xs">{new Date(order.created_at).toLocaleString()}</span>
           </div>
           {order.buyerOrderId && (
             <div className="flex justify-between items-start gap-4">
@@ -118,30 +116,50 @@ function SellOrderStatusContent() {
     const router = useRouter();
     const orderId = params.orderId as string;
     const { user } = useUser();
-    const firestore = useFirestore();
     const { toast } = useToast();
 
     const [isCancelling, setIsCancelling] = useState(false);
+    const [sellOrder, setSellOrder] = useState<SellOrder | null>(null);
+    const [sellOrderLoading, setSellOrderLoading] = useState(true);
 
-    const sellOrderRef = useMemo(() => {
-        if (!firestore || !user || !orderId) return null;
-        return doc(firestore, 'users', user.uid, 'sellOrders', orderId);
-    }, [firestore, user, orderId]);
-    
-    const userProfileRef = useMemo(() => {
-        if (!user || !firestore) return null;
-        return doc(firestore, 'users', user.uid);
-    }, [user, firestore]);
+    useEffect(() => {
+        if(!user || !orderId) {
+            setSellOrderLoading(false);
+            return;
+        };
 
-    const { data: sellOrder, loading: sellOrderLoading } = useDoc<SellOrder>(sellOrderRef);
+        const fetchOrder = async () => {
+            setSellOrderLoading(true);
+            const { data, error } = await supabase.from('sell_orders').select('*').eq('id', orderId).eq('userId', user.id).single();
+            if (error) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Sell order not found.' });
+            } else {
+                setSellOrder(data as SellOrder);
+            }
+            setSellOrderLoading(false);
+        };
+        
+        fetchOrder();
+
+        const channel = supabase.channel(`public:sell_orders:id=eq.${orderId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'sell_orders', filter: `id=eq.${orderId}`}, payload => {
+                setSellOrder(payload.new as SellOrder);
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        }
+
+    }, [user, orderId, toast]);
 
     const matchedOrders = useMemo(() => {
         if (!sellOrder || !sellOrder.matchedBuyOrders) return [];
-        return [...sellOrder.matchedBuyOrders].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+        return [...sellOrder.matchedBuyOrders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }, [sellOrder]);
     
     const handleCancelRemaining = useCallback(async () => {
-        if (!sellOrder || !sellOrderRef || !userProfileRef || sellOrder.remainingAmount <= 0) {
+        if (!sellOrder || !user || sellOrder.remainingAmount <= 0) {
             toast({ variant: 'destructive', title: 'Cannot cancel', description: 'No remaining amount to cancel.' });
             return;
         }
@@ -149,48 +167,12 @@ function SellOrderStatusContent() {
         setIsCancelling(true);
     
         try {
-            await runTransaction(firestore, async (transaction) => {
-                const userDoc = await transaction.get(userProfileRef);
-                const sellOrderDoc = await transaction.get(sellOrderRef);
-    
-                if (!userDoc.exists() || !sellOrderDoc.exists()) {
-                    throw new Error("Data not found.");
-                }
-    
-                const userData = userDoc.data();
-                const orderData = sellOrderDoc.data();
-                
-                if (orderData.remainingAmount <= 0) {
-                     throw new Error("No remaining amount to cancel.");
-                }
-                
-                const amountToRefund = orderData.remainingAmount;
-                const newBalance = (userData.balance || 0) + amountToRefund;
-    
-                transaction.update(userProfileRef, { balance: newBalance });
-    
-                // Check if any part of the order was successfully filled
-                const hasCompletedMatches = (orderData.matchedBuyOrders || []).some(
-                    (bo: MatchedBuyOrder) => bo.status === 'completed'
-                );
+           const { error } = await supabase.rpc('cancel_sell_order_remains', {
+               p_order_id: sellOrder.id,
+               p_user_id: user.id
+           });
 
-                // If no part was ever completed, the whole order is 'failed'.
-                // Otherwise, it's 'completed' because the active part is now done.
-                const newStatus = hasCompletedMatches ? 'completed' : 'failed';
-                
-                const updatePayload: any = {
-                    status: newStatus,
-                    remainingAmount: 0,
-                };
-
-                if (newStatus === 'completed') {
-                    updatePayload.completedAt = serverTimestamp();
-                } else { // newStatus is 'failed'
-                    updatePayload.failureReason = 'Cancelled by user';
-                }
-
-                transaction.update(sellOrderRef, updatePayload);
-            });
+           if(error) throw error;
     
             toast({ title: 'Order Updated', description: 'The remaining amount has been cancelled and refunded.' });
         } catch (error: any) {
@@ -199,7 +181,7 @@ function SellOrderStatusContent() {
         } finally {
             setIsCancelling(false);
         }
-    }, [sellOrder, sellOrderRef, userProfileRef, firestore, toast]);
+    }, [sellOrder, user, toast]);
 
     const loading = sellOrderLoading;
     
@@ -292,8 +274,8 @@ function SellOrderStatusContent() {
                     <CardContent>
                         {matchedOrders && matchedOrders.length > 0 ? (
                             <div className="space-y-3">
-                                {matchedOrders.map(buyOrder => (
-                                    <MatchedOrderCard key={buyOrder.buyOrderId} order={buyOrder} />
+                                {matchedOrders.map((buyOrder, idx) => (
+                                    <MatchedOrderCard key={buyOrder.buyOrderId + idx} order={buyOrder} />
                                 ))}
                             </div>
                         ) : (

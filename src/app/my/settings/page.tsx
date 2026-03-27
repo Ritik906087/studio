@@ -1,13 +1,12 @@
 
-
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import Link from 'next/link';
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -18,20 +17,28 @@ import { Loader } from '@/components/ui/loader';
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
 export default function SettingsPage() {
-  const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
+  const { user } = useUser();
   const { toast } = useToast();
 
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const userProfileRef = useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
+  const [userProfile, setUserProfile] = useState<{ displayName: string; photoURL?: string; numericId: string } | null>(null);
+  
+  useEffect(() => {
+    async function fetchProfile() {
+      if (user) {
+        const { data } = await supabase.from('users').select('displayName, photoURL, numericId').eq('id', user.id).single();
+        if (data) {
+          setUserProfile(data);
+          setNewName(data.displayName);
+        }
+      }
+    }
+    fetchProfile();
+  }, [user]);
 
-  const { data: userProfile, loading: profileLoading } = useDoc<{ displayName: string; photoURL?: string; numericId: string }>(userProfileRef);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -40,11 +47,13 @@ export default function SettingsPage() {
   };
 
   const handleNameChange = async () => {
-    if (!userProfileRef || !newName.trim()) return;
+    if (!user || !newName.trim()) return;
     setIsSaving(true);
     try {
-      await updateDoc(userProfileRef, { displayName: newName });
+      const { error } = await supabase.from('users').update({ displayName: newName }).eq('id', user.id);
+      if (error) throw error;
       toast({ title: 'Success', description: 'Your name has been updated.' });
+      setUserProfile(prev => prev ? { ...prev, displayName: newName } : null);
       setIsNameDialogOpen(false);
     } catch (error) {
       console.error("Error updating name: ", error);
@@ -134,6 +143,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-    
-
-    

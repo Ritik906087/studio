@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, Plus, Wallet } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { Loader } from "@/components/ui/loader";
 import { useLanguage } from "@/context/language-context";
 
@@ -27,15 +27,25 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
 
 export default function CollectionPage() {
   const { user } = useUser();
-  const firestore = useFirestore();
   const { translations } = useLanguage();
-
-  const userProfileRef = useMemo(() => {
-    if (!user || !firestore) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
-
-  const { data: userProfile, loading: profileLoading } = useDoc<{ paymentMethods?: LinkedPaymentMethod[] }>(userProfileRef);
+  const [userProfile, setUserProfile] = useState<{paymentMethods?: LinkedPaymentMethod[]} | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  
+  useEffect(() => {
+    async function fetchProfile() {
+      if(!user) {
+        setProfileLoading(false);
+        return;
+      }
+      setProfileLoading(true);
+      const { data, error } = await supabase.from('users').select('paymentMethods').eq('id', user.id).single();
+      if(data) {
+        setUserProfile(data);
+      }
+      setProfileLoading(false);
+    }
+    fetchProfile();
+  }, [user]);
 
   const linkedMethods = userProfile?.paymentMethods || [];
 

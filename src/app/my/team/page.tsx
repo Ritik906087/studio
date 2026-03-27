@@ -9,8 +9,8 @@ import { ChevronLeft, Users as UsersIcon, Wallet, UserPlus } from 'lucide-react'
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, query, where, DocumentData, Query } from 'firebase/firestore';
+import { useUser } from '@/hooks/use-user';
+import { supabase } from '@/lib/supabase';
 import { Loader } from '@/components/ui/loader';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -22,33 +22,29 @@ type UserProfile = {
 };
 
 const AgentItem = ({ agent }: { agent: UserProfile }) => {
-    const firestore = useFirestore();
-    
-    // Query for income from rewards
-    const incomeQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(
-            collection(firestore, 'users', agent.id, 'transactions')
-        );
-    }, [firestore, agent.id]);
-    const { data: transactions, loading: incomeLoading } = useCollection(incomeQuery);
-    const totalIncome = useMemo(() => {
-        if (!transactions) return 0;
-        return transactions.reduce((acc, tx) => acc + (tx.amount || 0), 0);
-    }, [transactions]);
+    const [totalIncome, setTotalIncome] = useState(0);
+    const [totalOrders, setTotalOrders] = useState(0);
+    const [loading, setLoading] = useState(true);
 
-    // Query for order count
-    const ordersQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(
-            collection(firestore, 'users', agent.id, 'orders'),
-            where('status', '==', 'completed')
-        );
-    }, [firestore, agent.id]);
-    const { data: orders, loading: ordersLoading } = useCollection(ordersQuery);
-    const totalOrders = orders.length;
-    
-    const loading = incomeLoading || ordersLoading;
+    useEffect(() => {
+        async function fetchData() {
+            setLoading(true);
+            const incomePromise = supabase.from('transactions').select('amount').eq('userId', agent.id);
+            const ordersPromise = supabase.from('orders').select('id', { count: 'exact' }).eq('userId', agent.id).eq('status', 'completed');
+            
+            const [incomeRes, ordersRes] = await Promise.all([incomePromise, ordersPromise]);
+            
+            if (incomeRes.data) {
+                setTotalIncome(incomeRes.data.reduce((acc, tx) => acc + (tx.amount || 0), 0));
+            }
+
+            if (ordersRes.count !== null) {
+                setTotalOrders(ordersRes.count);
+            }
+            setLoading(false);
+        }
+        fetchData();
+    }, [agent.id]);
 
     return (
         <div className="flex items-center gap-4 p-4 border-b last:border-b-0">
@@ -95,41 +91,39 @@ const StatCard = ({ title, value, icon: Icon, colorClass }: { title: string, val
 
 export default function TeamPage() {
     const { user } = useUser();
-    const firestore = useFirestore();
-
-    const l1Query = useMemo(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users'), where('inviterUid', '==', user.uid));
-    }, [user, firestore]);
-
-    const { data: l1Agents, loading: l1Loading } = useCollection<UserProfile>(l1Query);
-
-    const l1AgentUids = useMemo(() => l1Agents.map(agent => agent.id), [l1Agents]);
-
-    const [l2Query, setL2Query] = useState<Query<DocumentData> | null>(null);
+    const [l1Agents, setL1Agents] = useState<UserProfile[]>([]);
+    const [l2Agents, setL2Agents] = useState<UserProfile[]>([]);
+    const [selfIncome, setSelfIncome] = useState(0);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (firestore && l1AgentUids.length > 0) {
-            // Firestore 'in' queries are limited to 30 items.
-            setL2Query(query(collection(firestore, 'users'), where('inviterUid', 'in', l1AgentUids.slice(0, 30))));
-        } else {
-            setL2Query(null);
-        }
-    }, [firestore, l1AgentUids]);
+        async function fetchData() {
+            if(!user) {
+                setLoading(false);
+                return;
+            };
 
-    const { data: l2Agents, loading: l2Loading } = useCollection<UserProfile>(l2Query);
-    
-    const loading = l1Loading || (l1AgentUids.length > 0 && l2Loading);
-    
-    const selfIncomeQuery = useMemo(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'transactions'), where('type', '==', 'team_bonus'));
-    }, [user, firestore]);
-    const { data: selfTransactions, loading: selfIncomeLoading } = useCollection(selfIncomeQuery);
-    const selfIncome = useMemo(() => {
-        if (!selfTransactions) return 0;
-        return selfTransactions.reduce((acc, tx) => acc + (tx.amount || 0), 0);
-    }, [selfTransactions]);
+            setLoading(true);
+
+            const { data: l1Data } = await supabase.from('users').select('id, uid, numericId, photoURL').eq('inviterUid', user.uid);
+            setL1Agents(l1Data || []);
+            
+            if (l1Data && l1Data.length > 0) {
+                const l1AgentUids = l1Data.map(agent => agent.id);
+                // Supabase 'in' queries can handle up to ~1000 items, but chunking for very large lists is a good practice.
+                const { data: l2Data } = await supabase.from('users').select('id, uid, numericId, photoURL').in('inviterUid', l1AgentUids);
+                setL2Agents(l2Data || []);
+            }
+
+            const { data: incomeData } = await supabase.from('transactions').select('amount').eq('userId', user.id).eq('type', 'team_bonus');
+            if(incomeData) {
+                setSelfIncome(incomeData.reduce((acc, tx) => acc + (tx.amount || 0), 0));
+            }
+            
+            setLoading(false);
+        }
+        fetchData();
+    }, [user]);
 
 
   return (
@@ -147,9 +141,9 @@ export default function TeamPage() {
       <main className="flex-grow p-4 space-y-4">
         <Card className="bg-white">
             <CardContent className="grid grid-cols-2 gap-y-6 p-4">
-                <StatCard title="Income" value={selfIncomeLoading ? '...' : `₹${selfIncome.toFixed(2)}`} icon={Wallet} colorClass="bg-primary" />
+                <StatCard title="Income" value={loading ? '...' : `₹${selfIncome.toFixed(2)}`} icon={Wallet} colorClass="bg-primary" />
                 <StatCard title="Today's income" value="₹0" icon={Wallet} colorClass="bg-accent" />
-                <StatCard title="Team size" value={loading ? '...' : (l1Agents.length + (l2Agents?.length || 0))} icon={UsersIcon} colorClass="bg-green-500" />
+                <StatCard title="Team size" value={loading ? '...' : (l1Agents.length + l2Agents.length)} icon={UsersIcon} colorClass="bg-green-500" />
                 <StatCard title="New members today" value="0" icon={UserPlus} colorClass="bg-orange-500" />
             </CardContent>
         </Card>
@@ -160,7 +154,7 @@ export default function TeamPage() {
             <TabsTrigger value="lv2" className="flex-1 text-base data-[state=active]:font-bold data-[state=active]:shadow-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md bg-transparent text-muted-foreground p-2.5">Team L2</TabsTrigger>
           </TabsList>
           <TabsContent value="lv1" className="bg-white mt-4 rounded-lg border">
-            {l1Loading ? (
+            {loading ? (
                 <div className="flex justify-center p-8"><Loader size="sm" /></div>
             ) : l1Agents.length > 0 ? (
                 <div>
@@ -171,7 +165,7 @@ export default function TeamPage() {
             )}
           </TabsContent>
           <TabsContent value="lv2" className="bg-white mt-4 rounded-lg border">
-             {l2Loading && l1AgentUids.length > 0 ? (
+             {loading ? (
                 <div className="flex justify-center p-8"><Loader size="sm" /></div>
              ) : l2Agents && l2Agents.length > 0 ? (
                 <div>
