@@ -61,10 +61,37 @@ export function LoginForm() {
         return;
     }
     setIsLoading(true);
-    const derivedEmail = `91${values.phone}@lgpay.app`;
 
-    try {
-      await signInWithEmailAndPassword(auth, derivedEmail, values.password);
+    // Try multiple email formats to support legacy users
+    const emailFormats = [
+      `91${values.phone}@lgpay.app`, // New format
+      `${values.phone}@lgpay.app`    // Legacy format
+    ];
+
+    let success = false;
+
+    for (const email of emailFormats) {
+      if (success) break;
+      try {
+        await signInWithEmailAndPassword(auth, email, values.password);
+        success = true;
+      } catch (error: any) {
+        // If it's the last format and it still fails, we throw to the outer catch
+        if (email === emailFormats[emailFormats.length - 1]) {
+          console.error("Final login attempt failed:", error);
+          let msg = "Incorrect phone number or password.";
+          if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+            msg = "Incorrect phone number or password.";
+          } else if (error.code === 'auth/too-many-requests') {
+            msg = "Too many failed attempts. Please try again later.";
+          }
+          toast({ variant: "destructive", title: "Login Failed", description: msg });
+          form.resetField("password");
+        }
+      }
+    }
+
+    if (success) {
       toast({ title: "Login Successful", description: "Welcome back!" });
       
       // Redirect based on user type
@@ -73,20 +100,9 @@ export function LoginForm() {
       } else {
         router.push('/home');
       }
-      
-    } catch (error: any) {
-      console.error("Login failed:", error);
-      let msg = "Incorrect phone number or password.";
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        msg = "Incorrect phone number or password.";
-      } else if (error.code === 'auth/too-many-requests') {
-        msg = "Too many failed attempts. Please try again later.";
-      }
-      toast({ variant: "destructive", title: "Login Failed", description: msg });
-      form.resetField("password");
-    } finally {
-      setIsLoading(false);
     }
+    
+    setIsLoading(false);
   }
 
   return (
