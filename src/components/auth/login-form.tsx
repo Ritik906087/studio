@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,15 +13,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole } from "lucide-react";
 import { useState } from "react";
 import Link from 'next/link';
-import Image from "image";
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import Image from "next/image";
 
 const ADMIN_PHONE = '9060873927';
 
@@ -56,7 +55,6 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // Prevent admin from logging in through regular page to force use of /admin/key
     if (values.phone === ADMIN_PHONE) {
       toast({ 
         variant: "destructive", 
@@ -110,17 +108,23 @@ export function LoginForm() {
           name="phone"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{translations.phoneNumber}</FormLabel>
-              <div className="relative flex items-center">
-                 <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-muted-foreground">
-                  <img src="https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg" width={20} height={14} alt="India Flag" />
-                  <span>+91</span>
+              <FormLabel className="text-slate-600 font-bold text-xs uppercase tracking-wider">{translations.phoneNumber}</FormLabel>
+              <div className="relative flex items-center group">
+                 <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-slate-400 group-focus-within:text-primary transition-colors border-r pr-2">
+                  <Smartphone className="h-4 w-4" />
+                  <span className="font-bold">+91</span>
                 </div>
                 <FormControl>
-                  <Input type="tel" placeholder={translations.enterPhoneNumber} className="pl-[88px] text-base" maxLength={10} {...field} />
+                  <Input 
+                    type="tel" 
+                    placeholder={translations.enterPhoneNumber} 
+                    className="pl-[84px] h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary transition-all rounded-xl" 
+                    maxLength={10} 
+                    {...field} 
+                  />
                 </FormControl>
               </div>
-              <FormMessage />
+              <FormMessage className="text-[10px]" />
             </FormItem>
           )}
         />
@@ -130,25 +134,33 @@ export function LoginForm() {
           render={({ field }) => (
             <FormItem>
               <div className="flex items-center justify-between">
-                <FormLabel>{translations.password}</FormLabel>
-                <Link href="/forgot-password" className="text-sm font-semibold text-accent hover:underline">
+                <FormLabel className="text-slate-600 font-bold text-xs uppercase tracking-wider">{translations.password}</FormLabel>
+                <Link href="/forgot-password" className="text-xs font-bold text-accent hover:text-primary transition-colors">
                   {translations.forgotPassword}
                 </Link>
               </div>
-              <div className="relative">
+              <div className="relative group">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                  <LockKeyhole className="h-4 w-4" />
+                </div>
                 <FormControl>
-                  <Input type={showPassword ? "text" : "password"} placeholder={translations.enterPassword} className="pl-4 pr-10 text-base" {...field} />
+                  <Input 
+                    type={showPassword ? "text" : "password"} 
+                    placeholder={translations.enterPassword} 
+                    className="pl-10 pr-10 h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary transition-all rounded-xl" 
+                    {...field} 
+                  />
                 </FormControl>
-                 <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1/2 h-auto -translate-y-1/2 p-1 text-accent/80 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>
+                 <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 text-slate-400 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              <FormMessage />
+              <FormMessage className="text-[10px]" />
             </FormItem>
           )}
         />
         
-        <Button type="submit" className="w-full font-bold text-lg btn-gradient rounded-full h-12" disabled={isLoading}>
+        <Button type="submit" className="w-full font-black text-base btn-gradient rounded-xl h-14 mt-4" disabled={isLoading}>
           {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
           {isLoading ? translations.loggingIn : translations.login}
         </Button>

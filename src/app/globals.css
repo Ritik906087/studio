@@ -23,7 +23,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221 83% 53%;
-    --radius: 0.75rem;
+    --radius: 1rem;
   }
 
   .dark {
@@ -60,11 +60,14 @@
   }
   
   .auth-layout {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0369a1 100%);
+    background: radial-gradient(at 0% 0%, hsla(221,83%,53%,1) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, hsla(199,89%,48%,1) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, hsla(221,83%,53%,1) 0, transparent 50%),
+                #0f172a;
   }
 
   .btn-gradient {
-    @apply bg-gradient-to-r from-primary to-accent text-white shadow-lg hover:opacity-90 transition-opacity;
+    @apply bg-gradient-to-r from-primary to-accent text-white shadow-lg hover:opacity-90 transition-all active:scale-95;
   }
 
   .text-gradient {

@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ReactNode } from 'react';
@@ -28,24 +27,23 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-      <div className="md:bg-gray-200">
-        <div className={cn("relative mx-auto flex min-h-screen w-full flex-col items-center justify-start bg-secondary md:max-w-md md:shadow-lg", !isHelpPage && "auth-layout p-4 pt-24 pb-12")}>
-          {!isHelpPage && (
-            <header className="absolute top-0 flex w-full max-w-md items-center justify-between p-6">
-              <Image
-                src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/InShot_20260110_205628399.png?alt=media&token=5d466aa9-095b-495f-92e8-95f3b59b4367"
-                width={60}
-                height={60}
-                alt="Decorative corner image"
-                className="opacity-80"
-              />
-              <LanguageSwitcher />
-            </header>
-          )}
-          <main className="flex w-full max-w-md flex-col items-center">
-            {!isHelpPage && <Logo className="mb-6 text-2xl font-bold" />}
+      <div className="md:bg-slate-100 flex min-h-screen items-center justify-center">
+        <div className={cn(
+          "relative mx-auto flex min-h-screen w-full flex-col items-center justify-start md:min-h-[850px] md:max-w-md md:rounded-[2.5rem] md:shadow-2xl md:overflow-hidden",
+          "auth-layout transition-all duration-500"
+        )}>
+          <header className="z-20 flex w-full items-center justify-between p-6 bg-white/5 backdrop-blur-md border-b border-white/10 sticky top-0">
+            <Logo className="text-xl" />
+            <LanguageSwitcher />
+          </header>
+          
+          <main className="flex w-full flex-1 flex-col items-center px-6 pt-10 pb-12 z-10 overflow-y-auto">
             {children}
           </main>
+
+          <footer className="w-full p-6 text-center z-10 bg-black/20 backdrop-blur-sm border-t border-white/5">
+             <p className="text-[10px] text-white/40 font-bold tracking-[0.2em] uppercase">Secured by Flex Shield v4.0</p>
+          </footer>
         </div>
       </div>
   );
