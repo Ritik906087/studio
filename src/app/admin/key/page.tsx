@@ -17,9 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Loader2, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useFirestore } from "@/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/logo";
 
@@ -34,7 +33,6 @@ export default function AdminKeyPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
-  const router = useRouter();
   const firestore = useFirestore();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -46,56 +44,56 @@ export default function AdminKeyPage() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (values.phone !== ADMIN_PHONE) {
-      toast({ 
-        variant: "destructive", 
-        title: "Access Restricted", 
-        description: "This portal is for the designated Master Admin only." 
-      });
-      return;
-    }
-
-    if (!firestore) {
-      toast({ variant: "destructive", title: "System Error", description: "Database is not ready. Refresh and try again." });
-      return;
-    }
-    
     setIsLoading(true);
 
     try {
-      // Direct Query to 'admins' collection for Master ID and Password
+      if (values.phone !== ADMIN_PHONE) {
+        throw new Error("Access Restricted: Unauthorized Master ID.");
+      }
+
+      if (!firestore) {
+        throw new Error("System Error: Database connection failed. Please refresh.");
+      }
+      
+      // Query Firestore for matching admin credentials
       const adminQuery = query(
         collection(firestore, 'admins'),
         where('masterId', '==', values.phone),
-        where('password', '==', values.password)
+        where('password', '==', values.password),
+        limit(1)
       );
       
       const adminSnap = await getDocs(adminQuery);
 
       if (adminSnap.empty) {
-        throw new Error("Incorrect Master ID or Security Password.");
+        throw new Error("Access Denied: Invalid Security Password.");
       }
 
       // Set a local session token to bypass Firebase Auth state check in admin pages
       const sessionData = {
         token: 'admin_' + Math.random().toString(36).substr(2, 9),
+        masterId: values.phone,
+        authenticated: true,
         expires: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
       };
       localStorage.setItem('flex_admin_session', JSON.stringify(sessionData));
 
       toast({ 
-        title: "Access Granted", 
-        description: "Admin Server Granted",
+        title: "Admin Server Granted", 
+        description: "Identity Verified. Accessing management console...",
         className: "bg-green-600 text-white border-none"
       });
       
-      router.push('/admin/dashboard');
+      // Use window.location for a hard redirect to ensure the SPA state is fresh
+      setTimeout(() => {
+        window.location.href = '/admin/dashboard';
+      }, 800);
 
     } catch (error: any) {
       console.error("Admin verification error:", error);
       toast({ 
         variant: "destructive", 
-        title: "Login Failed", 
+        title: "Identity Verification Failed", 
         description: error.message || "An unexpected error occurred." 
       });
       form.resetField("password");
@@ -190,7 +188,7 @@ export default function AdminKeyPage() {
             </div>
         </div>
       </Card>
-      <p className="mt-8 text-xs text-slate-600">FLEX PAY SERVER v2.0.6</p>
+      <p className="mt-8 text-xs text-slate-600">FLEX PAY SERVER v2.1.0</p>
     </main>
   );
 }

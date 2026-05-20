@@ -22,6 +22,7 @@ import { doc, onSnapshot, collection, runTransaction, serverTimestamp } from 'fi
 import Link from 'next/link';
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
+const ADMIN_PHONE = '9060873927';
 
 export default function UserDetailsPage() {
     const params = useParams();
@@ -37,13 +38,24 @@ export default function UserDetailsPage() {
     const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
-        // Simple local session check for admin
         const sessionStr = localStorage.getItem('flex_admin_session');
-        if (!sessionStr) {
+        if (sessionStr) {
+            try {
+                const session = JSON.parse(sessionStr);
+                if (session.authenticated && session.masterId === ADMIN_PHONE && session.expires > Date.now()) {
+                    setIsAdmin(true);
+                } else {
+                    router.replace('/admin/key');
+                    return;
+                }
+            } catch (e) {
+                router.replace('/admin/key');
+                return;
+            }
+        } else {
             router.replace('/admin/key');
             return;
         }
-        setIsAdmin(true);
 
         if (!firestore || !userId) return;
 
@@ -51,6 +63,9 @@ export default function UserDetailsPage() {
             if (snap.exists()) {
                 setUser({ id: snap.id, ...snap.data() });
             }
+            setLoading(false);
+        }, (err) => {
+            console.error("User Detail Listener Error:", err);
             setLoading(false);
         });
 
@@ -77,10 +92,12 @@ export default function UserDetailsPage() {
                 // Add system transaction record
                 const txRef = doc(collection(firestore, 'users', user.id, 'transactions'));
                 transaction.set(txRef, {
+                    userId: user.id,
                     amount: val,
                     type: 'system_adjustment',
                     description: `Admin ${type === 'add' ? 'Added' : 'Deducted'} Balance`,
                     createdAt: serverTimestamp(),
+                    orderId: `ADJ${Date.now()}`
                 });
             });
             toast({ title: "Success", description: "Balance updated successfully." });

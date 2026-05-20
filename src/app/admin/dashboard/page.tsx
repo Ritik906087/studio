@@ -14,11 +14,10 @@ import { useRouter } from 'next/navigation';
 import { LogOut, Users, LayoutDashboard, Wallet, FileClock } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
-import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 type UserProfile = {
     id: string;
@@ -32,9 +31,10 @@ type UserProfile = {
     inviterUid?: string;
 };
 
+const ADMIN_PHONE = '9060873927';
+
 function AdminDashboard() {
     const router = useRouter();
-    const { toast } = useToast();
     const firestore = useFirestore();
     
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
@@ -43,12 +43,11 @@ function AdminDashboard() {
     const [authChecking, setAuthChecking] = useState(true);
 
     useEffect(() => {
-        // Check for local admin session instead of Firebase Auth
         const sessionStr = localStorage.getItem('flex_admin_session');
         if (sessionStr) {
             try {
                 const session = JSON.parse(sessionStr);
-                if (session.expires > Date.now()) {
+                if (session.authenticated && session.masterId === ADMIN_PHONE && session.expires > Date.now()) {
                     setIsMasterAdmin(true);
                 } else {
                     localStorage.removeItem('flex_admin_session');
@@ -68,7 +67,8 @@ function AdminDashboard() {
 
         setUsersLoading(true);
         // Listen for all users
-        const unsubUsers = onSnapshot(collection(firestore, 'users'), (snap) => {
+        const q = query(collection(firestore, 'users'), orderBy('createdAt', 'desc'));
+        const unsubUsers = onSnapshot(q, (snap) => {
             setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
             setUsersLoading(false);
         }, (error) => {
@@ -91,7 +91,7 @@ function AdminDashboard() {
     }
 
     if (!isMasterAdmin) {
-        return null; // Redirecting in useEffect
+        return null;
     }
 
     const totalUsers = allUsers.length;
