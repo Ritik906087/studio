@@ -1,11 +1,26 @@
+/**
+ * Supabase has been removed in favor of Firebase.
+ * This file is kept as a dummy export to prevent immediate build crashes
+ * in components that haven't been fully migrated to use useFirestore/useAuth hooks.
+ */
 
-import { createClient } from '@supabase/supabase-js';
+const dummySupabase = {
+  from: () => dummySupabase,
+  select: () => dummySupabase,
+  eq: () => dummySupabase,
+  single: () => Promise.resolve({ data: null, error: new Error('Supabase is disconnected. Please use Firebase hooks.') }),
+  insert: () => Promise.resolve({ data: null, error: new Error('Supabase is disconnected.') }),
+  update: () => dummySupabase,
+  in: () => dummySupabase,
+  order: () => dummySupabase,
+  limit: () => dummySupabase,
+  channel: () => ({ on: () => ({ subscribe: () => ({}) }) }),
+  auth: {
+    signOut: () => Promise.resolve({ error: null }),
+    updateUser: () => Promise.resolve({ data: null, error: null }),
+    signInWithOtp: () => Promise.resolve({ data: null, error: null }),
+    verifyOtp: () => Promise.resolve({ data: null, error: null }),
+  }
+};
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL and Anon Key must be provided.');
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = dummySupabase as any;

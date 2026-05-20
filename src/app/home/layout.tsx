@@ -2,16 +2,13 @@
 "use client";
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Home, History, UserPlus, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Loader } from '@/components/ui/loader';
 import { useLanguage } from '@/context/language-context';
 import { useUser } from '@/hooks/use-user';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase';
-
 
 export default function HomeLayout({
   children,
@@ -21,28 +18,7 @@ export default function HomeLayout({
   const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
   const { translations } = useLanguage();
-  const { user, session } = useUser();
-  const router = useRouter();
-  const { toast } = useToast();
-
-  const [userProfile, setUserProfile] = useState<{sessionId?: string} | null>(null);
-
-  useEffect(() => {
-    async function fetchProfile() {
-      if (user) {
-        const { data } = await supabase.from('users').select('sessionId').eq('uid', user.id).single();
-        setUserProfile(data);
-      }
-    }
-    fetchProfile();
-  }, [user]);
-
-  useEffect(() => {
-    // Session validation logic
-    if (userProfile && userProfile.sessionId && session) {
-      // Custom session handling might be needed if you want single-device login
-    }
-  }, [userProfile, session, router, toast]);
+  const { profile } = useUser();
 
   useEffect(() => {
     setIsMounted(true);

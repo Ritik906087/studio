@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
 import { useEffect, useState, createContext, useContext, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, firestore } from '@/firebase';
+import { useAuth, useFirestore } from '@/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 export type AuthState = {
@@ -18,12 +18,21 @@ const AuthContext = createContext<AuthState>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const auth = useAuth();
+  const firestore = useFirestore();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!auth) return;
+    // During SSR or if config is missing, auth will be null
+    if (!auth) {
+      if (typeof window !== 'undefined') {
+        // If we're on client but auth is missing, stop loading
+        setLoading(false);
+      }
+      return;
+    }
 
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
@@ -34,25 +43,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribeAuth();
-  }, []);
+  }, [auth]);
 
   useEffect(() => {
     if (!user || !firestore) return;
 
-    const unsubscribeProfile = onSnapshot(doc(firestore, 'users', user.uid), (snapshot) => {
-      if (snapshot.exists()) {
-        setProfile(snapshot.data());
-      } else {
-        setProfile(null);
+    setLoading(true);
+    const unsubscribeProfile = onSnapshot(
+      doc(firestore, 'users', user.uid),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setProfile(snapshot.data());
+        } else {
+          setProfile(null);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Profile listen error:", error);
+        setLoading(false);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error("Profile listen error:", error);
-      setLoading(false);
-    });
+    );
 
     return () => unsubscribeProfile();
-  }, [user]);
+  }, [user, firestore]);
 
   const value = {
     user,

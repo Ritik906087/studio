@@ -1,12 +1,13 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useFirestore } from '@/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -17,28 +18,13 @@ import { Loader } from '@/components/ui/loader';
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
 export default function SettingsPage() {
-  const { user } = useUser();
+  const { user, profile } = useUser();
+  const firestore = useFirestore();
   const { toast } = useToast();
 
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [newName, setNewName] = useState(profile?.displayName || '');
   const [isSaving, setIsSaving] = useState(false);
-
-  const [userProfile, setUserProfile] = useState<{ displayName: string; photoURL?: string; numericId: string } | null>(null);
-  
-  useEffect(() => {
-    async function fetchProfile() {
-      if (user) {
-        const { data } = await supabase.from('users').select('displayName, photoURL, numericId').eq('id', user.id).single();
-        if (data) {
-          setUserProfile(data);
-          setNewName(data.displayName);
-        }
-      }
-    }
-    fetchProfile();
-  }, [user]);
-
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -47,13 +33,13 @@ export default function SettingsPage() {
   };
 
   const handleNameChange = async () => {
-    if (!user || !newName.trim()) return;
+    if (!user || !firestore || !newName.trim()) return;
     setIsSaving(true);
     try {
-      const { error } = await supabase.from('users').update({ displayName: newName }).eq('id', user.id);
-      if (error) throw error;
+      await updateDoc(doc(firestore, 'users', user.uid), {
+        displayName: newName
+      });
       toast({ title: 'Success', description: 'Your name has been updated.' });
-      setUserProfile(prev => prev ? { ...prev, displayName: newName } : null);
       setIsNameDialogOpen(false);
     } catch (error) {
       console.error("Error updating name: ", error);
@@ -83,19 +69,19 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
                <div className="relative">
                 <Avatar className="h-14 w-14 border-2 border-primary/20">
-                  <AvatarImage src={defaultAvatarUrl} alt={userProfile?.displayName} />
+                  <AvatarImage src={defaultAvatarUrl} alt={profile?.displayName} />
                   <AvatarFallback className="bg-yellow-400 text-yellow-900 font-bold text-lg">
-                    {userProfile?.displayName?.charAt(0) || 'A'}
+                    {profile?.displayName?.charAt(0) || 'A'}
                   </AvatarFallback>
                 </Avatar>
               </div>
             </div>
           </div>
           <div className="mx-4 border-b"></div>
-          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50" onClick={() => { if (!isSaving) { setNewName(userProfile?.displayName || ''); setIsNameDialogOpen(true); } }}>
+          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50" onClick={() => { if (!isSaving) { setNewName(profile?.displayName || ''); setIsNameDialogOpen(true); } }}>
             <span className="font-medium">Nickname</span>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-muted-foreground">{userProfile?.displayName || '...'}</span>
+              <span className="font-semibold text-muted-foreground">{profile?.displayName || '...'}</span>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>
           </div>
@@ -103,8 +89,8 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between p-4">
             <span className="font-medium">UID</span>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-sm text-muted-foreground">{userProfile?.numericId || '...'}</span>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => userProfile && copyToClipboard(userProfile.numericId)}>
+              <span className="font-mono text-sm text-muted-foreground">{profile?.numericId || '...'}</span>
+              <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => profile && copyToClipboard(profile.numericId)}>
                 <Copy className="h-4 w-4 text-muted-foreground" />
               </Button>
             </div>
