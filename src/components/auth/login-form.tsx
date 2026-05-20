@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import Link from 'next/link';
-import Image from "next/image";
+import Image from "image";
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -56,16 +56,25 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    // Prevent admin from logging in through regular page to force use of /admin/key
+    if (values.phone === ADMIN_PHONE) {
+      toast({ 
+        variant: "destructive", 
+        title: "Access Restricted", 
+        description: "Please use the admin gateway for this account." 
+      });
+      return;
+    }
+
     if (!auth) {
         toast({ variant: "destructive", title: "Error", description: "Authentication not available." });
         return;
     }
     setIsLoading(true);
 
-    // Try multiple email formats to support legacy users
     const emailFormats = [
-      `91${values.phone}@lgpay.app`, // New format
-      `${values.phone}@lgpay.app`    // Legacy format
+      `91${values.phone}@lgpay.app`,
+      `${values.phone}@lgpay.app`
     ];
 
     let success = false;
@@ -76,15 +85,9 @@ export function LoginForm() {
         await signInWithEmailAndPassword(auth, email, values.password);
         success = true;
       } catch (error: any) {
-        // If it's the last format and it still fails, we throw to the outer catch
         if (email === emailFormats[emailFormats.length - 1]) {
           console.error("Final login attempt failed:", error);
           let msg = "Incorrect phone number or password.";
-          if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-            msg = "Incorrect phone number or password.";
-          } else if (error.code === 'auth/too-many-requests') {
-            msg = "Too many failed attempts. Please try again later.";
-          }
           toast({ variant: "destructive", title: "Login Failed", description: msg });
           form.resetField("password");
         }
@@ -93,13 +96,7 @@ export function LoginForm() {
 
     if (success) {
       toast({ title: "Login Successful", description: "Welcome back!" });
-      
-      // Redirect based on user type
-      if (values.phone === ADMIN_PHONE) {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/home');
-      }
+      router.push('/home');
     }
     
     setIsLoading(false);
@@ -116,7 +113,7 @@ export function LoginForm() {
               <FormLabel>{translations.phoneNumber}</FormLabel>
               <div className="relative flex items-center">
                  <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-muted-foreground">
-                  <Image src="https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg" width={20} height={14} alt="India Flag" />
+                  <img src="https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg" width={20} height={14} alt="India Flag" />
                   <span>+91</span>
                 </div>
                 <FormControl>
