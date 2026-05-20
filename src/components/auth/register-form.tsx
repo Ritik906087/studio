@@ -22,7 +22,7 @@ import Image from 'next/image';
 import { useLanguage } from "@/context/language-context";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useFirestore } from "@/firebase";
-import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs, limit, serverTimestamp } from "firebase/firestore";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
@@ -56,21 +56,19 @@ export function RegisterForm() {
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     if (!auth || !firestore) {
-      toast({ variant: "destructive", title: "System Error", description: "Firebase is not initialized. Please check your configuration." });
+      toast({ variant: "destructive", title: "Error", description: "Firebase is not ready. Please try again." });
       return;
     }
     setIsLoading(true);
     try {
         const email = `91${values.phone}@lgpay.app`;
         
-        // 1. Check if user already exists in Firestore (via phone)
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
         if (!phoneCheckSnap.empty) {
-            throw new Error("This phone number is already registered. Please login.");
+            throw new Error("This phone number is already registered.");
         }
 
-        // 2. Verify Inviter (Only if code is provided)
         let inviterUid = null;
         if (values.invitationCode) {
             const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
@@ -78,18 +76,15 @@ export function RegisterForm() {
             if (!inviterSnap.empty) {
                 inviterUid = inviterSnap.docs[0].id;
             } else {
-                throw new Error("Invalid invitation code.");
+                toast({ variant: "destructive", title: "Notice", description: "Invalid invitation code. Registering without it." });
             }
         }
 
-        // 3. Create Auth User
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
 
-        // 4. Generate a unique 8-digit numeric ID
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
-        // 5. Create Firestore Profile
         await setDoc(doc(firestore, 'users', user.uid), {
             uid: user.uid,
             email: email,
@@ -104,7 +99,7 @@ export function RegisterForm() {
             createdAt: serverTimestamp(),
         });
 
-        toast({ title: "Registration Successful", description: "Your account has been created." });
+        toast({ title: "Welcome!", description: "Registration successful." });
         router.push("/home");
     } catch (error: any) {
       console.error("Registration failed:", error);
