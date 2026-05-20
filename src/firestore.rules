@@ -16,6 +16,11 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phoneNumber == '9060873927';
     }
 
+    // Allow the login page to verify admin credentials
+    match /admins/{adminId} {
+      allow read: if true;
+    }
+
     match /users/{userId} {
       // Allow user to read their own profile. Admin can read all.
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());

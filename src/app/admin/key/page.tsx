@@ -19,8 +19,8 @@ import { Loader2, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, useFirestore } from "@/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { signInAnonymously } from "firebase/auth";
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/logo";
 
@@ -64,73 +64,60 @@ export default function AdminKeyPage() {
     
     setIsLoading(true);
 
-    const emailFormats = [
-      `91${values.phone}@lgpay.app`,
-      `${values.phone}@lgpay.app`
-    ];
+    try {
+      // 1. First, establish an anonymous session to talk to Firestore
+      const userCredential = await signInAnonymously(auth);
+      const user = userCredential.user;
 
-    let success = false;
-    let loggedInUser = null;
-    let lastError = "Invalid credentials.";
+      // 2. Query the 'admins' collection for Master ID and Password
+      // This is a custom Firestore-based login as requested
+      const adminQuery = query(
+        collection(firestore, 'admins'),
+        where('masterId', '==', values.phone),
+        where('password', '==', values.password)
+      );
+      
+      const adminSnap = await getDocs(adminQuery);
 
-    for (const email of emailFormats) {
-      if (success) break;
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
-        loggedInUser = userCredential.user;
-        success = true;
-      } catch (error: any) {
-        lastError = error.message;
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-            lastError = "Incorrect admin ID or security password.";
-        }
+      if (adminSnap.empty) {
+        throw new Error("Incorrect Master ID or Security Password.");
       }
-    }
 
-    if (success && loggedInUser) {
-      try {
-        // Ensure Admin Profile exists in Firestore
-        const adminRef = doc(firestore, 'users', loggedInUser.uid);
-        const adminSnap = await getDoc(adminRef);
-        
-        if (!adminSnap.exists()) {
-          await setDoc(adminRef, {
-            uid: loggedInUser.uid,
-            numericId: "00000000",
-            phoneNumber: ADMIN_PHONE,
-            displayName: "Master Admin",
-            balance: 0,
-            holdBalance: 0,
-            createdAt: serverTimestamp(),
-          });
-        }
-        
-        toast({ 
-          title: "Access Granted", 
-          description: "Admin Server Granted",
-          className: "bg-green-600 text-white border-none"
-        });
-        
-        // Short delay to allow session to propagate
-        setTimeout(() => {
-          router.push('/admin/dashboard');
-        }, 1000);
+      // 3. Promote the anonymous user to Admin status by creating their user profile
+      // with the admin phone number. This satisfies the isAdmin() Security Rule.
+      const adminRef = doc(firestore, 'users', user.uid);
+      await setDoc(adminRef, {
+        uid: user.uid,
+        numericId: "00000000",
+        phoneNumber: ADMIN_PHONE,
+        displayName: "Master Admin",
+        balance: 0,
+        holdBalance: 0,
+        createdAt: serverTimestamp(),
+      }, { merge: true });
 
-      } catch (e) {
-        console.error("Profile check error:", e);
-        // If profile check fails but auth is good, still try to redirect
+      toast({ 
+        title: "Access Granted", 
+        description: "Admin Server Granted",
+        className: "bg-green-600 text-white border-none"
+      });
+      
+      // Short delay to allow session and document creation to propagate
+      setTimeout(() => {
         router.push('/admin/dashboard');
-      }
-    } else {
+      }, 1000);
+
+    } catch (error: any) {
+      console.error("Admin verification error:", error);
       toast({ 
         variant: "destructive", 
         title: "Login Failed", 
-        description: lastError 
+        description: error.message || "An unexpected error occurred." 
       });
       form.resetField("password");
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   }
 
   return (
@@ -160,7 +147,7 @@ export default function AdminKeyPage() {
                     <FormLabel className="text-slate-300">Master ID</FormLabel>
                     <FormControl>
                       <Input 
-                        placeholder="Admin Phone Number" 
+                        placeholder="Admin Master ID" 
                         className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 h-12 focus:ring-primary/50" 
                         maxLength={10} 
                         autoComplete="username"
@@ -219,7 +206,7 @@ export default function AdminKeyPage() {
             </div>
         </div>
       </Card>
-      <p className="mt-8 text-xs text-slate-600">FLEX PAY SERVER v2.0.4</p>
+      <p className="mt-8 text-xs text-slate-600">FLEX PAY SERVER v2.0.5</p>
     </main>
   );
 }

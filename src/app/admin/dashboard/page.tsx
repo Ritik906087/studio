@@ -56,14 +56,14 @@ function AdminDashboard() {
             return;
         }
 
-        // Check if the user is the admin
-        // We check both the profile phone number and the current user's email/logic
-        const isAdminEmail = user.email?.includes(ADMIN_PHONE);
+        // Check if the user is the admin by phone number in their Firestore profile
+        // This profile is created/promoted during the /admin/key login process
         const isAdminProfile = profile?.phoneNumber === ADMIN_PHONE;
 
-        if (isAdminEmail || isAdminProfile) {
+        if (isAdminProfile) {
             setIsMasterAdmin(true);
-        } else {
+        } else if (!authLoading && profile !== undefined) {
+            // Only redirect if profile has finished loading and is clearly not admin
             toast({ 
                 variant: 'destructive', 
                 title: "Access Denied", 
@@ -84,7 +84,7 @@ function AdminDashboard() {
         }, (error) => {
             console.error("Admin Users Listener Error:", error);
             if (error.code === 'permission-denied') {
-                toast({ variant: 'destructive', title: "Permission Error", description: "Unable to fetch users. Check Security Rules." });
+                toast({ variant: 'destructive', title: "Permission Error", description: "Unable to fetch users. Access denied by Security Rules." });
             }
             setUsersLoading(false);
         });
@@ -108,7 +108,7 @@ function AdminDashboard() {
         return <div className="flex h-screen items-center justify-center"><Loader size="md" /></div>;
     }
 
-    if (!isMasterAdmin) {
+    if (!isMasterAdmin && !authLoading) {
         return <div className="flex h-screen items-center justify-center font-bold text-destructive text-xl">
             Access Denied
         </div>;
@@ -129,7 +129,7 @@ function AdminDashboard() {
                     </Button>
                 </div>
             </header>
-            <main className="flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+            <main className="flex-grow flex-col gap-4 p-4 md:gap-8 md:p-8">
                 <Tabs defaultValue="dashboard" className="w-full md:grid md:grid-cols-[220px_1fr] lg:grid-cols-[250px_1fr] gap-6">
                     <TabsList className="w-full h-auto flex-row justify-start overflow-x-auto md:flex-col md:items-stretch md:justify-start">
                         <TabsTrigger value="dashboard" className="justify-start p-3"><LayoutDashboard className="mr-2" /> Dashboard</TabsTrigger>
