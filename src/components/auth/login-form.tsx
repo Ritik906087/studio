@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,6 +23,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
+
+const ADMIN_PHONE = '9060873927';
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -63,7 +66,14 @@ export function LoginForm() {
     try {
       await signInWithEmailAndPassword(auth, derivedEmail, values.password);
       toast({ title: "Login Successful", description: "Welcome back!" });
-      router.push('/home');
+      
+      // Redirect based on user type
+      if (values.phone === ADMIN_PHONE) {
+        router.push('/admin/dashboard');
+      } else {
+        router.push('/home');
+      }
+      
     } catch (error: any) {
       console.error("Login failed:", error);
       let msg = "Incorrect phone number or password.";

@@ -18,8 +18,9 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Loader } from '@/components/ui/loader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useFirestore, useUser } from '@/firebase';
+import { useFirestore, useUser, useAuth } from '@/firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 
 const ADMIN_PHONE = '9060873927';
 
@@ -39,6 +40,7 @@ function AdminDashboard() {
     const router = useRouter();
     const { toast } = useToast();
     const firestore = useFirestore();
+    const auth = useAuth();
     const { profile, loading: profileLoading } = useUser();
     
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
@@ -56,8 +58,8 @@ function AdminDashboard() {
             toast({ variant: 'destructive', title: "Access Denied", description: "You do not have permission to access the admin panel." });
             router.push('/home');
         } else if (!profile && !profileLoading) {
-             // Not logged in or no profile, redirect to admin login
-             router.push('/admin/login');
+             // Not logged in or no profile, redirect to main login
+             router.push('/login');
         }
     }, [profile, profileLoading, router, toast]);
 
@@ -81,17 +83,24 @@ function AdminDashboard() {
         };
     }, [firestore, isMasterAdmin, toast]);
 
-    const handleLogout = () => {
-        document.cookie = 'admin-phone=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        router.push('/admin/login');
+    const handleLogout = async () => {
+        if (!auth) return;
+        try {
+            await signOut(auth);
+            router.push('/login');
+        } catch (e) {
+            console.error("Logout failed", e);
+        }
     };
 
     if (profileLoading || (isMasterAdmin && loading && allUsers.length === 0)) {
         return <div className="flex h-screen items-center justify-center"><Loader size="md" /></div>;
     }
 
-    if (!isMasterAdmin) {
-        return <div className="flex h-screen items-center justify-center font-bold text-destructive">Access Denied</div>;
+    if (!isMasterAdmin && !profileLoading) {
+        return <div className="flex h-screen items-center justify-center font-bold text-destructive text-xl">
+            Access Denied
+        </div>;
     }
 
     const totalUsers = allUsers.length;
