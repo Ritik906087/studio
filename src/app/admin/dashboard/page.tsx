@@ -11,15 +11,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, LayoutDashboard, Wallet, FileClock, Clock } from 'lucide-react';
+import { LogOut, Users, LayoutDashboard, Wallet, FileClock } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 import { Loader } from '@/components/ui/loader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useFirestore, useUser, useAuth } from '@/firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { useFirestore, useAuth } from '@/firebase';
+import { useUser } from '@/hooks/use-user';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 
 const ADMIN_PHONE = '9060873927';
@@ -41,41 +41,52 @@ function AdminDashboard() {
     const { toast } = useToast();
     const firestore = useFirestore();
     const auth = useAuth();
-    const { profile, loading: profileLoading } = useUser();
+    const { user, profile, loading: authLoading } = useUser();
     
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [usersLoading, setUsersLoading] = useState(true);
     const [isMasterAdmin, setIsMasterAdmin] = useState(false);
 
     useEffect(() => {
-        if (profileLoading) return;
+        if (authLoading) return;
 
-        // Authenticate admin based on phone number from Firestore profile
-        if (profile?.phoneNumber === ADMIN_PHONE) {
-            setIsMasterAdmin(true);
-        } else if (profile && profile.phoneNumber !== ADMIN_PHONE) {
-            // Not an admin, redirect home
-            toast({ variant: 'destructive', title: "Access Denied", description: "You do not have permission to access the admin panel." });
-            router.push('/home');
-        } else if (!profile && !profileLoading) {
-             // Not logged in or no profile, redirect to main login
-             router.push('/login');
+        // Ensure user is logged in
+        if (!user) {
+            router.replace('/admin/key');
+            return;
         }
-    }, [profile, profileLoading, router, toast]);
+
+        // Check if the user is the admin
+        // We check both the profile phone number and the current user's email/logic
+        const isAdminEmail = user.email?.includes(ADMIN_PHONE);
+        const isAdminProfile = profile?.phoneNumber === ADMIN_PHONE;
+
+        if (isAdminEmail || isAdminProfile) {
+            setIsMasterAdmin(true);
+        } else {
+            toast({ 
+                variant: 'destructive', 
+                title: "Access Denied", 
+                description: "You do not have permission to access the admin panel." 
+            });
+            router.replace('/home');
+        }
+    }, [user, profile, authLoading, router, toast]);
 
     useEffect(() => {
         if (!firestore || !isMasterAdmin) return;
 
+        setUsersLoading(true);
         // Listen for all users - ONLY if authenticated as admin
         const unsubUsers = onSnapshot(collection(firestore, 'users'), (snap) => {
             setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
-            setLoading(false);
+            setUsersLoading(false);
         }, (error) => {
             console.error("Admin Users Listener Error:", error);
             if (error.code === 'permission-denied') {
-                toast({ variant: 'destructive', title: "Permission Error", description: "Unable to fetch users. Please check your admin status." });
+                toast({ variant: 'destructive', title: "Permission Error", description: "Unable to fetch users. Check Security Rules." });
             }
-            setLoading(false);
+            setUsersLoading(false);
         });
 
         return () => {
@@ -87,17 +98,17 @@ function AdminDashboard() {
         if (!auth) return;
         try {
             await signOut(auth);
-            router.push('/login');
+            router.replace('/admin/key');
         } catch (e) {
             console.error("Logout failed", e);
         }
     };
 
-    if (profileLoading || (isMasterAdmin && loading && allUsers.length === 0)) {
+    if (authLoading) {
         return <div className="flex h-screen items-center justify-center"><Loader size="md" /></div>;
     }
 
-    if (!isMasterAdmin && !profileLoading) {
+    if (!isMasterAdmin) {
         return <div className="flex h-screen items-center justify-center font-bold text-destructive text-xl">
             Access Denied
         </div>;
@@ -111,7 +122,7 @@ function AdminDashboard() {
             <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-10 justify-between">
                 <Logo className="text-2xl" />
                 <div className="flex items-center gap-4">
-                    <span className="hidden md:inline text-sm font-medium text-muted-foreground">Admin: {profile?.displayName}</span>
+                    <span className="hidden md:inline text-sm font-medium text-muted-foreground">Admin: {profile?.displayName || 'Master'}</span>
                     <Button onClick={handleLogout} variant="outline" size="sm">
                         <LogOut className="mr-2 h-4 w-4" />
                         Logout
@@ -153,7 +164,7 @@ function AdminDashboard() {
                             <Card>
                                 <CardHeader><CardTitle>User Management</CardTitle></CardHeader>
                                 <CardContent>
-                                    {loading ? <div className="flex justify-center p-8"><Loader /></div> : (
+                                    {usersLoading ? <div className="flex justify-center p-8"><Loader /></div> : (
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>

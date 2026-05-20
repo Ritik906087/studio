@@ -16,10 +16,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Loader2, Eye, EyeOff, ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/logo";
 
@@ -36,6 +37,7 @@ export default function AdminKeyPage() {
   const { toast } = useToast();
   const router = useRouter();
   const auth = useAuth();
+  const firestore = useFirestore();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -55,7 +57,7 @@ export default function AdminKeyPage() {
       return;
     }
 
-    if (!auth) return;
+    if (!auth || !firestore) return;
     setIsLoading(true);
 
     const emailFormats = [
@@ -64,14 +66,16 @@ export default function AdminKeyPage() {
     ];
 
     let success = false;
+    let loggedInUser = null;
 
     for (const email of emailFormats) {
       if (success) break;
       try {
-        await signInWithEmailAndPassword(auth, email, values.password);
+        const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
+        loggedInUser = userCredential.user;
         success = true;
       } catch (error: any) {
-        if (email === emailFormats[emailFormats.length - 1]) {
+        if (email === emailFormats[emailFormats.length - 1] && !success) {
           console.error("Admin login failed:", error);
           toast({ 
             variant: "destructive", 
@@ -83,9 +87,36 @@ export default function AdminKeyPage() {
       }
     }
 
-    if (success) {
-      toast({ title: "Welcome, Master Admin", description: "Secured session established." });
-      router.push('/admin/dashboard');
+    if (success && loggedInUser) {
+      // Ensure Admin Profile exists in Firestore for rules to pass
+      try {
+        const adminRef = doc(firestore, 'users', loggedInUser.uid);
+        const adminSnap = await getDoc(adminRef);
+        
+        if (!adminSnap.exists()) {
+          await setDoc(adminRef, {
+            uid: loggedInUser.uid,
+            numericId: "00000000",
+            phoneNumber: ADMIN_PHONE,
+            displayName: "Master Admin",
+            balance: 0,
+            holdBalance: 0,
+            createdAt: serverTimestamp(),
+          });
+        }
+        
+        toast({ title: "Welcome, Master Admin", description: "Secured session established." });
+        
+        // Use a small delay to ensure Auth state is recognized by providers
+        setTimeout(() => {
+          router.replace('/admin/dashboard');
+        }, 500);
+
+      } catch (e) {
+        console.error("Error creating/checking admin profile:", e);
+        // Still try to redirect
+        router.replace('/admin/dashboard');
+      }
     }
     
     setIsLoading(false);
