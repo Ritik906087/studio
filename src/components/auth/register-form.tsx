@@ -44,7 +44,7 @@ export function RegisterForm() {
       phone: z.string().length(10, { message: translations.phoneRequired }).regex(/^[6-9]\d{9}$/, { message: translations.phoneInvalid }),
       password: z.string().min(6, { message: translations.passwordMin }),
       confirmPassword: z.string(),
-      invitationCode: z.string().min(1, { message: translations.invitationCodeRequired }),
+      invitationCode: z.string().optional(),
       agreement: z.literal(true, { errorMap: () => ({ message: translations.agreementRequired }) }),
     })
     .refine((data) => data.password === data.confirmPassword, { message: translations.passwordsDontMatch, path: ["confirmPassword"] });
@@ -70,14 +70,16 @@ export function RegisterForm() {
             throw new Error("This phone number is already registered. Please login.");
         }
 
-        // 2. Verify Inviter
+        // 2. Verify Inviter (Only if code is provided)
         let inviterUid = null;
-        const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
-        const inviterSnap = await getDocs(inviterQuery);
-        if (!inviterSnap.empty) {
-            inviterUid = inviterSnap.docs[0].id;
-        } else {
-            throw new Error("Invalid invitation code.");
+        if (values.invitationCode) {
+            const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
+            const inviterSnap = await getDocs(inviterQuery);
+            if (!inviterSnap.empty) {
+                inviterUid = inviterSnap.docs[0].id;
+            } else {
+                throw new Error("Invalid invitation code.");
+            }
         }
 
         // 3. Create Auth User
@@ -146,7 +148,7 @@ export function RegisterForm() {
             <FormItem>
               <FormLabel>{translations.password}</FormLabel>
               <div className="relative">
-                <FormControl><Input type={showPassword ? "text" : "password"} placeholder={translations.enterPassword} className="pr-10 text-base" {...field} /></FormControl>
+                <FormControl><Input type={showPassword ? "text" : "password"} placeholder={translations.enterPassword} className="pl-4 pr-10 text-base" {...field} /></FormControl>
                 <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1/2 -translate-y-1/2" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
@@ -170,7 +172,11 @@ export function RegisterForm() {
           control={form.control}
           name="invitationCode"
           render={({ field }) => (
-            <FormItem><FormLabel>{translations.invitationCode}</FormLabel><FormControl><Input placeholder={translations.enterInvitationCode} {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem>
+                <FormLabel>{translations.invitationCode} (Optional)</FormLabel>
+                <FormControl><Input placeholder={translations.enterInvitationCode} {...field} /></FormControl>
+                <FormMessage />
+            </FormItem>
           )}
         />
         <FormField
