@@ -52,7 +52,7 @@
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
 }
 
-.lgText {
+.logoText {
   font-weight: 900;
   letter-spacing: 2px;
   background: linear-gradient(90deg, var(--cyan), var(--pink));
@@ -60,6 +60,7 @@
   background-clip: text;
   color: transparent;
   user-select: none;
+  font-style: italic;
 }
 
 /* Default/Medium Size */
@@ -71,7 +72,7 @@
   width: 118px;
   height: 118px;
 }
-.loader-md .lgText {
+.loader-md .logoText {
   font-size: 40px;
 }
 
@@ -84,7 +85,7 @@
   width: 150px;
   height: 150px;
 }
-.loader-lg .lgText {
+.loader-lg .logoText {
   font-size: 50px;
 }
 
@@ -97,7 +98,7 @@
   width: 50px;
   height: 50px;
 }
-.loader-sm .lgText {
+.loader-sm .logoText {
   font-size: 20px;
 }
 
@@ -118,7 +119,7 @@
 .loader-xs .ring2 {
     display: none;
 }
-.loader-xs .lgText {
+.loader-xs .logoText {
   font-size: 8px;
   font-weight: bold;
   letter-spacing: 0;

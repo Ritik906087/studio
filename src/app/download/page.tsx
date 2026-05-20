@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Button } from '@/components/ui/button';
@@ -19,10 +18,10 @@ export default function DownloadPage() {
                 src={logoUrl}
                 width={120}
                 height={120}
-                alt="LG Pay Logo"
+                alt="Flex Pay Logo"
                 className="rounded-full"
               />
-            <CardTitle className="text-2xl font-bold pt-4">Download LG Pay</CardTitle>
+            <CardTitle className="text-2xl font-bold pt-4">Download Flex Pay</CardTitle>
             <CardDescription>
               Secure and fast digital payments platform.
             </CardDescription>

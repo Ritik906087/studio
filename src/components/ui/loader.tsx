@@ -17,7 +17,7 @@ export const Loader = ({
       <div className="ring"></div>
       <div className="ring2"></div>
       <div className="center">
-        <div className="lgText">LG</div>
+        <div className="logoText">FP</div>
       </div>
     </div>
   )

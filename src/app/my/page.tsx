@@ -68,7 +68,7 @@ export default function MyPage() {
   const auth = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const [currency, setCurrency] = useState<'LGB' | 'INR'>('LGB');
+  const [currency, setCurrency] = useState<'FP' | 'INR'>('FP');
   const { setLanguage, translations } = useLanguage();
 
   const actionItems = [
@@ -154,7 +154,7 @@ export default function MyPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent className="w-24 bg-slate-700 text-white border-slate-600">
-                        <DropdownMenuItem onSelect={() => setCurrency('LGB')}>LGB</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setCurrency('FP')}>FP</DropdownMenuItem>
                         <DropdownMenuItem onSelect={() => setCurrency('INR')}>INR</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -165,7 +165,7 @@ export default function MyPage() {
                         <span className="text-xs">{translations.hold}</span>
                         {loading ? <Skeleton className="h-4 w-10 bg-slate-700"/> : <span>≈ {(profile?.holdBalance || 0).toFixed(2)}</span>}
                     </span>
-                    <span className="text-xs">1LG ≈ 1INR</span>
+                    <span className="text-xs">1 FP ≈ 1 INR</span>
                 </div>
             </CardContent>
         </Card>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -15,8 +14,8 @@ import {
 const tutorials = [
   {
     id: 'buy',
-    title: 'How to Buy LGB',
-    description: 'A step-by-step guide on purchasing LGB in the app.',
+    title: 'How to Buy FLEX',
+    description: 'A step-by-step guide on purchasing FLEX in the app.',
     videoUrl: '',
     steps: [
       'Go to the Home page and click "Buy".',
@@ -24,13 +23,13 @@ const tutorials = [
       'Choose your payment method (UPI or Bank).',
       'Follow the on-screen instructions to complete the payment.',
       'Submit the UTR number and a screenshot of your payment.',
-      'Your LGB balance will be updated after confirmation.'
+      'Your FLEX balance will be updated after confirmation.'
     ]
   },
   {
     id: 'sell',
-    title: 'How to Sell LGB',
-    description: 'Learn how to sell your LGB and withdraw funds.',
+    title: 'How to Sell FLEX',
+    description: 'Learn how to sell your FLEX and withdraw funds.',
     videoUrl: '',
     steps: [
         'Go to the Home page and click "Sell".',

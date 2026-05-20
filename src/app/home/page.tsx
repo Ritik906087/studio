@@ -32,6 +32,7 @@ import { Loader } from '@/components/ui/loader';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { Logo } from '@/components/logo';
 
 const GlassCard = ({ children, className }: { children: React.ReactNode, className?: string }) => (
   <Card className={cn("border bg-white rounded-2xl shadow-sm", className)}>
@@ -40,9 +41,9 @@ const GlassCard = ({ children, className }: { children: React.ReactNode, classNa
 );
 
 const faqs = [
-    { question: "1. How to sell LG?", answer: "You can sell LG directly from the app. Go to the 'Sell' section and follow the instructions." },
+    { question: "1. How to sell FP?", answer: "You can sell FP directly from the app. Go to the 'Sell' section and follow the instructions." },
     { question: "2. How to withdraw to bank account?", answer: "To withdraw funds, link your bank account in the 'My' section and then use the 'Withdraw' option." },
-    { question: "3. How to withdraw LG to game account?", answer: "This feature is coming soon. Stay tuned for updates." },
+    { question: "3. How to withdraw FP to game account?", answer: "This feature is coming soon. Stay tuned for updates." },
     { question: "4. Sell order has been completed, but have not received funds", answer: "Please allow up to 24 hours for the funds to reflect. If it takes longer, contact support." },
 ];
 
@@ -162,15 +163,15 @@ export default function HomePage() {
       <header className="flex items-center justify-between p-4 bg-white">
         <div className="flex items-center gap-2">
             <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/InShot_20260110_205628399.png?alt=media&token=5d466aa9-095b-495f-92e8-95f3b59b4367" width={32} height={32} alt="Logo" />
-            <h1 className="text-xl font-bold text-gradient">LG Pay</h1>
+            <Logo className="text-xl" />
         </div>
       </header>
 
       <main className="flex-grow space-y-6 p-4 pt-2">
         <GlassCard>
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Total LG Balance</p>
-            <p className="text-3xl font-bold">{profile?.balance?.toFixed(2) || '0.00'} <span className="text-2xl font-medium">LGB</span></p>
+            <p className="text-sm text-muted-foreground">Total FLEX Balance</p>
+            <p className="text-3xl font-bold">{profile?.balance?.toFixed(2) || '0.00'} <span className="text-2xl font-medium">FP</span></p>
           </CardContent>
         </GlassCard>
 
@@ -187,8 +188,8 @@ export default function HomePage() {
         </Carousel>
 
         <div className="grid grid-cols-2 gap-4">
-          <Button asChild className="h-16 btn-gradient text-lg"><Link href="/buy">Buy LG</Link></Button>
-          <Button asChild variant="outline" className="h-16 border-green-200 bg-green-50 text-green-800 text-lg hover:bg-green-100"><Link href="/sell">Sell LG</Link></Button>
+          <Button asChild className="h-16 btn-gradient text-lg"><Link href="/buy">Buy FLEX</Link></Button>
+          <Button asChild variant="outline" className="h-16 border-green-200 bg-green-50 text-green-800 text-lg hover:bg-green-100"><Link href="/sell">Sell FLEX</Link></Button>
         </div>
         
         <GlassCard>

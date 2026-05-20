@@ -45,7 +45,7 @@ export default function SellPage() {
             const sellRef = doc(collection(firestore, 'users', user.uid, 'sellOrders'));
             transaction.set(sellRef, {
                 userId: user.uid,
-                orderId: `LGPAY${Date.now()}`,
+                orderId: `FLEXS${Date.now()}`,
                 amount: val,
                 remainingAmount: val,
                 withdrawalMethod: selectedMethod,
@@ -62,9 +62,9 @@ export default function SellPage() {
 
   return (
     <div className="p-4 space-y-4 pb-24">
-      <header className="flex items-center gap-4"><Button asChild variant="ghost" size="icon"><Link href="/home"><ChevronLeft /></Link></Button><h1 className="text-xl font-bold">Sell LG</h1></header>
+      <header className="flex items-center gap-4"><Button asChild variant="ghost" size="icon"><Link href="/home"><ChevronLeft /></Link></Button><h1 className="text-xl font-bold">Sell FLEX</h1></header>
       <Card><CardHeader><CardTitle className="text-sm">Withdrawal Rules</CardTitle></CardHeader><CardContent className="text-xs text-muted-foreground">Min ₹100. Multiple of 100.</CardContent></Card>
-      <Card><CardHeader><CardTitle>Amount</CardTitle></CardHeader><CardContent><Input type="number" placeholder="Multiple of 100" value={amount} onChange={e => setAmount(e.target.value)} /><p className="text-xs mt-2">Balance: {profile?.balance || 0}</p></CardContent></Card>
+      <Card><CardHeader><CardTitle>Amount</CardTitle></CardHeader><CardContent><Input type="number" placeholder="Multiple of 100" value={amount} onChange={e => setAmount(e.target.value)} /><p className="text-xs mt-2">Balance: {profile?.balance || 0} FP</p></CardContent></Card>
       <Card>
         <CardHeader><CardTitle>Method</CardTitle></CardHeader>
         <CardContent>

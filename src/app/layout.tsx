@@ -7,8 +7,8 @@ import { AuthProvider } from '@/hooks/use-user';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 
 export const metadata: Metadata = {
-  title: "LG Pay – Smart Digital Wallet",
-  description: "Join LG Pay and experience fast, secure and easy digital payments. Invite friends and earn rewards instantly.",
+  title: "Flex Pay – Smart Digital Wallet",
+  description: "Join Flex Pay and experience fast, secure and easy digital payments. Invite friends and earn rewards instantly.",
   icons: {
     icon: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6",
   },

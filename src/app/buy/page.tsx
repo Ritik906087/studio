@@ -25,14 +25,14 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
 const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, isCreatingOrder }: any) => (
     <div className="grid grid-cols-1 gap-3 mt-4">
       {options.map((option: any) => {
-          const totalLGB = option.amount + (option.amount * (bonusPercentage / 100));
+          const totalFLEX = option.amount + (option.amount * (bonusPercentage / 100));
           return (
             <Card key={option.id} className="p-3 flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 flex items-center justify-center bg-primary/10 rounded-lg text-primary font-bold">LG</div>
+                    <div className="h-12 w-12 flex items-center justify-center bg-primary/10 rounded-lg text-primary font-black italic">FP</div>
                     <div>
                         <p className="font-bold text-lg">₹ {option.amount.toLocaleString()}</p>
-                        <p className="text-xs text-green-600 font-semibold">Get: {totalLGB.toFixed(0)}</p>
+                        <p className="text-xs text-green-600 font-semibold">Get: {totalFLEX.toFixed(0)} FP</p>
                     </div>
                 </div>
                 <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold" disabled={isCreatingOrder}>
@@ -77,7 +77,7 @@ export default function BuyPage() {
     try {
         const bonus = activeTab === 'bank' ? 5 : 6;
         const total = amount + (amount * bonus / 100);
-        const orderId = `LGPAY${Date.now()}`;
+        const orderId = `FLEX${Date.now()}`;
         const ref = await addDoc(collection(firestore, 'users', user.uid, 'orders'), {
             userId: user.uid,
             orderId,
@@ -103,7 +103,7 @@ export default function BuyPage() {
             <ChevronLeft />
           </Link>
         </Button>
-        <h1 className="text-xl font-bold">Buy LG</h1>
+        <h1 className="text-xl font-bold">Buy FLEX</h1>
       </header>
       <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
         <TabsList className="grid grid-cols-3">
