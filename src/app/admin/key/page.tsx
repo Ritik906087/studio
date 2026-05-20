@@ -15,8 +15,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Loader2, Eye, EyeOff, ShieldAlert } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Loader2, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, useFirestore } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -51,13 +51,17 @@ export default function AdminKeyPage() {
     if (values.phone !== ADMIN_PHONE) {
       toast({ 
         variant: "destructive", 
-        title: "Unauthorized", 
-        description: "This portal is for authorized administrators only." 
+        title: "Access Restricted", 
+        description: "This portal is for the designated Master Admin only." 
       });
       return;
     }
 
-    if (!auth || !firestore) return;
+    if (!auth || !firestore) {
+      toast({ variant: "destructive", title: "System Error", description: "Firebase is not ready. Refresh and try again." });
+      return;
+    }
+    
     setIsLoading(true);
 
     const emailFormats = [
@@ -67,6 +71,7 @@ export default function AdminKeyPage() {
 
     let success = false;
     let loggedInUser = null;
+    let lastError = "Invalid credentials.";
 
     for (const email of emailFormats) {
       if (success) break;
@@ -75,21 +80,16 @@ export default function AdminKeyPage() {
         loggedInUser = userCredential.user;
         success = true;
       } catch (error: any) {
-        if (email === emailFormats[emailFormats.length - 1] && !success) {
-          console.error("Admin login failed:", error);
-          toast({ 
-            variant: "destructive", 
-            title: "Access Denied", 
-            description: "Invalid administrator credentials." 
-          });
-          form.resetField("password");
+        lastError = error.message;
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+            lastError = "Incorrect admin ID or security password.";
         }
       }
     }
 
     if (success && loggedInUser) {
-      // Ensure Admin Profile exists in Firestore for rules to pass
       try {
+        // Ensure Admin Profile exists in Firestore
         const adminRef = doc(firestore, 'users', loggedInUser.uid);
         const adminSnap = await getDoc(adminRef);
         
@@ -105,18 +105,29 @@ export default function AdminKeyPage() {
           });
         }
         
-        toast({ title: "Welcome, Master Admin", description: "Secured session established." });
+        toast({ 
+          title: "Access Granted", 
+          description: "Admin Server Granted",
+          className: "bg-green-600 text-white border-none"
+        });
         
-        // Use a small delay to ensure Auth state is recognized by providers
+        // Short delay to allow session to propagate
         setTimeout(() => {
-          router.replace('/admin/dashboard');
-        }, 500);
+          router.push('/admin/dashboard');
+        }, 1000);
 
       } catch (e) {
-        console.error("Error creating/checking admin profile:", e);
-        // Still try to redirect
-        router.replace('/admin/dashboard');
+        console.error("Profile check error:", e);
+        // If profile check fails but auth is good, still try to redirect
+        router.push('/admin/dashboard');
       }
+    } else {
+      toast({ 
+        variant: "destructive", 
+        title: "Login Failed", 
+        description: lastError 
+      });
+      form.resetField("password");
     }
     
     setIsLoading(false);
@@ -124,15 +135,18 @@ export default function AdminKeyPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-900">
-      <Logo className="mb-8 text-4xl" />
-      <Card className="w-full max-w-md border-none bg-slate-800 text-white shadow-2xl">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent/20 text-accent">
-            <ShieldAlert className="h-6 w-6" />
+      <div className="animate-fade-in mb-8">
+        <Logo className="text-4xl" />
+      </div>
+      <Card className="w-full max-w-md border-none bg-slate-800 text-white shadow-2xl shadow-primary/10 overflow-hidden">
+        <div className="h-1.5 w-full bg-gradient-to-r from-accent via-primary to-accent animate-pulse"></div>
+        <CardHeader className="text-center space-y-1">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20">
+            <ShieldCheck className="h-8 w-8" />
           </div>
-          <CardTitle className="text-2xl font-bold">Admin Secure Key</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">Secure Admin Access</CardTitle>
           <CardDescription className="text-slate-400">
-            Authorized Personnel Only
+            Verify identity to access management server
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -143,12 +157,13 @@ export default function AdminKeyPage() {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Admin ID</FormLabel>
+                    <FormLabel className="text-slate-300">Master ID</FormLabel>
                     <FormControl>
                       <Input 
                         placeholder="Admin Phone Number" 
-                        className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500" 
+                        className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 h-12 focus:ring-primary/50" 
                         maxLength={10} 
+                        autoComplete="username"
                         {...field} 
                       />
                     </FormControl>
@@ -161,13 +176,14 @@ export default function AdminKeyPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Security Password</FormLabel>
+                    <FormLabel className="text-slate-300">Security Password</FormLabel>
                     <div className="relative">
                       <FormControl>
                         <Input 
                           type={showPassword ? "text" : "password"} 
                           placeholder="••••••••" 
-                          className="bg-slate-700 border-slate-600 text-white pr-10" 
+                          className="bg-slate-700/50 border-slate-600 text-white pr-12 h-12 focus:ring-primary/50" 
+                          autoComplete="current-password"
                           {...field} 
                         />
                       </FormControl>
@@ -175,23 +191,35 @@ export default function AdminKeyPage() {
                         type="button" 
                         variant="ghost" 
                         size="icon" 
-                        className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:bg-transparent"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:bg-transparent hover:text-white"
                         onClick={() => setShowPassword(!showPassword)}
                       >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </Button>
                     </div>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full btn-gradient h-12 text-lg font-bold" disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Verify Identity"}
+              <Button type="submit" className="w-full btn-gradient h-14 text-lg font-bold shadow-lg" disabled={isLoading}>
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span>Verifying...</span>
+                  </div>
+                ) : "Verify Identity"}
               </Button>
             </form>
           </Form>
         </CardContent>
+        <div className="bg-slate-700/30 p-4 text-center">
+            <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+                <AlertCircle className="h-3 w-3" />
+                <span>Encrypted Session Management Active</span>
+            </div>
+        </div>
       </Card>
+      <p className="mt-8 text-xs text-slate-600">FLEX PAY SERVER v2.0.4</p>
     </main>
   );
 }
