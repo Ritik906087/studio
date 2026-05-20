@@ -101,7 +101,7 @@ const StatCard = ({ title, value, icon: Icon, colorClass }: { title: string, val
 
 
 export default function TeamPage() {
-    const { user, profile } = useUser();
+    const { user } = useUser();
     const firestore = useFirestore();
     const [l1Agents, setL1Agents] = useState<UserProfile[]>([]);
     const [l2Agents, setL2Agents] = useState<UserProfile[]>([]);
@@ -131,6 +131,9 @@ export default function TeamPage() {
                 setL2Agents(l2Snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
             }
             setLoading(false);
+        }, (error) => {
+            console.error("L1 Agents Listener Error:", error);
+            setLoading(false);
         });
 
         // Fetch Total Team Income for the current user
@@ -141,6 +144,8 @@ export default function TeamPage() {
         const unsubscribeIncome = onSnapshot(incomeQuery, (snap) => {
             const income = snap.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
             setSelfIncome(income);
+        }, (error) => {
+            console.error("Team Income Listener Error:", error);
         });
 
         return () => {

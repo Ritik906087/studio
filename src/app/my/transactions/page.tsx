@@ -110,7 +110,6 @@ export default function AllTransactionsPage() {
 
         setLoading(true);
 
-        // Fetch subcollections in real-time
         const buyRef = collection(firestore, 'users', user.uid, 'orders');
         const sellRef = collection(firestore, 'users', user.uid, 'sellOrders');
         const txRef = collection(firestore, 'users', user.uid, 'transactions');
@@ -118,16 +117,25 @@ export default function AllTransactionsPage() {
         const unsubBuy = onSnapshot(query(buyRef, orderBy('createdAt', 'desc'), limit(50)), (snap) => {
             const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id, transactionType: 'buy' } as any));
             updateState(data, 'buy');
+        }, (error) => {
+            console.error("Buy Trans Listener Error:", error);
+            setLoading(false);
         });
 
         const unsubSell = onSnapshot(query(sellRef, orderBy('createdAt', 'desc'), limit(50)), (snap) => {
             const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id, transactionType: 'sell' } as any));
             updateState(data, 'sell');
+        }, (error) => {
+            console.error("Sell Trans Listener Error:", error);
+            setLoading(false);
         });
 
         const unsubTx = onSnapshot(query(txRef, orderBy('createdAt', 'desc'), limit(50)), (snap) => {
             const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id, transactionType: 'invite' } as any));
             updateState(data, 'invite');
+        }, (error) => {
+            console.error("Misc Trans Listener Error:", error);
+            setLoading(false);
         });
 
         const updateState = (newData: Transaction[], type: string) => {

@@ -4,36 +4,41 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Helper to check if user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
     // Helper to check if user is admin (using the phone number for this prototype)
     function isAdmin() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+      return isSignedIn() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phoneNumber == '9060873927';
     }
 
     match /users/{userId} {
-      // Users can read any profile (needed for team/invite logic)
-      allow read: if request.auth != null;
+      // Users can read their own profile. We allow 'get' for any profile to support ID lookups,
+      // but 'list' is restricted.
+      allow get: if isSignedIn();
+      allow list: if isAdmin() || (isSignedIn() && (request.auth.uid == userId || request.query.limit <= 100));
+      
       // Users can only write to their own profile, Admins can write to any
-      allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       
       match /orders/{orderId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       }
       
       match /sellOrders/{orderId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
+        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       }
       
       match /transactions/{transactionId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
+        allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow write: if isAdmin();
       }
       
       match /dailyRewards/{date} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
     }
 
@@ -48,24 +53,24 @@ service cloud.firestore {
     }
     
     match /reports/{reportId} {
-      allow create: if request.auth != null;
-      allow read, update: if request.auth != null || isAdmin();
+      allow create: if isSignedIn();
+      allow read, update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
     
     match /feedback/{feedbackId} {
-      allow create: if request.auth != null;
+      allow create: if isSignedIn();
       allow read: if isAdmin();
     }
 
-    // Rules for Collection Group queries used in admin panel and team page
+    // Rules for Collection Group queries
     match /{path=**}/orders/{orderId} {
-      allow read: if request.auth != null;
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
     match /{path=**}/sellOrders/{orderId} {
-      allow read: if request.auth != null;
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
     match /{path=**}/transactions/{transactionId} {
-      allow read: if request.auth != null;
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
   }
 }

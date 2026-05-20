@@ -1,3 +1,4 @@
+
 'use client';
 import {
   Card,
@@ -16,12 +17,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
   History,
   Clock,
 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
 import React, { useEffect, useState, useCallback } from 'react';
@@ -31,7 +29,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Logo } from '@/components/logo';
 
 const GlassCard = ({ children, className }: { children: React.ReactNode, className?: string }) => (
@@ -140,10 +138,16 @@ export default function HomePage() {
     const unsubBuy = onSnapshot(buyQuery, (snap) => {
         setInProgressBuyOrders(snap.docs.map(d => ({ id: d.id, ...d.data(), type: 'buy' })));
         setOrdersLoading(false);
+    }, (error) => {
+        console.error("Buy Orders Listener Error:", error);
+        setOrdersLoading(false);
     });
 
     const unsubSell = onSnapshot(sellQuery, (snap) => {
         setInProgressSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data(), type: 'sell' })));
+        setOrdersLoading(false);
+    }, (error) => {
+        console.error("Sell Orders Listener Error:", error);
         setOrdersLoading(false);
     });
 
@@ -153,8 +157,12 @@ export default function HomePage() {
   const handleOrderExpire = useCallback(async (orderId: string, type: 'buy' | 'sell', status: string) => {
     if (!user || !firestore) return;
     if (type === 'buy' && status === 'pending_confirmation') {
-        await updateDoc(doc(firestore, 'users', user.uid, 'orders', orderId), { status: 'in_applied' });
-        toast({ title: 'Order Under Review', description: 'System is busy. Please wait for admin review.' });
+        try {
+            await updateDoc(doc(firestore, 'users', user.uid, 'orders', orderId), { status: 'in_applied' });
+            toast({ title: 'Order Under Review', description: 'System is busy. Please wait for admin review.' });
+        } catch (e) {
+            console.error("Failed to update expired order status", e);
+        }
     }
   }, [user, firestore, toast]);
 
