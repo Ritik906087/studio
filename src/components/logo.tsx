@@ -4,12 +4,15 @@ export function Logo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "font-headline font-black tracking-tighter italic",
+        "font-headline font-black tracking-tighter italic flex items-center gap-1",
         className
       )}
     >
+      <div className="bg-primary p-1 rounded-sm">
+        <span className="text-white">F</span>
+      </div>
       <span className="text-gradient drop-shadow-sm">
-        FLEX PAY
+        LEX PAY
       </span>
     </div>
   );

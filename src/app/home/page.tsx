@@ -1,4 +1,3 @@
-
 'use client';
 import {
   Card,
@@ -19,6 +18,9 @@ import {
 import {
   History,
   Clock,
+  TrendingUp,
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
@@ -33,7 +35,7 @@ import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/f
 import { Logo } from '@/components/logo';
 
 const GlassCard = ({ children, className }: { children: React.ReactNode, className?: string }) => (
-  <Card className={cn("border bg-white rounded-2xl shadow-sm", className)}>
+  <Card className={cn("border bg-white rounded-2xl shadow-sm border-blue-50", className)}>
     {children}
   </Card>
 );
@@ -84,42 +86,38 @@ const InProgressOrderCard = ({ order, onExpire }: { order: any, onExpire: (order
 
     if (isBuy) {
         if (order.status === 'pending_payment') {
-            buttonText = "Complete Payment";
+            buttonText = "Pay Now";
             buttonLink = `/buy/confirm/${order.id}?type=${order.paymentType}&provider=${order.paymentProvider}`;
             expiryTimestamp = new Date(order.createdAt.toMillis() + 10 * 60000).toISOString();
         } else if (order.status === 'pending_confirmation') {
-            buttonText = "View Order";
+            buttonText = "Checking";
             buttonLink = `/order/${order.id}`;
-            statusText = "Confirmation";
+            statusText = "Verification";
             if (order.submittedAt) expiryTimestamp = new Date(order.submittedAt.toMillis() + 30 * 60000).toISOString();
         }
     } else {
-        buttonText = "View Status";
+        buttonText = "Status";
         buttonLink = `/order/sell/${order.id}`;
     }
 
     return (
-        <Card className="bg-secondary/50">
-            <CardContent className="p-3">
-                <div className="flex items-start justify-between gap-4">
-                    <div className="flex-grow space-y-1">
-                        <p className="font-bold text-lg">{currencySymbol}{displayAmount}</p>
-                        <div className="flex items-center gap-2">
-                             <p className="text-xs text-muted-foreground capitalize">{statusText}</p>
-                             {expiryTimestamp && <Countdown expiryTimestamp={expiryTimestamp} onExpire={() => onExpire(order.id, order.type, order.status)} />}
-                        </div>
-                    </div>
-                    <Button asChild size="sm" className="font-bold flex-shrink-0">
-                        <Link href={buttonLink}>{buttonText}</Link>
-                    </Button>
+        <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3 flex items-center justify-between">
+            <div className="space-y-1">
+                <p className="font-bold text-lg text-primary">{currencySymbol}{displayAmount}</p>
+                <div className="flex items-center gap-2">
+                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{statusText}</p>
+                     {expiryTimestamp && <Countdown expiryTimestamp={expiryTimestamp} onExpire={() => onExpire(order.id, order.type, order.status)} />}
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+            <Button asChild size="sm" className="font-bold bg-primary hover:bg-primary/90 text-white rounded-full px-5">
+                <Link href={buttonLink}>{buttonText}</Link>
+            </Button>
+        </div>
     );
 };
 
 export default function HomePage() {
-  const plugin = React.useRef(Autoplay({ delay: 2000, stopOnInteraction: false }));
+  const plugin = React.useRef(Autoplay({ delay: 3000, stopOnInteraction: false }));
   const { user, profile, loading: userLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -170,28 +168,52 @@ export default function HomePage() {
   }, [user, firestore, toast]);
 
   return (
-    <div className="flex flex-col pb-24 text-foreground">
-      <header className="flex items-center justify-between p-4 bg-white">
-        <div className="flex items-center gap-2">
-            <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/InShot_20260110_205628399.png?alt=media&token=5d466aa9-095b-495f-92e8-95f3b59b4367" width={32} height={32} alt="Logo" />
-            <Logo className="text-xl" />
+    <div className="flex flex-col pb-24 text-foreground bg-slate-50 min-h-screen">
+      <header className="flex items-center justify-between p-4 bg-white border-b sticky top-0 z-50">
+        <Logo className="text-xl" />
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-50 px-3 py-1 rounded-full border border-blue-100 flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5 text-primary fill-primary" />
+            <span className="text-xs font-bold text-primary">v2.5</span>
+          </div>
         </div>
       </header>
 
-      <main className="flex-grow space-y-6 p-4 pt-2">
-        <GlassCard>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">Total FLEX Balance</p>
-            <p className="text-3xl font-bold">{profile?.balance?.toFixed(2) || '0.00'} <span className="text-2xl font-medium">FP</span></p>
+      <main className="flex-grow space-y-6 p-4">
+        <Card className="border-none bg-gradient-to-br from-primary to-blue-700 text-white rounded-3xl shadow-xl shadow-blue-200 overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-8 opacity-10">
+            <TrendingUp className="h-32 w-32" />
+          </div>
+          <CardContent className="p-6 relative z-10">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-white/70 text-sm font-medium">Total Balance</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <p className="text-4xl font-black">{profile?.balance?.toFixed(2) || '0.00'}</p>
+                  <span className="text-xl font-bold opacity-80">FP</span>
+                </div>
+              </div>
+              <div className="h-10 w-10 bg-white/20 rounded-full flex items-center justify-center">
+                <ShieldCheck className="h-6 w-6 text-white" />
+              </div>
+            </div>
+            <div className="mt-6 flex gap-4 text-xs font-medium text-white/80">
+              <div className="bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
+                1 FP ≈ 1 INR
+              </div>
+              <div className="bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
+                Secure SSL
+              </div>
+            </div>
           </CardContent>
-        </GlassCard>
+        </Card>
 
         <Carousel className="w-full" plugins={[plugin.current]}>
           <CarouselContent>
             {[1, 2, 3].map((i) => (
               <CarouselItem key={i}>
-                <Card className="overflow-hidden rounded-2xl border-none">
-                  <Image src={`https://picsum.photos/seed/${i}/600/300`} alt="Banner" width={600} height={300} className="w-full object-cover" data-ai-hint="banner promo" />
+                <Card className="overflow-hidden rounded-2xl border-none shadow-md">
+                  <Image src={`https://picsum.photos/seed/${i+10}/600/300`} alt="Banner" width={600} height={300} className="w-full object-cover h-32" data-ai-hint="business banner" />
                 </Card>
               </CarouselItem>
             ))}
@@ -199,34 +221,37 @@ export default function HomePage() {
         </Carousel>
 
         <div className="grid grid-cols-2 gap-4">
-          <Button asChild className="h-16 btn-gradient text-lg"><Link href="/buy">Buy FLEX</Link></Button>
-          <Button asChild variant="outline" className="h-16 border-green-200 bg-green-50 text-green-800 text-lg hover:bg-green-100"><Link href="/sell">Sell FLEX</Link></Button>
+          <Button asChild className="h-14 btn-gradient text-lg rounded-2xl"><Link href="/buy">Add Funds</Link></Button>
+          <Button asChild variant="outline" className="h-14 border-blue-200 bg-white text-primary text-lg hover:bg-blue-50 rounded-2xl shadow-sm"><Link href="/sell">Withdraw</Link></Button>
         </div>
         
-        <GlassCard>
-            {ordersLoading ? (
-                <CardContent className="p-8 flex items-center justify-center"><Loader size="sm" /></CardContent>
-            ) : (inProgressBuyOrders.length + inProgressSellOrders.length > 0) ? (
-                <CardContent className="p-3 space-y-3">
-                    {[...inProgressBuyOrders, ...inProgressSellOrders].map(o => (
-                        <InProgressOrderCard key={o.id} order={o} onExpire={handleOrderExpire} />
-                    ))}
-                </CardContent>
-            ) : (
-                <CardContent className="p-8 flex flex-col items-center justify-center text-muted-foreground">
-                    <History className="h-10 w-10 mb-2 opacity-30" /><p className="text-sm">No orders in progress</p>
-                </CardContent>
-            )}
-        </GlassCard>
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest pl-1">Active Operations</h3>
+          <GlassCard className="rounded-2xl">
+              {ordersLoading ? (
+                  <CardContent className="p-8 flex items-center justify-center"><Loader size="sm" /></CardContent>
+              ) : (inProgressBuyOrders.length + inProgressSellOrders.length > 0) ? (
+                  <CardContent className="p-3 space-y-3">
+                      {[...inProgressBuyOrders, ...inProgressSellOrders].map(o => (
+                          <InProgressOrderCard key={o.id} order={o} onExpire={handleOrderExpire} />
+                      ))}
+                  </CardContent>
+              ) : (
+                  <CardContent className="p-8 flex flex-col items-center justify-center text-muted-foreground">
+                      <Zap className="h-10 w-10 mb-2 opacity-20" /><p className="text-sm font-medium">Ready for transactions</p>
+                  </CardContent>
+              )}
+          </GlassCard>
+        </div>
 
         <div className="space-y-4">
-           <h2 className="text-center text-lg font-semibold">FAQs</h2>
+           <h2 className="text-center text-sm font-bold text-slate-400 uppercase tracking-widest">Help & Support</h2>
             <Accordion type="single" collapsible className="w-full space-y-2">
               {faqs.map((faq, index) => (
                 <AccordionItem key={index} value={`item-${index}`} className="border-none">
-                    <GlassCard className="rounded-xl">
-                      <AccordionTrigger className="p-4 text-left font-semibold">{faq.question}</AccordionTrigger>
-                      <AccordionContent className="px-4 pb-4 text-muted-foreground">{faq.answer}</AccordionContent>
+                    <GlassCard className="rounded-xl border-none shadow-sm overflow-hidden">
+                      <AccordionTrigger className="p-4 text-left font-bold text-slate-700 hover:no-underline">{faq.question}</AccordionTrigger>
+                      <AccordionContent className="px-4 pb-4 text-slate-500 font-medium">{faq.answer}</AccordionContent>
                     </GlassCard>
                 </AccordionItem>
               ))}

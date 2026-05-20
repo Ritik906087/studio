@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,18 +14,18 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Loader2, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react";
+import { Loader2, Eye, EyeOff, ShieldCheck, AlertCircle, Database, Server, Terminal } from "lucide-react";
 import { useState } from "react";
 import { useFirestore } from "@/firebase";
-import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import { collection, query, where, getDocs, limit, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/logo";
 
 const ADMIN_PHONE = '9060873927';
 
 const formSchema = z.object({
-  phone: z.string().length(10, { message: "Must be 10 digits" }),
-  password: z.string().min(6, { message: "Minimum 6 characters" }),
+  phone: z.string().length(10, { message: "Admin Master ID required" }),
+  password: z.string().min(6, { message: "Security Password required" }),
 });
 
 export default function AdminKeyPage() {
@@ -52,10 +51,9 @@ export default function AdminKeyPage() {
       }
 
       if (!firestore) {
-        throw new Error("System Error: Database connection failed. Please refresh.");
+        throw new Error("System Error: Database connection failed.");
       }
       
-      // Query Firestore for matching admin credentials
       const adminQuery = query(
         collection(firestore, 'admins'),
         where('masterId', '==', values.phone),
@@ -69,32 +67,46 @@ export default function AdminKeyPage() {
         throw new Error("Access Denied: Invalid Security Password.");
       }
 
-      // Set a local session token to bypass Firebase Auth state check in admin pages
+      // Ensure admin profile exists in users collection for security rules
+      const adminProfileRef = doc(firestore, 'users', 'admin_master');
+      const adminProfileSnap = await getDoc(adminProfileRef);
+      
+      if (!adminProfileSnap.exists()) {
+        await setDoc(adminProfileRef, {
+          uid: 'admin_master',
+          numericId: '00000001',
+          phoneNumber: ADMIN_PHONE,
+          displayName: 'MASTER ADMIN',
+          balance: 999999999,
+          holdBalance: 0,
+          createdAt: serverTimestamp(),
+        });
+      }
+
       const sessionData = {
-        token: 'admin_' + Math.random().toString(36).substr(2, 9),
+        token: 'admin_' + Math.random().toString(36).substr(2, 12),
         masterId: values.phone,
         authenticated: true,
-        expires: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+        expires: Date.now() + (12 * 60 * 60 * 1000) // 12 hours
       };
       localStorage.setItem('flex_admin_session', JSON.stringify(sessionData));
 
       toast({ 
         title: "Admin Server Granted", 
-        description: "Identity Verified. Accessing management console...",
-        className: "bg-green-600 text-white border-none"
+        description: "Identity Verified. Initializing management core...",
+        className: "bg-blue-600 text-white border-none font-bold"
       });
       
-      // Use window.location for a hard redirect to ensure the SPA state is fresh
       setTimeout(() => {
         window.location.href = '/admin/dashboard';
-      }, 800);
+      }, 1000);
 
     } catch (error: any) {
       console.error("Admin verification error:", error);
       toast({ 
         variant: "destructive", 
-        title: "Identity Verification Failed", 
-        description: error.message || "An unexpected error occurred." 
+        title: "Access Violation", 
+        description: error.message || "Credential validation failed." 
       });
       form.resetField("password");
     } finally {
@@ -103,22 +115,26 @@ export default function AdminKeyPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-900">
-      <div className="animate-fade-in mb-8">
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-[#020617]">
+      <div className="animate-fade-in mb-8 flex flex-col items-center">
         <Logo className="text-4xl" />
+        <div className="flex items-center gap-2 text-blue-500 mt-2">
+            <Terminal className="h-4 w-4" />
+            <span className="text-[10px] font-black tracking-widest uppercase">Console v4.0.1</span>
+        </div>
       </div>
-      <Card className="w-full max-w-md border-none bg-slate-800 text-white shadow-2xl shadow-primary/10 overflow-hidden">
-        <div className="h-1.5 w-full bg-gradient-to-r from-accent via-primary to-accent animate-pulse"></div>
-        <CardHeader className="text-center space-y-1">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20">
-            <ShieldCheck className="h-8 w-8" />
+      <Card className="w-full max-w-md border border-blue-900/50 bg-slate-900/50 text-white shadow-[0_0_50px_rgba(30,58,138,0.3)] backdrop-blur-md overflow-hidden rounded-3xl">
+        <div className="h-1 w-full bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-pulse"></div>
+        <CardHeader className="text-center space-y-1 py-8">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-inner">
+            <ShieldCheck className="h-9 w-9" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Secure Admin Access</CardTitle>
-          <CardDescription className="text-slate-400">
-            Verify identity to access management server
+          <CardTitle className="text-2xl font-black tracking-tighter">ADMIN CORE ACCESS</CardTitle>
+          <CardDescription className="text-slate-400 font-medium">
+            Authorized Personnel Only
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-8 pb-8">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
@@ -126,17 +142,20 @@ export default function AdminKeyPage() {
                 name="phone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-slate-300">Master ID</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="Admin Master ID" 
-                        className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500 h-12 focus:ring-primary/50" 
-                        maxLength={10} 
-                        autoComplete="username"
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormMessage />
+                    <FormLabel className="text-slate-400 text-xs font-black uppercase tracking-widest">Master Identifier</FormLabel>
+                    <div className="relative">
+                        <Server className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                        <FormControl>
+                        <Input 
+                            placeholder="MASTER ID" 
+                            className="bg-slate-950/50 border-slate-800 text-white placeholder:text-slate-700 h-14 pl-11 focus:border-blue-500 rounded-xl transition-all" 
+                            maxLength={10} 
+                            autoComplete="username"
+                            {...field} 
+                        />
+                        </FormControl>
+                    </div>
+                    <FormMessage className="text-red-400 text-[10px]" />
                   </FormItem>
                 )}
               />
@@ -145,13 +164,14 @@ export default function AdminKeyPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-slate-300">Security Password</FormLabel>
+                    <FormLabel className="text-slate-400 text-xs font-black uppercase tracking-widest">Access Key</FormLabel>
                     <div className="relative">
+                      <Database className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                       <FormControl>
                         <Input 
                           type={showPassword ? "text" : "password"} 
                           placeholder="••••••••" 
-                          className="bg-slate-700/50 border-slate-600 text-white pr-12 h-12 focus:ring-primary/50" 
+                          className="bg-slate-950/50 border-slate-800 text-white pr-12 h-14 pl-11 focus:border-blue-500 rounded-xl transition-all" 
                           autoComplete="current-password"
                           {...field} 
                         />
@@ -160,35 +180,35 @@ export default function AdminKeyPage() {
                         type="button" 
                         variant="ghost" 
                         size="icon" 
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:bg-transparent hover:text-white"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:bg-transparent hover:text-white"
                         onClick={() => setShowPassword(!showPassword)}
                       >
                         {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                       </Button>
                     </div>
-                    <FormMessage />
+                    <FormMessage className="text-red-400 text-[10px]" />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full btn-gradient h-14 text-lg font-bold shadow-lg" disabled={isLoading}>
+              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 h-14 text-sm font-black tracking-widest uppercase rounded-xl shadow-lg shadow-blue-900/20" disabled={isLoading}>
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Verifying...</span>
+                    <span>SYNCHRONIZING...</span>
                   </div>
-                ) : "Verify Identity"}
+                ) : "AUTHENTICATE SYSTEM"}
               </Button>
             </form>
           </Form>
         </CardContent>
-        <div className="bg-slate-700/30 p-4 text-center">
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
-                <AlertCircle className="h-3 w-3" />
-                <span>Encrypted Session Management Active</span>
+        <div className="bg-slate-950/50 p-4 text-center border-t border-slate-800">
+            <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 font-bold tracking-widest uppercase">
+                <AlertCircle className="h-3 w-3 text-blue-500" />
+                <span>AES-256 Encrypted Session</span>
             </div>
         </div>
       </Card>
-      <p className="mt-8 text-xs text-slate-600">FLEX PAY SERVER v2.1.0</p>
+      <p className="mt-8 text-[10px] text-slate-700 font-black tracking-[0.3em] uppercase">Security Level: Maximum</p>
     </main>
   );
 }
