@@ -56,7 +56,7 @@ export function RegisterForm() {
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     if (!auth || !firestore) {
-      toast({ variant: "destructive", title: "System Error", description: "Firebase is not initialized." });
+      toast({ variant: "destructive", title: "System Error", description: "Firebase is not initialized. Please check your configuration." });
       return;
     }
     setIsLoading(true);
@@ -86,7 +86,7 @@ export function RegisterForm() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
 
-        // 4. Generate a unique-ish numeric ID
+        // 4. Generate a unique 8-digit numeric ID
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
         // 5. Create Firestore Profile
@@ -104,18 +104,11 @@ export function RegisterForm() {
             createdAt: serverTimestamp(),
         });
 
-        toast({ title: "Registration Successful", description: "Please log in with your new account." });
-        
-        // Sign out automatically after registration to force standard login
-        await signOut(auth);
-        router.push("/login");
+        toast({ title: "Registration Successful", description: "Your account has been created." });
+        router.push("/home");
     } catch (error: any) {
       console.error("Registration failed:", error);
-      let errorMessage = error.message;
-      if (error.code === 'auth/email-already-in-use') {
-          errorMessage = "An account with this phone number already exists.";
-      }
-      toast({ variant: "destructive", title: "Registration Failed", description: errorMessage });
+      toast({ variant: "destructive", title: "Registration Failed", description: error.message });
     } finally {
       setIsLoading(false);
     }

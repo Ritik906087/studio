@@ -26,10 +26,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!auth) {
-      if (typeof window !== 'undefined') {
-        setLoading(false);
-      }
-      return;
+      // If auth is null, we can't do anything yet.
+      // But we set loading false if we're sure it won't be initialized.
+      const timer = setTimeout(() => {
+        if (!auth) setLoading(false);
+      }, 2000);
+      return () => clearTimeout(timer);
     }
 
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
@@ -45,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user || !firestore) {
-      if (!user) setLoading(false);
+      if (!user && !loading) setLoading(false);
       return;
     };
 

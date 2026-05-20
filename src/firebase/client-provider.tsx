@@ -1,22 +1,21 @@
 'use client';
 
 import React, { ReactNode, useMemo } from 'react';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { firebaseConfig } from './config';
 import { FirebaseProvider } from './provider';
 
 export const FirebaseClientProvider = ({ children }: { children: ReactNode }) => {
   const firebase = useMemo(() => {
-    // Only initialize on the client
     if (typeof window === 'undefined') return null;
 
     try {
-      // Don't initialize if API key is explicitly 'undefined' as string or empty
+      // Check if we have at least an API key to attempt initialization
       if (!firebaseConfig.apiKey || firebaseConfig.apiKey === 'undefined') {
-        console.warn("Firebase configuration is missing or incomplete. Please check your environment variables.");
+        console.error("Firebase API Key is missing. Check your environment variables.");
         return null;
       }
       
@@ -32,6 +31,8 @@ export const FirebaseClientProvider = ({ children }: { children: ReactNode }) =>
     }
   }, []);
 
+  // We always render children to prevent a blank screen, 
+  // but hooks inside will receive null services if firebase is null.
   return (
     <FirebaseProvider
       app={firebase?.app || null}
