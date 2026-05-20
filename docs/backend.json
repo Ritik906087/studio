@@ -1,6 +1,22 @@
 
 {
   "entities": {
+    "AdminCredential": {
+      "title": "Admin Credential",
+      "description": "Secure storage for admin Master ID and password.",
+      "type": "object",
+      "properties": {
+        "masterId": {
+          "type": "string",
+          "description": "The unique numeric ID for admin access."
+        },
+        "password": {
+          "type": "string",
+          "description": "The secure password for the admin portal."
+        }
+      },
+      "required": ["masterId", "password"]
+    },
     "UserProfile": {
       "title": "User Profile",
       "description": "Represents a user's profile in the application.",
@@ -17,7 +33,7 @@
         "email": {
           "type": "string",
           "format": "email",
-          "description": "The user's email address."
+          "description": "The user's email address, derived from their phone number."
         },
         "displayName": {
           "type": "string",
@@ -47,20 +63,35 @@
         },
         "paymentMethods": {
           "type": "array",
-          "description": "A list of the user's linked payment methods.",
+          "description": "A list of the user's linked payment methods (UPI or Bank).",
           "items": {
             "type": "object",
             "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["upi", "bank"]
+              },
               "name": {
                 "type": "string",
-                "description": "The name of the payment method (e.g., PhonePe, Paytm)."
+                "description": "The name of the UPI provider or Bank."
               },
               "upiId": {
-                "type": "string",
-                "description": "The user's UPI ID for that payment method."
+                "type": "string"
+              },
+              "bankName": {
+                "type": "string"
+              },
+              "accountHolderName": {
+                "type": "string"
+              },
+              "accountNumber": {
+                "type": "string"
+              },
+              "ifscCode": {
+                "type": "string"
               }
             },
-            "required": ["name", "upiId"]
+            "required": ["type", "name"]
           }
         },
         "inviterUid": {
@@ -149,7 +180,7 @@
         "paymentType": {
           "type": "string",
           "description": "The payment method type chosen by the user.",
-          "enum": ["bank", "upi", "usdt", "p2p_upi"]
+          "enum": ["bank", "upi", "usdt", "p2p_upi", "p2p_bank"]
         },
         "paymentProvider": {
           "type": "string",
@@ -163,12 +194,17 @@
             "type": "string",
             "description": "The UID of the seller in a P2P transaction."
         },
-        "sellerUpiDetails": {
+        "sellerWithdrawalDetails": {
             "type": "object",
-            "description": "The UPI details of the seller in a P2P transaction.",
+            "description": "The withdrawal details of the seller in a P2P transaction.",
             "properties": {
+                "type": { "type": "string", "enum": ["upi", "bank"] },
                 "name": { "type": "string" },
-                "upiId": { "type": "string" }
+                "upiId": { "type": "string" },
+                "bankName": { "type": "string" },
+                "accountHolderName": { "type": "string" },
+                "accountNumber": { "type": "string" },
+                "ifscCode": { "type": "string" }
             }
         },
         "status": {
@@ -247,18 +283,33 @@
         },
         "withdrawalMethod": {
           "type": "object",
-          "description": "The UPI method chosen by the user for withdrawal.",
+          "description": "The method chosen by the user for withdrawal.",
           "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["upi", "bank"]
+            },
             "name": {
               "type": "string",
-              "description": "The name of the UPI provider (e.g., PhonePe)."
+              "description": "The name of the UPI provider or Bank."
             },
             "upiId": {
-              "type": "string",
-              "description": "The UPI ID for withdrawal."
+              "type": "string"
+            },
+            "bankName": {
+              "type": "string"
+            },
+            "accountHolderName": {
+              "type": "string"
+            },
+            "accountNumber": {
+              "type": "string"
+            },
+            "ifscCode": {
+              "type": "string"
             }
           },
-          "required": ["name", "upiId"]
+          "required": ["type", "name"]
         },
         "status": {
           "type": "string",
@@ -523,6 +574,12 @@
     "providers": ["email", "phone"]
   },
   "firestore": {
+    "/admins/{adminId}": {
+      "schema": {
+        "$ref": "#/entities/AdminCredential"
+      },
+      "description": "Stores admin login credentials (Master ID and Password)."
+    },
     "/users/{userId}": {
       "schema": {
         "$ref": "#/entities/UserProfile"
