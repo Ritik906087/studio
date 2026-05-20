@@ -120,7 +120,7 @@ const InProgressOrderCard = ({ order, onExpire }: { order: any, onExpire: (order
 
 export default function HomePage() {
   const plugin = React.useRef(Autoplay({ delay: 2000, stopOnInteraction: false }));
-  const { user, profile } = useUser();
+  const { user, profile, loading: userLoading } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
   
@@ -129,7 +129,10 @@ export default function HomePage() {
   const [ordersLoading, setOrdersLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || !firestore) return;
+    if (!user || !firestore) {
+        if (!userLoading) setOrdersLoading(false);
+        return;
+    }
     setOrdersLoading(true);
 
     const buyQuery = query(collection(firestore, 'users', user.uid, 'orders'), where('status', 'in', ['pending_payment', 'pending_confirmation', 'in_applied']));
@@ -152,7 +155,7 @@ export default function HomePage() {
     });
 
     return () => { unsubBuy(); unsubSell(); };
-  }, [user, firestore]);
+  }, [user, userLoading, firestore]);
 
   const handleOrderExpire = useCallback(async (orderId: string, type: 'buy' | 'sell', status: string) => {
     if (!user || !firestore) return;

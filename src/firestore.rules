@@ -12,17 +12,20 @@ service cloud.firestore {
     // Helper to check if user is admin (using the phone number for this prototype)
     function isAdmin() {
       return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phoneNumber == '9060873927';
     }
 
     match /users/{userId} {
-      // Users can read their own profile. We allow 'get' for any profile to support ID lookups,
-      // but 'list' is restricted.
-      allow get: if isSignedIn();
-      allow list: if isAdmin() || (isSignedIn() && (request.auth.uid == userId || request.query.limit <= 100));
+      // Allow user to read their own profile. Admin can read all.
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Only admin can list the users collection
+      allow list: if isAdmin();
       
-      // Users can only write to their own profile, Admins can write to any
-      allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Allow registration (creation)
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      // Allow updates to own profile or by admin
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       
       match /orders/{orderId} {
         allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
@@ -48,6 +51,7 @@ service cloud.firestore {
     }
     
     match /chatRequests/{requestId} {
+      // Support public chat creation
       allow create: if true;
       allow read, update: if true;
     }

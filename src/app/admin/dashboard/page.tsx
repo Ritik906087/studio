@@ -35,37 +35,31 @@ type UserProfile = {
     inviterUid?: string;
 };
 
-type Order = {
-    id: string;
-    userId: string;
-    orderId: string;
-    amount: number;
-    status: 'pending_confirmation' | 'in_applied' | 'completed' | 'failed';
-    submittedAt?: any;
-    utr?: string;
-    screenshotURL?: string;
-    createdAt: any;
-};
-
 function AdminDashboard() {
     const router = useRouter();
     const { toast } = useToast();
     const firestore = useFirestore();
-    const { profile } = useUser();
+    const { profile, loading: profileLoading } = useUser();
     
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [isMasterAdmin, setIsMasterAdmin] = useState(false);
 
     useEffect(() => {
+        if (profileLoading) return;
+
         // Authenticate admin based on phone number from Firestore profile
         if (profile?.phoneNumber === ADMIN_PHONE) {
             setIsMasterAdmin(true);
         } else if (profile && profile.phoneNumber !== ADMIN_PHONE) {
             // Not an admin, redirect home
+            toast({ variant: 'destructive', title: "Access Denied", description: "You do not have permission to access the admin panel." });
             router.push('/home');
+        } else if (!profile && !profileLoading) {
+             // Not logged in or no profile, redirect to admin login
+             router.push('/admin/login');
         }
-    }, [profile, router]);
+    }, [profile, profileLoading, router, toast]);
 
     useEffect(() => {
         if (!firestore || !isMasterAdmin) return;
@@ -76,21 +70,28 @@ function AdminDashboard() {
             setLoading(false);
         }, (error) => {
             console.error("Admin Users Listener Error:", error);
+            if (error.code === 'permission-denied') {
+                toast({ variant: 'destructive', title: "Permission Error", description: "Unable to fetch users. Please check your admin status." });
+            }
             setLoading(false);
         });
 
         return () => {
             unsubUsers();
         };
-    }, [firestore, isMasterAdmin]);
+    }, [firestore, isMasterAdmin, toast]);
 
     const handleLogout = () => {
         document.cookie = 'admin-phone=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
         router.push('/admin/login');
     };
 
-    if (!isMasterAdmin && !loading) {
-        return <div className="flex h-screen items-center justify-center">Access Denied</div>;
+    if (profileLoading || (isMasterAdmin && loading && allUsers.length === 0)) {
+        return <div className="flex h-screen items-center justify-center"><Loader size="md" /></div>;
+    }
+
+    if (!isMasterAdmin) {
+        return <div className="flex h-screen items-center justify-center font-bold text-destructive">Access Denied</div>;
     }
 
     const totalUsers = allUsers.length;
@@ -100,12 +101,15 @@ function AdminDashboard() {
         <div className="flex min-h-screen w-full flex-col">
             <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-10 justify-between">
                 <Logo className="text-2xl" />
-                <Button onClick={handleLogout} variant="outline" size="sm">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Logout
-                </Button>
+                <div className="flex items-center gap-4">
+                    <span className="hidden md:inline text-sm font-medium text-muted-foreground">Admin: {profile?.displayName}</span>
+                    <Button onClick={handleLogout} variant="outline" size="sm">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Logout
+                    </Button>
+                </div>
             </header>
-            <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
+            <main className="flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
                 <Tabs defaultValue="dashboard" className="w-full md:grid md:grid-cols-[220px_1fr] lg:grid-cols-[250px_1fr] gap-6">
                     <TabsList className="w-full h-auto flex-row justify-start overflow-x-auto md:flex-col md:items-stretch md:justify-start">
                         <TabsTrigger value="dashboard" className="justify-start p-3"><LayoutDashboard className="mr-2" /> Dashboard</TabsTrigger>
@@ -161,6 +165,11 @@ function AdminDashboard() {
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
+                                                {allUsers.length === 0 && (
+                                                    <TableRow>
+                                                        <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">No users found.</TableCell>
+                                                    </TableRow>
+                                                )}
                                             </TableBody>
                                         </Table>
                                     )}

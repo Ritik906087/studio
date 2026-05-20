@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, createContext, useContext, ReactNode } from 'react';
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // But we set loading false if we're sure it won't be initialized.
       const timer = setTimeout(() => {
         if (!auth) setLoading(false);
-      }, 2000);
+      }, 3000);
       return () => clearTimeout(timer);
     }
 
@@ -64,6 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       (error) => {
         console.error("Profile listen error:", error);
+        // If profile document doesn't exist yet (e.g. newly registered), handle silently
+        if (error.code === 'permission-denied') {
+          console.warn("Permission denied for profile read. This is normal during registration or admin checks.");
+        }
         setLoading(false);
       }
     );
