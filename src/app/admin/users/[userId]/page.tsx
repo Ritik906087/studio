@@ -1,28 +1,24 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
-  CardFooter
+  CardTitle
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Wallet, ChevronLeft, Copy, Users, CheckCircle, XCircle } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ChevronLeft } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader } from '@/components/ui/loader';
 import { useFirestore } from '@/firebase';
-import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDocs, runTransaction, serverTimestamp, addDoc } from 'firebase/firestore';
+import { doc, onSnapshot, collection, runTransaction, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
@@ -31,14 +27,24 @@ export default function UserDetailsPage() {
     const params = useParams();
     const userId = params.userId as string;
     const firestore = useFirestore();
+    const router = useRouter();
     const { toast } = useToast();
     
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [amount, setAmount] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
+        // Simple local session check for admin
+        const sessionStr = localStorage.getItem('flex_admin_session');
+        if (!sessionStr) {
+            router.replace('/admin/key');
+            return;
+        }
+        setIsAdmin(true);
+
         if (!firestore || !userId) return;
 
         const unsub = onSnapshot(doc(firestore, 'users', userId), (snap) => {
@@ -49,7 +55,7 @@ export default function UserDetailsPage() {
         });
 
         return () => unsub();
-    }, [firestore, userId]);
+    }, [firestore, userId, router]);
 
     const handleUpdateBalance = async (type: 'add' | 'deduct') => {
         const val = parseFloat(amount);
@@ -86,6 +92,7 @@ export default function UserDetailsPage() {
         }
     };
 
+    if (!isAdmin) return null;
     if (loading) return <div className="p-8 flex justify-center"><Loader /></div>;
     if (!user) return <div className="p-8 text-center">User not found</div>;
 

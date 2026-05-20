@@ -18,9 +18,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Loader2, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, useFirestore } from "@/firebase";
-import { signInAnonymously } from "firebase/auth";
-import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/logo";
 
@@ -36,7 +35,6 @@ export default function AdminKeyPage() {
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const auth = useAuth();
   const firestore = useFirestore();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -57,20 +55,15 @@ export default function AdminKeyPage() {
       return;
     }
 
-    if (!auth || !firestore) {
-      toast({ variant: "destructive", title: "System Error", description: "Firebase is not ready. Refresh and try again." });
+    if (!firestore) {
+      toast({ variant: "destructive", title: "System Error", description: "Database is not ready. Refresh and try again." });
       return;
     }
     
     setIsLoading(true);
 
     try {
-      // 1. First, establish an anonymous session to talk to Firestore
-      const userCredential = await signInAnonymously(auth);
-      const user = userCredential.user;
-
-      // 2. Query the 'admins' collection for Master ID and Password
-      // This is a custom Firestore-based login as requested
+      // Direct Query to 'admins' collection for Master ID and Password
       const adminQuery = query(
         collection(firestore, 'admins'),
         where('masterId', '==', values.phone),
@@ -83,18 +76,12 @@ export default function AdminKeyPage() {
         throw new Error("Incorrect Master ID or Security Password.");
       }
 
-      // 3. Promote the anonymous user to Admin status by creating their user profile
-      // with the admin phone number. This satisfies the isAdmin() Security Rule.
-      const adminRef = doc(firestore, 'users', user.uid);
-      await setDoc(adminRef, {
-        uid: user.uid,
-        numericId: "00000000",
-        phoneNumber: ADMIN_PHONE,
-        displayName: "Master Admin",
-        balance: 0,
-        holdBalance: 0,
-        createdAt: serverTimestamp(),
-      }, { merge: true });
+      // Set a local session token to bypass Firebase Auth state check in admin pages
+      const sessionData = {
+        token: 'admin_' + Math.random().toString(36).substr(2, 9),
+        expires: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+      };
+      localStorage.setItem('flex_admin_session', JSON.stringify(sessionData));
 
       toast({ 
         title: "Access Granted", 
@@ -102,10 +89,7 @@ export default function AdminKeyPage() {
         className: "bg-green-600 text-white border-none"
       });
       
-      // Short delay to allow session and document creation to propagate
-      setTimeout(() => {
-        router.push('/admin/dashboard');
-      }, 1000);
+      router.push('/admin/dashboard');
 
     } catch (error: any) {
       console.error("Admin verification error:", error);
@@ -206,7 +190,7 @@ export default function AdminKeyPage() {
             </div>
         </div>
       </Card>
-      <p className="mt-8 text-xs text-slate-600">FLEX PAY SERVER v2.0.5</p>
+      <p className="mt-8 text-xs text-slate-600">FLEX PAY SERVER v2.0.6</p>
     </main>
   );
 }

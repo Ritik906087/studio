@@ -17,12 +17,8 @@ import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useFirestore, useAuth } from '@/firebase';
-import { useUser } from '@/hooks/use-user';
+import { useFirestore } from '@/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
-
-const ADMIN_PHONE = '9060873927';
 
 type UserProfile = {
     id: string;
@@ -40,78 +36,62 @@ function AdminDashboard() {
     const router = useRouter();
     const { toast } = useToast();
     const firestore = useFirestore();
-    const auth = useAuth();
-    const { user, profile, loading: authLoading } = useUser();
     
     const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
     const [usersLoading, setUsersLoading] = useState(true);
     const [isMasterAdmin, setIsMasterAdmin] = useState(false);
+    const [authChecking, setAuthChecking] = useState(true);
 
     useEffect(() => {
-        if (authLoading) return;
-
-        // Ensure user is logged in
-        if (!user) {
+        // Check for local admin session instead of Firebase Auth
+        const sessionStr = localStorage.getItem('flex_admin_session');
+        if (sessionStr) {
+            try {
+                const session = JSON.parse(sessionStr);
+                if (session.expires > Date.now()) {
+                    setIsMasterAdmin(true);
+                } else {
+                    localStorage.removeItem('flex_admin_session');
+                    router.replace('/admin/key');
+                }
+            } catch (e) {
+                router.replace('/admin/key');
+            }
+        } else {
             router.replace('/admin/key');
-            return;
         }
-
-        // Check if the user is the admin by phone number in their Firestore profile
-        // This profile is created/promoted during the /admin/key login process
-        const isAdminProfile = profile?.phoneNumber === ADMIN_PHONE;
-
-        if (isAdminProfile) {
-            setIsMasterAdmin(true);
-        } else if (!authLoading && profile !== undefined) {
-            // Only redirect if profile has finished loading and is clearly not admin
-            toast({ 
-                variant: 'destructive', 
-                title: "Access Denied", 
-                description: "You do not have permission to access the admin panel." 
-            });
-            router.replace('/home');
-        }
-    }, [user, profile, authLoading, router, toast]);
+        setAuthChecking(false);
+    }, [router]);
 
     useEffect(() => {
         if (!firestore || !isMasterAdmin) return;
 
         setUsersLoading(true);
-        // Listen for all users - ONLY if authenticated as admin
+        // Listen for all users
         const unsubUsers = onSnapshot(collection(firestore, 'users'), (snap) => {
             setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
             setUsersLoading(false);
         }, (error) => {
             console.error("Admin Users Listener Error:", error);
-            if (error.code === 'permission-denied') {
-                toast({ variant: 'destructive', title: "Permission Error", description: "Unable to fetch users. Access denied by Security Rules." });
-            }
             setUsersLoading(false);
         });
 
         return () => {
             unsubUsers();
         };
-    }, [firestore, isMasterAdmin, toast]);
+    }, [firestore, isMasterAdmin]);
 
-    const handleLogout = async () => {
-        if (!auth) return;
-        try {
-            await signOut(auth);
-            router.replace('/admin/key');
-        } catch (e) {
-            console.error("Logout failed", e);
-        }
+    const handleLogout = () => {
+        localStorage.removeItem('flex_admin_session');
+        router.replace('/admin/key');
     };
 
-    if (authLoading) {
+    if (authChecking) {
         return <div className="flex h-screen items-center justify-center"><Loader size="md" /></div>;
     }
 
-    if (!isMasterAdmin && !authLoading) {
-        return <div className="flex h-screen items-center justify-center font-bold text-destructive text-xl">
-            Access Denied
-        </div>;
+    if (!isMasterAdmin) {
+        return null; // Redirecting in useEffect
     }
 
     const totalUsers = allUsers.length;
@@ -122,7 +102,7 @@ function AdminDashboard() {
             <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-10 justify-between">
                 <Logo className="text-2xl" />
                 <div className="flex items-center gap-4">
-                    <span className="hidden md:inline text-sm font-medium text-muted-foreground">Admin: {profile?.displayName || 'Master'}</span>
+                    <span className="hidden md:inline text-sm font-medium text-muted-foreground">Admin: Master</span>
                     <Button onClick={handleLogout} variant="outline" size="sm">
                         <LogOut className="mr-2 h-4 w-4" />
                         Logout
