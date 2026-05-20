@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,7 +20,8 @@ import Image from "next/image";
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { auth } from "@/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -52,48 +52,26 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!auth) return;
     setIsLoading(true);
     const derivedEmail = `91${values.phone}@lgpay.app`;
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: derivedEmail,
-        password: values.password,
-      });
-
-      if (error) {
-        if (error.message.includes('Invalid login credentials')) {
-          throw new Error("Incorrect phone number or password. Please check and try again, or register if you don't have an account.");
-        }
-        throw error;
-      }
-
-      if (!data.session) throw new Error("Login failed, please try again.");
-      
-      await postLoginSuccess(data.session, data.user.id);
-
+      await signInWithEmailAndPassword(auth, derivedEmail, values.password);
+      toast({ title: "Login Successful", description: "Welcome back!" });
+      router.push('/home');
     } catch (error: any) {
       console.error("Login failed:", error);
-      toast({
-        variant: "destructive",
-        title: "Login Failed",
-        description: error.message,
-      });
+      let msg = error.message;
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+        msg = "Incorrect phone number or password.";
+      }
+      toast({ variant: "destructive", title: "Login Failed", description: msg });
       form.resetField("password");
     } finally {
       setIsLoading(false);
     }
   }
-
-  async function postLoginSuccess(session: any, userId: string) {
-    toast({
-      title: "Login Successful",
-      description: "Welcome back!",
-    });
-
-    router.refresh();
-  }
-
 
   return (
     <Form {...form}>
@@ -106,22 +84,11 @@ export function LoginForm() {
               <FormLabel>{translations.phoneNumber}</FormLabel>
               <div className="relative flex items-center">
                  <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-muted-foreground">
-                  <Image
-                    src="https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg"
-                    width={20}
-                    height={14}
-                    alt="India Flag"
-                  />
+                  <Image src="https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg" width={20} height={14} alt="India Flag" />
                   <span>+91</span>
                 </div>
                 <FormControl>
-                  <Input
-                    type="tel"
-                    placeholder={translations.enterPhoneNumber}
-                    className="pl-[88px] text-base"
-                    maxLength={10}
-                    {...field}
-                  />
+                  <Input type="tel" placeholder={translations.enterPhoneNumber} className="pl-[88px] text-base" maxLength={10} {...field} />
                 </FormControl>
               </div>
               <FormMessage />
@@ -141,20 +108,9 @@ export function LoginForm() {
               </div>
               <div className="relative">
                 <FormControl>
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    placeholder={translations.enterPassword}
-                    className="pl-4 pr-10 text-base"
-                    {...field}
-                  />
+                  <Input type={showPassword ? "text" : "password"} placeholder={translations.enterPassword} className="pl-4 pr-10 text-base" {...field} />
                 </FormControl>
-                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1.5 top-1/2 h-auto -translate-y-1/2 p-1 text-accent/80 hover:bg-transparent hover:text-accent"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
+                 <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1/2 h-auto -translate-y-1/2 p-1 text-accent/80 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </Button>
               </div>
@@ -163,11 +119,7 @@ export function LoginForm() {
           )}
         />
         
-        <Button
-          type="submit"
-          className="w-full font-semibold btn-gradient rounded-full"
-          disabled={isLoading}
-        >
+        <Button type="submit" className="w-full font-semibold btn-gradient rounded-full" disabled={isLoading}>
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isLoading ? translations.loggingIn : translations.login}
         </Button>

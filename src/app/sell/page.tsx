@@ -1,286 +1,86 @@
-
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ChevronLeft, Info, Wallet, Landmark } from 'lucide-react';
+import { ChevronLeft, Info, Wallet } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useFirestore } from '@/firebase';
+import { collection, addDoc, doc, updateDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Loader } from '@/components/ui/loader';
-
-type WithdrawalMethod = {
-    type: 'upi' | 'bank';
-    name: string;
-    upiId?: string;
-    bankName?: string;
-    accountHolderName?: string;
-    accountNumber?: string;
-    ifscCode?: string;
-}
-
-type UserProfile = {
-  id: string;
-  balance: number;
-  holdBalance: number;
-  numericId: string;
-  phoneNumber: string;
-  paymentMethods?: WithdrawalMethod[];
-};
-
-
-const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
-  PhonePe: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f",
-    bgColor: "bg-violet-600",
-  },
-  Paytm: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8",
-    bgColor: "bg-sky-500",
-  },
-  MobiKwik: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7",
-    bgColor: "bg-blue-600",
-  },
-  Freecharge: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4",
-    bgColor: "bg-orange-500",
-  },
-  Airtel: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Airtel%2001.png?alt=media&token=357342fd-85df-43c1-a7fb-d9d57315df1d",
-    bgColor: "bg-red-500",
-  },
-};
 
 export default function SellPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { user } = useUser();
+  const { user, profile } = useUser();
+  const firestore = useFirestore();
 
   const [amount, setAmount] = useState('');
-  const [selectedMethod, setSelectedMethod] = useState<WithdrawalMethod | null>(null);
-  const [isAmountValid, setIsAmountValid] = useState(true);
+  const [selectedMethod, setSelectedMethod] = useState<any>(null);
   const [isSelling, setIsSelling] = useState(false);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
-  
-  useEffect(() => {
-    async function fetchProfile() {
-      if(!user) {
-        setProfileLoading(false);
-        return;
-      }
-      const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
-      setUserProfile(data as UserProfile);
-      setProfileLoading(false);
-    }
-    fetchProfile();
-  }, [user]);
-
-
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    // Allow only numbers
-    if (/^\d*$/.test(value)) {
-      setAmount(value);
-      const numValue = parseInt(value, 10);
-      if (value === '' || (numValue > 0 && numValue % 100 === 0)) {
-        setIsAmountValid(true);
-      } else {
-        setIsAmountValid(false);
-      }
-    }
-  };
 
   const handleSell = async () => {
-    const sellAmount = parseInt(amount, 10);
-    
-    if (!isAmountValid || !sellAmount || sellAmount <= 0) {
-        toast({ variant: 'destructive', title: 'Invalid Amount', description: 'Please enter a valid amount ending in 00.' });
-        return;
-    }
-    
-    if (!selectedMethod) {
-        toast({ variant: 'destructive', title: 'No method selected', description: 'Please select a withdrawal method.' });
-        return;
-    }
-
-    if (!userProfile || (userProfile.balance < sellAmount)) {
-        toast({ variant: 'destructive', title: 'Insufficient Balance', description: 'You do not have enough balance to make this transaction.' });
-        return;
-    }
-    
-    if (!user) return;
+    const val = parseInt(amount);
+    if (!val || val < 100 || val % 100 !== 0) { toast({ title: "Invalid Amount", description: "Must be multiple of 100" }); return; }
+    if (!selectedMethod) { toast({ title: "No method", description: "Select payment method" }); return; }
+    if (!profile || profile.balance < val) { toast({ title: "Insufficient balance", variant: "destructive" }); return; }
+    if (!user || !firestore) return;
 
     setIsSelling(true);
-
     try {
-        const { error } = await supabase.rpc('create_sell_order', {
-            p_user_id: user.id,
-            p_amount: sellAmount,
-            p_withdrawal_method: selectedMethod,
-        });
+        await runTransaction(firestore, async (transaction) => {
+            const userRef = doc(firestore, 'users', user.uid);
+            const userSnap = await transaction.get(userRef);
+            const currentBalance = userSnap.data()?.balance || 0;
+            if (currentBalance < val) throw new Error("Insufficient balance");
 
-        if (error) throw error;
-        
-        toast({
-            title: 'Sell Order Placed!',
-            description: `Your request to sell ${sellAmount} LGB is being processed.`,
+            transaction.update(userRef, { balance: currentBalance - val });
+            const sellRef = doc(collection(firestore, 'users', user.uid, 'sellOrders'));
+            transaction.set(sellRef, {
+                userId: user.uid,
+                orderId: `LGPAY${Date.now()}`,
+                amount: val,
+                remainingAmount: val,
+                withdrawalMethod: selectedMethod,
+                status: 'pending',
+                createdAt: serverTimestamp(),
+            });
         });
+        toast({ title: "Order Placed" });
         router.push('/order');
-
-    } catch (error: any) {
-        console.error('Sell transaction failed:', error);
-        toast({ variant: 'destructive', title: 'Sell Failed', description: error.message });
-    } finally {
-        setIsSelling(false);
-    }
+    } catch (e: any) {
+        toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setIsSelling(false); }
   };
 
-
   return (
-    <div className="flex min-h-screen flex-col bg-secondary">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-          <Link href="/home">
-            <ChevronLeft className="h-6 w-6 text-muted-foreground" />
-          </Link>
-        </Button>
-        <h1 className="text-xl font-bold">Sell LG</h1>
-        <div className="w-8"></div>
-      </header>
-
-      <main className="flex-grow space-y-4 p-4 pb-20">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Info className="h-5 w-5 text-primary" />
-              Withdrawal Rules
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>1. Minimum withdrawal amount is ₹100.</p>
-            <p>2. Withdrawal amount must be a multiple of 100 (e.g., 100, 500, 1200).</p>
-            <p>3. Funds will be transferred to your selected account within 30 minutes.</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Sell Amount</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-bold">
-                ₹
-              </span>
-              <Input
-                placeholder="0.00"
-                className={cn(
-                  'h-14 pl-8 text-2xl font-bold tracking-wider',
-                  !isAmountValid && amount !== '' && 'border-destructive ring-2 ring-destructive/50'
-                )}
-                value={amount}
-                onChange={handleAmountChange}
-                type="text" 
-                inputMode="numeric"
-              />
-               <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                <p>Balance: {profileLoading ? '...' : (userProfile?.balance || 0).toFixed(2)}</p>
-               </div>
-            </div>
-            {!isAmountValid && amount !== '' && (
-              <p className="mt-2 text-xs text-destructive">
-                Amount must be a multiple of 100.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-base">Withdrawal Method</CardTitle>
-            </CardHeader>
-            <CardContent>
-                {profileLoading ? (
-                    <Skeleton className="h-24 w-full" />
-                ) : userProfile?.paymentMethods && userProfile.paymentMethods.length > 0 ? (
-                    <RadioGroup 
-                        onValueChange={(value) => setSelectedMethod(JSON.parse(value))}
-                        className="space-y-3"
-                    >
-                        {userProfile.paymentMethods.map((method, index) => {
-                            const methodType = method.type || (method.upiId ? 'upi' : 'bank');
-                            const isUpi = methodType === 'upi';
-                            const isBank = methodType === 'bank';
-
-                            const key = isUpi ? method.upiId : (isBank ? method.accountNumber : `method-${index}`);
-                            const id = isUpi ? method.upiId : (isBank ? `bank-${index}` : `method-id-${index}`);
-                            
-                            const upiDetails = isUpi ? paymentMethodDetails[method.name] : null;
-                            const bgColor = isBank ? 'bg-slate-700' : (upiDetails ? upiDetails.bgColor : 'bg-gray-500');
-
-                            if (!key || !id) return null;
-
-                            return (
-                                <Label key={key} htmlFor={id} className={cn("flex items-center gap-4 rounded-xl p-3 border-2 border-transparent has-[:checked]:border-primary", bgColor)}>
-                                    <RadioGroupItem value={JSON.stringify(method)} id={id} className="border-white text-white ring-offset-0" />
-                                    
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
-                                        {isUpi && upiDetails ? (
-                                            <Image src={upiDetails.logo} alt={`${method.name} logo`} width={32} height={32} className="object-contain" />
-                                        ) : isBank ? (
-                                            <Landmark className="h-6 w-6 text-slate-700"/>
-                                        ) : (
-                                            <Wallet className="h-6 w-6 text-gray-500"/>
-                                        )}
-                                    </div>
-
-                                    <div className="text-white">
-                                        <span className="text-lg font-semibold">{isUpi ? method.name : method.bankName}</span>
-                                        <p className="text-sm font-mono text-white/80">{isUpi ? method.upiId : method.accountNumber}</p>
-                                    </div>
-                                </Label>
-                            );
-                        })}
-                    </RadioGroup>
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-24 text-center text-muted-foreground">
-                        <Wallet className="h-8 w-8 opacity-50 mb-2" />
-                        <p>No withdrawal method active</p>
-                        <Button asChild variant="link" className="mt-1">
-                            <Link href="/my/collection/add">Add Payment Method</Link>
-                        </Button>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-      </main>
-
-       <CardFooter className="p-4 bg-white border-t sticky bottom-0">
-        <Button 
-            className="w-full h-12 btn-gradient font-bold text-base"
-            onClick={handleSell}
-            disabled={isSelling || !isAmountValid || !amount || !selectedMethod}
-        >
-          {isSelling ? <Loader size="sm" className="mr-2" /> : 'Sell Now'}
-        </Button>
-      </CardFooter>
+    <div className="p-4 space-y-4 pb-24">
+      <header className="flex items-center gap-4"><Button asChild variant="ghost" size="icon"><Link href="/home"><ChevronLeft /></Link></Button><h1 className="text-xl font-bold">Sell LG</h1></header>
+      <Card><CardHeader><CardTitle className="text-sm">Withdrawal Rules</CardTitle></CardHeader><CardContent className="text-xs text-muted-foreground">Min ₹100. Multiple of 100.</CardContent></Card>
+      <Card><CardHeader><CardTitle>Amount</CardTitle></CardHeader><CardContent><Input type="number" placeholder="Multiple of 100" value={amount} onChange={e => setAmount(e.target.value)} /><p className="text-xs mt-2">Balance: {profile?.balance || 0}</p></CardContent></Card>
+      <Card>
+        <CardHeader><CardTitle>Method</CardTitle></CardHeader>
+        <CardContent>
+            {profile?.paymentMethods?.length > 0 ? (
+                <RadioGroup onValueChange={v => setSelectedMethod(JSON.parse(v))}>
+                    {profile.paymentMethods.map((m: any, i: number) => (
+                        <Label key={i} className="flex items-center gap-3 p-3 border rounded-lg">
+                            <RadioGroupItem value={JSON.stringify(m)} />
+                            <span>{m.name} ({m.upiId})</span>
+                        </Label>
+                    ))}
+                </RadioGroup>
+            ) : <Link href="/my/collection/add" className="text-primary text-sm">Add UPI first</Link>}
+        </CardContent>
+      </Card>
+      <Button className="w-full btn-gradient h-12" onClick={handleSell} disabled={isSelling}>{isSelling ? <Loader size="xs" /> : "Sell Now"}</Button>
     </div>
   );
 }

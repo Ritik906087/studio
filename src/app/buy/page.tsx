@@ -1,499 +1,123 @@
-
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { motion, AnimatePresence } from 'framer-motion';
-
-import { ChevronLeft, Wallet, ArrowDownUp, Loader2, Info } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ChevronLeft, Wallet, ArrowDownUp, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useFirestore } from '@/firebase';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc, limit } from 'firebase/firestore';
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
-  PhonePe: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f",
-    bgColor: "bg-violet-600",
-  },
-  Paytm: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8",
-    bgColor: "bg-sky-500",
-  },
-  MobiKwik: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7",
-    bgColor: "bg-blue-600",
-  },
-  Freecharge: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4",
-    bgColor: "bg-orange-500",
-  },
-  Airtel: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Airtel%2001.png?alt=media&token=357342fd-85df-43c1-a7fb-d9d57315df1d",
-    bgColor: "bg-red-500",
-  },
+  PhonePe: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f", bgColor: "bg-violet-600" },
+  Paytm: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8", bgColor: "bg-sky-500" },
+  MobiKwik: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7", bgColor: "bg-blue-600" },
+  Freecharge: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4", bgColor: "bg-orange-500" },
 };
 
-const purchaseConfig = {
-    "100": 5, "200": 6, "300": 7, "400": 5, "500": 6, "600": 5, "700": 4, "800": 3, "1000": 4,
-    "2000": 3, "3000": 3, "4000": 5, "5000": 4, "6000": 3, "7000": 2, "8000": 3, "10000": 2
-};
-
-const generateOptionsFromConfig = (config: Record<string, number>) => {
-    let idCounter = 1;
-    return Object.entries(config).flatMap(([amountStr, count]) => {
-        const amount = parseInt(amountStr);
-        return Array.from({ length: count }, () => ({
-            id: idCounter++,
-            amount,
-        }));
-    });
-};
-
-const allPurchaseOptions = generateOptionsFromConfig(purchaseConfig);
-
-
-const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, isCreatingOrder }: { onBuyClick: (option: any) => void; options: any[]; bonusPercentage: number; isCreatingOrder: boolean; }) => {
-  return (
+const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, isCreatingOrder }: any) => (
     <div className="grid grid-cols-1 gap-3 mt-4">
-      <AnimatePresence>
-        {options.map((option) => {
+      {options.map((option: any) => {
           const totalLGB = option.amount + (option.amount * (bonusPercentage / 100));
-
           return (
-            <motion.div
-              key={option.id}
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, transition: { duration: 0.2 } }}
-              transition={{ type: 'spring', stiffness: 200, damping: 25 }}
-            >
-              <Card className="rounded-xl shadow-sm overflow-hidden bg-white w-full">
-                 <div className="flex items-center justify-between p-3 relative z-10">
-                     <div className="flex items-center gap-4">
-                         <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec" width={36} height={36} alt="Buy LG" />
-                         </div>
-                         <div>
-                            <p className="font-bold text-lg">₹ {option.amount.toLocaleString('en-IN')}</p>
-                            <p className="text-xs text-green-600 font-semibold">
-                                You Get: {option.amount}+{bonusPercentage}%={totalLGB.toFixed(0)}
-                            </p>
-                         </div>
-                     </div>
-                     <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold rounded-lg" disabled={isCreatingOrder}>
-                        {isCreatingOrder ? <Loader2 className="animate-spin" /> : 'Buy'}
-                     </Button>
-                  </div>
-              </Card>
-            </motion.div>
+            <Card key={option.id} className="p-3 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 flex items-center justify-center bg-primary/10 rounded-lg text-primary font-bold">LG</div>
+                    <div>
+                        <p className="font-bold text-lg">₹ {option.amount.toLocaleString()}</p>
+                        <p className="text-xs text-green-600 font-semibold">Get: {totalLGB.toFixed(0)}</p>
+                    </div>
+                </div>
+                <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold" disabled={isCreatingOrder}>
+                    {isCreatingOrder ? <Loader2 className="animate-spin" /> : 'Buy'}
+                </Button>
+            </Card>
           );
-        })}
-      </AnimatePresence>
+      })}
     </div>
-  );
-};
-
-const UsdtPurchaseForm = ({ onBuyClick, isCreatingOrder }: { onBuyClick: (option: { amount: number }) => void, isCreatingOrder: boolean }) => {
-    const { toast } = useToast();
-    const [usdtAmount, setUsdtAmount] = useState('5');
-    
-    const lgbAmount = useMemo(() => {
-        const numValue = parseFloat(usdtAmount);
-        if (!isNaN(numValue) && numValue > 0) {
-            return numValue * 110;
-        }
-        return 0;
-    }, [usdtAmount]);
-    
-
-    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        if (/^\d*\.?\d*$/.test(value)) {
-            setUsdtAmount(value);
-        }
-    };
-
-    const handleRecharge = () => {
-        const amount = parseFloat(usdtAmount);
-        if (isNaN(amount) || amount < 5) {
-            toast({
-                variant: 'destructive',
-                title: 'Invalid Amount',
-                description: 'Minimum deposit amount is 5 USDT.',
-            });
-            return; 
-        }
-        onBuyClick({ amount: lgbAmount }); 
-    };
-
-    return (
-        <div className="space-y-4 pt-4">
-            <div className="flex justify-between items-center text-sm font-semibold px-2">
-                <span>Main Network: TRC-20</span>
-                <span className="text-primary">1 USDT ≈ 110₹</span>
-            </div>
-
-            <Card className="bg-green-500/10 border-green-500 shadow-none">
-                <CardContent className="p-4">
-                    <Label htmlFor="usdt-amount" className="text-sm text-green-900/80">Deposit amount (minimum 5 USDT)</Label>
-                    <div className="flex items-center gap-2 mt-1">
-                        <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/USDT%20LOGO%20.png?alt=media&token=bfd96cbc-634b-42a5-bbd8-2195f964b76b" width={28} height={28} alt="USDT" />
-                        <Input 
-                            id="usdt-amount"
-                            type="number"
-                            placeholder="5"
-                            value={usdtAmount}
-                            onChange={handleAmountChange}
-                            className="bg-transparent border-none text-3xl font-bold text-green-900 focus-visible:ring-0 p-0 h-auto shadow-none"
-                        />
-                    </div>
-                </CardContent>
-            </Card>
-
-            <div className="flex justify-center items-center my-2">
-                 <div className="bg-background rounded-full p-1 border-2 border-primary/50 shadow-md z-10">
-                    <ArrowDownUp className="h-5 w-5 text-primary"/>
-                 </div>
-            </div>
-            
-            <Card className="bg-yellow-500/10 border-yellow-500 shadow-none">
-                <CardContent className="p-4">
-                    <Label htmlFor="lgb-amount" className="text-sm text-yellow-900/80">Recharge quantity</Label>
-                     <div className="flex items-baseline gap-2 mt-1">
-                        <span className="font-bold text-3xl text-yellow-900">{lgbAmount.toFixed(0)}</span>
-                        <span className="font-semibold text-yellow-900/90">LGB</span>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Button onClick={handleRecharge} disabled={isCreatingOrder} className="w-full h-12 text-lg font-bold btn-gradient rounded-full">
-                {isCreatingOrder ? <Loader2 className="animate-spin" /> : "Buy"}
-            </Button>
-            
-            <Card className="bg-secondary/50 shadow-none">
-                <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2"><Wallet className="h-5 w-5 text-primary" />LG Pay Wallet Exchange Rate</CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                    Please ensure that the amount of USDT you pay matches the amount stated in your order. Otherwise, the order will not be processed and no refund will be issued.
-                </CardContent>
-            </Card>
-        </div>
-    );
-};
-
+);
 
 export default function BuyPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'upi' | 'bank' | 'usdt'>('upi');
-  const [activeSubTab, setActiveSubTab] = useState('small');
-  
-  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const { user } = useUser();
+  const { user, profile } = useUser();
+  const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [isInProgressDialogOpen, setIsInProgressDialogOpen] = useState(false);
-  const [inProgressOrder, setInProgressOrder] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'upi' | 'bank' | 'usdt'>('upi');
+  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
-  
-  const [allOptions, setAllOptions] = useState(() => [...allPurchaseOptions]);
-
-  const [userProfile, setUserProfile] = useState<{ paymentMethods?: { name: string; upiId: string }[] } | null>(null);
-  const [verifiedBuyUpiMethods, setVerifiedBuyUpiMethods] = useState<{name: string, upiId: string}[]>([]);
+  const [inProgressOrder, setInProgressOrder] = useState<any>(null);
 
   useEffect(() => {
-    async function fetchUserData() {
-        if (!user) return;
-        const { data: profile, error: profileError } = await supabase.from('users').select('paymentMethods').eq('uid', user.id).single();
-        if (profile) setUserProfile(profile);
+    if (!user || !firestore) return;
+    const q = query(collection(firestore, 'users', user.uid, 'orders'), where('status', 'in', ['pending_payment', 'pending_confirmation']), limit(1));
+    getDocs(q).then(snap => { if (!snap.empty) setInProgressOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); });
+  }, [user, firestore]);
 
-        const { data: orders, error: ordersError } = await supabase.from('orders').select('*').in('status', ['pending_payment', 'pending_confirmation']);
-        if (orders && orders.length > 0) {
-            setInProgressOrder(orders[0]);
-        }
-    }
-    fetchUserData();
-  }, [user]);
+  const purchaseOptions = [100, 500, 1000, 2000, 5000].map((a, i) => ({ id: i, amount: a }));
 
-  useEffect(() => {
-    const removalInterval = setInterval(() => {
-        setAllOptions(prevOptions => {
-            if (prevOptions.length <= 20) return prevOptions;
-            let currentOpts = [...prevOptions];
-            for (let i = 0; i < 20; i++) {
-                if (currentOpts.length === 0) break;
-                const removeIndex = Math.floor(Math.random() * currentOpts.length);
-                currentOpts.splice(removeIndex, 1);
-            }
-            return currentOpts;
-        });
-    }, 2000);
-
-    const additionInterval = setInterval(() => {
-        setAllOptions(prevOptions => {
-            let currentOpts = [...prevOptions];
-            const baseOptions = generateOptionsFromConfig(purchaseConfig);
-            
-            for (let i = 0; i < 30; i++) {
-                const addIndex = Math.floor(Math.random() * baseOptions.length);
-                const itemToAdd = { ...baseOptions[addIndex], id: Math.random() }; 
-                
-                const insertAtIndex = Math.floor(Math.random() * (currentOpts.length + 1));
-                currentOpts.splice(insertAtIndex, 0, itemToAdd);
-            }
-            return currentOpts;
-        });
-    }, 4000);
-
-    return () => {
-      clearInterval(removalInterval);
-      clearInterval(additionInterval);
-    };
-  }, []); 
-
-const createOrder = async (provider: string, orderAmount: number) => {
-    if (!user) return;
-    setIsCreatingOrder(true);
-    
-    const bonusPercentage = activeTab === 'bank' ? 5 : activeTab === 'upi' ? 6 : (activeTab === 'usdt' ? 0 : 0);
-    const finalPaymentType: 'upi' | 'bank' | 'usdt' | 'p2p_upi' | 'p2p_bank' = activeTab;
-
-    try {
-        const { data, error } = await supabase.rpc('create_buy_order', {
-            p_user_id: user.id,
-            p_amount: orderAmount,
-            p_bonus_percentage: bonusPercentage,
-            p_payment_provider: provider,
-            p_payment_type: finalPaymentType
-        });
-        
-        if (error) throw error;
-        
-        const { order_id: newBuyOrderId, matched_payment_type } = data;
-
-        if (newBuyOrderId) {
-            router.push(`/buy/confirm/${newBuyOrderId}?type=${matched_payment_type}&provider=${provider}`);
-        } else {
-            throw new Error("Order creation failed unexpectedly.");
-        }
-
-    } catch (error: any) {
-        console.error('Error creating order: ', error);
-        toast({ variant: 'destructive', title: 'Could not create order.', description: error.message || 'Please try again.' });
-    } finally {
-        setIsCreatingOrder(false);
-    }
-  };
-
-
-  const handleBuyClick = (option: { amount: number }) => {
-     if (!user) {
-      toast({ variant: 'destructive', title: 'Please log in to continue.' });
-      return;
-    }
-
-    if (inProgressOrder) {
-        setIsInProgressDialogOpen(true);
-        return;
-    }
-
+  const handleBuyClick = (option: any) => {
+    if (inProgressOrder) { toast({ title: "Order already in progress", variant: "destructive" }); return; }
     setSelectedAmount(option.amount);
-
-    if (activeTab === 'usdt') {
-        createOrder('TRC20', option.amount);
-        return;
-    }
-
-    if (activeTab === 'bank') {
-        createOrder('Bank Transfer', option.amount);
-        return;
-    }
-
-    if (activeTab === 'upi') {
-        const availableMethods = userProfile?.paymentMethods?.filter(pm => 
-            ['MobiKwik', 'Freecharge'].includes(pm.name)
-        ) || [];
-
-        if (availableMethods.length === 0) {
-            toast({
-                variant: "destructive",
-                title: "No Verified UPI Found",
-                description: `Please link a MobiKwik or Freecharge UPI account first.`,
-            });
-            router.push('/my/collection/add');
-            return;
-        }
-
-        setVerifiedBuyUpiMethods(availableMethods);
-        setIsDialogOpen(true);
-    }
+    if (activeTab === 'upi') setIsDialogOpen(true);
+    else createOrder('Direct', option.amount);
   };
 
-  const handleProviderSelect = async (method: {name: string, upiId: string}) => {
-    setIsDialogOpen(false);
-    if (!selectedAmount) return;
-    await createOrder(method.name, selectedAmount);
-  };
-  
-  const handleGoToOrder = () => {
-    if (!inProgressOrder) return;
-    let path = '';
-    if (inProgressOrder.status === 'pending_payment') {
-        path = `/buy/confirm/${inProgressOrder.id}?type=${inProgressOrder.paymentType}&provider=${inProgressOrder.paymentProvider || ''}`;
-    } else if (inProgressOrder.status === 'pending_confirmation') {
-        path = `/order/${inProgressOrder.id}`;
-    }
-    if (path) {
-        router.push(path);
-    }
+  const createOrder = async (provider: string, amount: number) => {
+    if (!user || !firestore) return;
+    setIsCreatingOrder(true);
+    try {
+        const bonus = activeTab === 'bank' ? 5 : 6;
+        const total = amount + (amount * bonus / 100);
+        const orderId = `LGPAY${Date.now()}`;
+        const ref = await addDoc(collection(firestore, 'users', user.uid, 'orders'), {
+            userId: user.uid,
+            orderId,
+            amount: total,
+            baseAmount: amount,
+            bonusPercentage: bonus,
+            paymentType: activeTab,
+            paymentProvider: provider,
+            status: 'pending_payment',
+            createdAt: serverTimestamp(),
+        });
+        router.push(`/buy/confirm/${ref.id}?type=${activeTab}&provider=${provider}`);
+    } catch (e: any) {
+        toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setIsCreatingOrder(false); }
   };
 
-  const bonusPercentage = activeTab === 'bank' ? 5 : activeTab === 'upi' ? 6 : 0;
-  
-  const displayedOptions = useMemo(() => {
-      if (activeSubTab === 'small') {
-          return allOptions.filter(opt => opt.amount <= 1000).sort((a,b) => a.amount - b.amount);
-      } else {
-          return allOptions.filter(opt => opt.amount > 1000).sort((a,b) => b.amount - a.amount);
-      }
-  }, [allOptions, activeSubTab]);
-  
   return (
-    <div className="text-foreground pb-4 min-h-screen flex flex-col">
-       <header className="flex items-center justify-between p-4 bg-white border-b">
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-          <Link href="/home">
-            <ChevronLeft className="h-6 w-6 text-muted-foreground" />
-          </Link>
-        </Button>
-        <div className="flex flex-col items-center">
-            <h1 className="text-xl font-bold">Buy</h1>
-        </div>
-        <div className="w-8"></div>
-      </header>
-
-      <main className="p-4 flex-grow">
-        <Tabs value={activeTab} className="w-full" onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList className="grid w-full grid-cols-3 gap-2 h-auto p-0 bg-transparent">
-             <TabsTrigger value="upi" className="flex flex-col items-center justify-center p-3 h-auto rounded-xl border-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all space-y-1">
-                <span className="font-bold text-base text-foreground">UPI</span>
-                <span className="text-xs text-green-600 font-semibold">+6% Bonus</span>
-            </TabsTrigger>
-            <TabsTrigger value="bank" className="flex flex-col items-center justify-center p-3 h-auto rounded-xl border-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all space-y-1">
-                <span className="font-bold text-base text-foreground">BANK</span>
-                <span className="text-xs text-green-600 font-semibold">+5% Bonus</span>
-            </TabsTrigger>
-             <TabsTrigger value="usdt" className="flex flex-col items-center justify-center p-3 h-auto rounded-xl border-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-primary/5 transition-all space-y-1">
-                <span className="font-bold text-base text-foreground">USDT</span>
-                <span className="text-xs text-primary font-semibold">1 USDT ≈ 110₹</span>
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        
-        {activeTab === 'usdt' ? (
-             <UsdtPurchaseForm onBuyClick={handleBuyClick} isCreatingOrder={isCreatingOrder} />
-        ) : (
-            <Tabs defaultValue="small" className="w-full mt-4" onValueChange={setActiveSubTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="small">Small Amount</TabsTrigger>
-                    <TabsTrigger value="high">High Amount</TabsTrigger>
-                </TabsList>
-                <TabsContent value="small" className="mt-0">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} isCreatingOrder={isCreatingOrder} />
-                </TabsContent>
-                <TabsContent value="high" className="mt-0">
-                    <PurchaseGrid onBuyClick={handleBuyClick} options={displayedOptions} bonusPercentage={bonusPercentage} isCreatingOrder={isCreatingOrder} />
-                </TabsContent>
-            </Tabs>
-        )}
-      </main>
-
-       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md p-0">
-          <DialogHeader className="p-4 border-b">
-            <DialogTitle className="text-lg font-semibold text-center">Choose Verified UPI</DialogTitle>
-          </DialogHeader>
-          <div className="p-4 space-y-3">
-             {verifiedBuyUpiMethods.map((method) => {
-                const details = paymentMethodDetails[method.name as keyof typeof paymentMethodDetails];
-                return (
-                  <button 
-                      key={method.upiId}
-                      onClick={() => handleProviderSelect(method)}
-                      disabled={isCreatingOrder}
-                      className={cn("w-full flex items-center p-3 rounded-lg border hover:bg-opacity-90 transition-colors disabled:opacity-50", details?.bgColor || 'bg-gray-500', "text-white")}
-                  >
-                      {isCreatingOrder ? (
-                        <Loader2 className="h-5 w-5 mr-4 animate-spin" /> 
-                      ) : (
-                        details && (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1 mr-4">
-                              <Image src={details.logo} alt={method.name} width={32} height={32} className="object-contain" />
-                          </div>
-                        )
-                      )}
-                      <div className="text-left">
-                          <span className="font-medium">{method.name}</span>
-                          <p className="text-xs font-mono text-white/80">{method.upiId}</p>
-                      </div>
-                  </button>
-              )}
-            )}
-          </div>
+    <div className="p-4 space-y-4 pb-24">
+      <header className="flex items-center gap-4"><Button asChild variant="ghost" size="icon"><Link href="/home"><ChevronLeft /></Link></Button><h1 className="text-xl font-bold">Buy LG</h1></header>
+      <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
+        <TabsList className="grid grid-cols-3"><TabsTrigger value="upi">UPI</TabsTrigger><TabsTrigger value="bank">Bank</TabsTrigger><TabsTrigger value="usdt">USDT</TabsTrigger></TabsList>
+      </Tabs>
+      <PurchaseGrid options={purchaseOptions} bonusPercentage={activeTab === 'bank' ? 5 : 6} onBuyClick={handleBuyClick} isCreatingOrder={isCreatingOrder} />
+      
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+            <DialogHeader><DialogTitle>Select App</DialogTitle></DialogHeader>
+            <div className="grid grid-cols-2 gap-4">
+                {Object.entries(paymentMethodDetails).map(([name, details]) => (
+                    <Button key={name} onClick={() => createOrder(name, selectedAmount!)} className={cn("h-20 flex flex-col gap-2", details.bgColor)}>
+                        <Image src={details.logo} width={30} height={30} alt={name} />
+                        <span>{name}</span>
+                    </Button>
+                ))}
+            </div>
         </DialogContent>
       </Dialog>
-      <AlertDialog open={isInProgressDialogOpen} onOpenChange={setIsInProgressDialogOpen}>
-        <AlertDialogContent className="rounded-2xl bg-white shadow-2xl">
-          <AlertDialogHeader className="text-center items-center">
-              <AlertDialogTitle className="text-xl font-bold text-orange-500">Order Already In Progress</AlertDialogTitle>
-              <AlertDialogDescription className="pt-2 font-semibold text-red-500">
-                  You can buy your order only after completing your old order, otherwise not.
-              </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2 pt-4">
-              <AlertDialogCancel className="w-full h-12 rounded-full">Cancel</AlertDialogCancel>
-              <AlertDialogAction 
-                  onClick={handleGoToOrder} 
-                  className="w-full h-12 rounded-full btn-gradient font-bold text-base"
-              >
-                  Complete
-              </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
-
-    
