@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -10,7 +10,8 @@ import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useFirestore } from '@/firebase';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { Loader } from '@/components/ui/loader';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -19,32 +20,42 @@ type UserProfile = {
   uid: string;
   numericId: string;
   photoURL?: string;
+  displayName?: string;
 };
 
 const AgentItem = ({ agent }: { agent: UserProfile }) => {
     const [totalIncome, setTotalIncome] = useState(0);
     const [totalOrders, setTotalOrders] = useState(0);
     const [loading, setLoading] = useState(true);
+    const firestore = useFirestore();
 
     useEffect(() => {
+        if (!firestore || !agent.id) return;
+        
         async function fetchData() {
             setLoading(true);
-            const incomePromise = supabase.from('transactions').select('amount').eq('userId', agent.id);
-            const ordersPromise = supabase.from('orders').select('id', { count: 'exact' }).eq('userId', agent.id).eq('status', 'completed');
-            
-            const [incomeRes, ordersRes] = await Promise.all([incomePromise, ordersPromise]);
-            
-            if (incomeRes.data) {
-                setTotalIncome(incomeRes.data.reduce((acc, tx) => acc + (tx.amount || 0), 0));
-            }
+            try {
+                // Get income from transactions subcollection
+                const txQuery = query(collection(firestore, 'users', agent.id, 'transactions'));
+                const txSnap = await getDocs(txQuery);
+                const income = txSnap.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
+                setTotalIncome(income);
 
-            if (ordersRes.count !== null) {
-                setTotalOrders(ordersRes.count);
+                // Get completed orders count
+                const ordersQuery = query(
+                    collection(firestore, 'users', agent.id, 'orders'),
+                    where('status', '==', 'completed')
+                );
+                const ordersSnap = await getDocs(ordersQuery);
+                setTotalOrders(ordersSnap.size);
+            } catch (e) {
+                console.error("Error fetching agent stats:", e);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         }
         fetchData();
-    }, [agent.id]);
+    }, [agent.id, firestore]);
 
     return (
         <div className="flex items-center gap-4 p-4 border-b last:border-b-0">
@@ -90,40 +101,53 @@ const StatCard = ({ title, value, icon: Icon, colorClass }: { title: string, val
 
 
 export default function TeamPage() {
-    const { user } = useUser();
+    const { user, profile } = useUser();
+    const firestore = useFirestore();
     const [l1Agents, setL1Agents] = useState<UserProfile[]>([]);
     const [l2Agents, setL2Agents] = useState<UserProfile[]>([]);
     const [selfIncome, setSelfIncome] = useState(0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        async function fetchData() {
-            if(!user) {
-                setLoading(false);
-                return;
-            };
-
-            setLoading(true);
-
-            const { data: l1Data } = await supabase.from('users').select('id, uid, numericId, photoURL').eq('inviterUid', user.uid);
-            setL1Agents(l1Data || []);
-            
-            if (l1Data && l1Data.length > 0) {
-                const l1AgentUids = l1Data.map(agent => agent.id);
-                // Supabase 'in' queries can handle up to ~1000 items, but chunking for very large lists is a good practice.
-                const { data: l2Data } = await supabase.from('users').select('id, uid, numericId, photoURL').in('inviterUid', l1AgentUids);
-                setL2Agents(l2Data || []);
-            }
-
-            const { data: incomeData } = await supabase.from('transactions').select('amount').eq('userId', user.id).eq('type', 'team_bonus');
-            if(incomeData) {
-                setSelfIncome(incomeData.reduce((acc, tx) => acc + (tx.amount || 0), 0));
-            }
-            
+        if (!user || !firestore) {
             setLoading(false);
-        }
-        fetchData();
-    }, [user]);
+            return;
+        };
+
+        setLoading(true);
+
+        // Fetch L1 Agents
+        const l1Query = query(collection(firestore, 'users'), where('inviterUid', '==', user.uid));
+        const unsubscribeL1 = onSnapshot(l1Query, async (snap) => {
+            const agents = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+            setL1Agents(agents);
+            
+            // Fetch L2 Agents based on L1 Agent IDs
+            if (agents.length > 0) {
+                const l1Ids = agents.map(a => a.id);
+                // Chunk IDs because 'in' query has a limit of 30
+                const l2Query = query(collection(firestore, 'users'), where('inviterUid', 'in', l1Ids.slice(0, 30)));
+                const l2Snap = await getDocs(l2Query);
+                setL2Agents(l2Snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
+            }
+            setLoading(false);
+        });
+
+        // Fetch Total Team Income for the current user
+        const incomeQuery = query(
+            collection(firestore, 'users', user.uid, 'transactions'), 
+            where('type', '==', 'team_bonus')
+        );
+        const unsubscribeIncome = onSnapshot(incomeQuery, (snap) => {
+            const income = snap.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
+            setSelfIncome(income);
+        });
+
+        return () => {
+            unsubscribeL1();
+            unsubscribeIncome();
+        };
+    }, [user, firestore]);
 
 
   return (

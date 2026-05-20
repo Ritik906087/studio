@@ -4,36 +4,40 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // WARNING: The following rules are simplified for prototyping and grant some public write access.
-    // For a production app, you MUST use a secure backend and tighten these rules.
+    // Helper to check if user is admin (using the phone number for this prototype)
+    function isAdmin() {
+      return request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phoneNumber == '9060873927'
+      );
+    }
 
     match /users/{userId} {
       allow read: if true;
-      allow write: if true; // More permissive for admin actions
-    }
-    
-    match /users/{userId}/orders/{orderId} {
-       allow read: if true;
-       allow write: if true; // More permissive for admin actions
-    }
-    
-    match /users/{userId}/sellOrders/{orderId} {
-       allow read: if true;
-       allow write: if true; // More permissive for admin actions
+      allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      
+      match /orders/{orderId} {
+        allow read: if true;
+        allow write: if request.auth != null;
+      }
+      
+      match /sellOrders/{orderId} {
+        allow read: if true;
+        allow write: if request.auth != null;
+      }
+      
+      match /transactions/{transactionId} {
+        allow read: if true;
+        allow write: if request.auth != null;
+      }
+      
+      match /dailyRewards/{date} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
-    match /users/{userId}/transactions/{transactionId} {
-       allow read, write: if request.auth.uid == userId;
-    }
-    
-    match /users/{userId}/dailyRewards/{date} {
-       allow read, write: if request.auth.uid == userId;
-    }
-
-    // Rules for top-level collections needed by admin panel
     match /paymentMethods/{methodId} {
       allow read: if true;
-      allow write: if false; 
+      allow write: if isAdmin();
     }
     
     match /chatRequests/{requestId} {
@@ -42,24 +46,23 @@ service cloud.firestore {
     }
     
     match /reports/{reportId} {
-      // Only authenticated users can create reports
       allow create: if request.auth != null;
-      // Admins can read/update all reports, users can only read their own.
       allow read, update: if request.auth != null;
     }
     
     match /feedback/{feedbackId} {
       allow create: if request.auth != null;
-      // Only admins should be able to read all feedback
-      allow read: if request.auth != null; // WARNING: This is still permissive. For production, check for an admin claim.
-      allow update, delete: if false;
+      allow read: if request.auth != null;
     }
 
-    // Rules for Collection Group queries used in admin panel
+    // Rules for Collection Group queries used in admin panel and team page
     match /{path=**}/orders/{orderId} {
       allow read: if true;
     }
     match /{path=**}/sellOrders/{orderId} {
+      allow read: if true;
+    }
+    match /{path=**}/transactions/{transactionId} {
       allow read: if true;
     }
   }

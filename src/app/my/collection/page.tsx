@@ -1,20 +1,24 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ChevronLeft, Plus, Wallet } from "lucide-react";
+import { ChevronLeft, Plus, Wallet, Trash2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useFirestore } from '@/firebase';
+import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
 import { useLanguage } from "@/context/language-context";
+import { useToast } from "@/hooks/use-toast";
 
 type LinkedPaymentMethod = {
+  type: 'upi' | 'bank';
   name: string;
-  upiId: string;
+  upiId?: string;
+  accountNumber?: string;
 };
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
@@ -27,27 +31,47 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
 
 export default function CollectionPage() {
   const { user } = useUser();
+  const firestore = useFirestore();
   const { translations } = useLanguage();
-  const [userProfile, setUserProfile] = useState<{paymentMethods?: LinkedPaymentMethod[]} | null>(null);
+  const { toast } = useToast();
+  
+  const [paymentMethods, setPaymentMethods] = useState<LinkedPaymentMethod[]>([]);
   const [profileLoading, setProfileLoading] = useState(true);
   
   useEffect(() => {
-    async function fetchProfile() {
-      if(!user) {
-        setProfileLoading(false);
-        return;
-      }
-      setProfileLoading(true);
-      const { data, error } = await supabase.from('users').select('paymentMethods').eq('id', user.id).single();
-      if(data) {
-        setUserProfile(data);
+    if (!user || !firestore) {
+      setProfileLoading(false);
+      return;
+    }
+
+    setProfileLoading(true);
+    const unsubscribe = onSnapshot(doc(firestore, 'users', user.uid), (snapshot) => {
+      if (snapshot.exists()) {
+        setPaymentMethods(snapshot.data().paymentMethods || []);
       }
       setProfileLoading(false);
-    }
-    fetchProfile();
-  }, [user]);
+    });
 
-  const linkedMethods = userProfile?.paymentMethods || [];
+    return () => unsubscribe();
+  }, [user, firestore]);
+
+  const handleDelete = async (index: number) => {
+    if (!user || !firestore) return;
+    if (!confirm("Are you sure you want to remove this payment method?")) return;
+
+    try {
+        const updatedMethods = [...paymentMethods];
+        updatedMethods.splice(index, 1);
+        
+        await updateDoc(doc(firestore, 'users', user.uid), {
+            paymentMethods: updatedMethods
+        });
+        
+        toast({ title: "Deleted", description: "Payment method removed successfully." });
+    } catch (e: any) {
+        toast({ variant: "destructive", title: "Error", description: e.message });
+    }
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-secondary">
@@ -66,33 +90,41 @@ export default function CollectionPage() {
             <div className="flex items-center justify-center pt-20">
                 <Loader size="md" />
             </div>
-        ) : linkedMethods.length > 0 ? (
+        ) : paymentMethods.length > 0 ? (
             <div className="space-y-3">
-              {linkedMethods.map((method) => {
-                const details = paymentMethodDetails[method.name];
-                if (!details) return null;
+              {paymentMethods.map((method, idx) => {
+                const details = paymentMethodDetails[method.name] || { logo: "", bgColor: "bg-slate-700" };
                 return (
                   <div
-                    key={method.upiId}
+                    key={idx}
                     className={`flex h-20 w-full items-center justify-between gap-4 rounded-xl px-4 py-2 text-white shadow-md ${details.bgColor}`}
                   >
                     <div className="flex items-center gap-4">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
-                        <Image
-                          src={details.logo}
-                          alt={`${method.name} logo`}
-                          width={32}
-                          height={32}
-                          className="object-contain"
-                        />
+                        {method.type === 'bank' ? <Wallet className="text-slate-700 h-6 w-6"/> : (
+                           <Image
+                            src={details.logo}
+                            alt={`${method.name} logo`}
+                            width={32}
+                            height={32}
+                            className="object-contain"
+                          />
+                        )}
                       </div>
-                      <div>
-                        <span className="text-lg font-semibold">{method.name}</span>
-                        <p className="text-xs font-mono text-white/80">{method.upiId}</p>
+                      <div className="min-w-0">
+                        <span className="text-lg font-semibold truncate block">{method.name}</span>
+                        <p className="text-xs font-mono text-white/80 truncate block">
+                            {method.type === 'upi' ? method.upiId : `****${method.accountNumber?.slice(-4)}`}
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-center rounded-md bg-green-500/80 px-3 py-1.5 text-xs font-bold uppercase text-white">
-                        ACTIVATED
+                    <div className="flex items-center gap-2">
+                        <div className="hidden xs:flex items-center justify-center rounded-md bg-green-500/80 px-2 py-1 text-[10px] font-bold uppercase text-white">
+                            ACTIVATED
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(idx)} className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10">
+                            <Trash2 className="h-5 w-5" />
+                        </Button>
                     </div>
                   </div>
                 );
@@ -101,18 +133,18 @@ export default function CollectionPage() {
         ) : (
              <div className="flex flex-col items-center justify-center pt-20 text-center text-muted-foreground">
                 <Wallet className="h-16 w-16 opacity-30" />
-                <p className="mt-4 text-lg font-medium">No UPI accounts linked.</p>
+                <p className="mt-4 text-lg font-medium">No accounts linked.</p>
                 <p className="text-sm">Click below to add a new account.</p>
             </div>
         )}
 
         <Link href="/my/collection/add" className="block !mt-6">
-          <Card className="bg-white">
+          <Card className="bg-white hover:bg-gray-50 transition-colors">
             <CardContent className="flex items-center justify-center gap-3 p-4">
               <div className="grid h-6 w-6 place-items-center rounded-full bg-muted text-muted-foreground">
                 <Plus className="h-4 w-4" />
               </div>
-              <span className="font-semibold text-foreground">Add payment UPI</span>
+              <span className="font-semibold text-foreground">Add Payment Method</span>
             </CardContent>
           </Card>
         </Link>

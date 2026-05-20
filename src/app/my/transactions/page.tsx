@@ -1,239 +1,157 @@
 
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Copy, ChevronLeft, ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useFirestore } from '@/firebase';
+import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { Loader } from '@/components/ui/loader';
 import { Button } from '@/components/ui/button';
 
 // Type Definitions
-type Order = {
+type Transaction = {
   id: string;
-  orderId: string;
+  orderId?: string;
   amount: number;
-  status: 'pending_payment' | 'processing' | 'completed' | 'cancelled' | 'failed';
-  utr?: string;
-  createdAt: string;
-  cancellationReason?: string;
+  status: string;
+  createdAt: any;
+  type: string;
+  description?: string;
+  transactionType: 'buy' | 'sell' | 'invite';
 };
 
-type SellOrder = {
-  id: string;
-  orderId: string;
-  amount: number;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  utr?: string;
-  createdAt: string;
-  failureReason?: string;
-};
-
-type RewardTransaction = {
-    id: string;
-    orderId: string;
-    amount: number;
-    description: string;
-    type: 'team_bonus' | 'daily_task' | 'new_user_reward';
-    createdAt: string;
-}
-
-type CombinedTransaction = (Order | SellOrder | RewardTransaction) & { transactionType: 'buy' | 'sell' | 'invite' };
-
-// Card Components
-const BuyTransactionCard = React.memo(({ transaction }: { transaction: Order }) => {
+const TransactionCard = React.memo(({ transaction }: { transaction: Transaction }) => {
   const { toast } = useToast();
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => toast({ title: 'Copied!' }));
   };
 
-  const isTimeout = transaction.status === 'failed' && transaction.cancellationReason && (transaction.cancellationReason.includes('expired') || transaction.cancellationReason.includes('timed out'));
-  const statusConfig = {
-    completed: { style: "bg-green-100 text-green-800", text: "Completed" },
-    cancelled: { style: "bg-red-100 text-red-800", text: "Cancelled" },
-    failed: { style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800", text: isTimeout ? "Timeout" : "Failed" },
-    processing: { style: "bg-blue-100 text-blue-800", text: "Processing" },
-    pending_payment: { style: "bg-yellow-100 text-yellow-800", text: "Pending Payment" }
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'pending':
+      case 'pending_payment':
+      case 'pending_confirmation': return 'bg-yellow-100 text-yellow-800';
+      case 'failed':
+      case 'cancelled': return 'bg-red-100 text-red-800';
+      default: return 'bg-blue-100 text-blue-800';
+    }
   };
-  const currentStatus = statusConfig[transaction.status] || { style: "bg-gray-100 text-gray-800", text: transaction.status.replace(/_/g, ' ') };
+
+  const badgeConfig = {
+      buy: { text: 'Buy', color: 'bg-blue-100 text-blue-800' },
+      sell: { text: 'Sell', color: 'bg-green-100 text-green-800' },
+      invite: { text: 'Invite', color: 'bg-purple-100 text-purple-800' }
+  };
+
+  const badge = badgeConfig[transaction.transactionType] || { text: 'Misc', color: 'bg-gray-100 text-gray-800' };
 
   return (
     <Card className="mb-4 bg-white text-foreground shadow-sm">
       <CardContent className="p-4 space-y-3">
         <div className="flex justify-between items-center">
-          <span className="rounded px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-800">Buy</span>
-          <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
+          <span className={cn("rounded px-2 py-0.5 text-xs font-bold", badge.color)}>{badge.text}</span>
+          <span className={cn("font-semibold text-sm capitalize", getStatusColor(transaction.status), "px-2 py-1 rounded-md")}>
+              {transaction.status?.replace(/_/g, ' ') || 'Completed'}
+          </span>
         </div>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Amount</span>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-primary">₹{transaction.amount.toFixed(2)}</span>
-              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.amount.toFixed(2))} />
+              <span className="font-bold text-lg">₹{transaction.amount.toFixed(2)}</span>
             </div>
           </div>
-          {transaction.utr && (
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">UTR</span>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-muted-foreground" style={{ wordBreak: 'break-all' }}>{transaction.utr}</span>
-                <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.utr!)} />
+          {transaction.description && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Description</span>
+                <span className="text-right">{transaction.description}</span>
               </div>
-            </div>
           )}
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Time</span>
-            <span className="font-mono text-muted-foreground text-xs">{new Date(transaction.createdAt).toLocaleString()}</span>
+            <span className="font-mono text-muted-foreground text-xs">
+                {transaction.createdAt?.toDate ? transaction.createdAt.toDate().toLocaleString() : 'Just now'}
+            </span>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Order Number</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-muted-foreground" style={{ wordBreak: 'break-all' }}>{transaction.orderId}</span>
-              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderId)} />
+          {transaction.orderId && (
+            <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Order ID</span>
+                <div className="flex items-center gap-2">
+                    <span className="font-mono text-muted-foreground text-xs truncate max-w-[120px]">{transaction.orderId}</span>
+                    <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderId!)} />
+                </div>
             </div>
-          </div>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 });
-BuyTransactionCard.displayName = 'BuyTransactionCard';
-
-const SellTransactionCard = React.memo(({ transaction }: { transaction: SellOrder }) => {
-    const { toast } = useToast();
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text).then(() => toast({ title: 'Copied!' }));
-    };
-    const isTimeout = transaction.status === 'failed' && transaction.failureReason && (transaction.failureReason.includes('expired') || transaction.failureReason.includes('timed out'));
-    const statusConfig = {
-      completed: { style: "bg-green-100 text-green-800", text: "Completed" },
-      failed: { style: isTimeout ? "bg-orange-100 text-orange-800" : "bg-red-100 text-red-800", text: isTimeout ? "Timeout" : "Failed" },
-      pending: { style: "bg-yellow-100 text-yellow-800", text: "Pending" },
-      processing: { style: "bg-blue-100 text-blue-800", text: "Processing" },
-    };
-    const currentStatus = statusConfig[transaction.status] || { style: "bg-gray-100 text-gray-800", text: transaction.status };
-
-    return (
-        <Card className="mb-4 bg-white text-foreground shadow-sm">
-            <CardContent className="p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                    <span className="bg-green-100 text-green-800 text-xs font-bold px-2 py-0.5 rounded">Sell</span>
-                    <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
-                </div>
-                <div className="space-y-2 text-sm">
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Amount</span>
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-lg">₹{transaction.amount.toFixed(2)}</span>
-                            <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.amount.toFixed(2))} />
-                        </div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">UTR</span>
-                        <div className="flex items-center gap-2">
-                            <span className="font-mono text-muted-foreground" style={{ wordBreak: 'break-all' }}>{transaction.utr || '---'}</span>
-                            {transaction.utr && <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.utr!)} />}
-                        </div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Time</span>
-                        <span className="font-mono text-muted-foreground text-xs">{new Date(transaction.createdAt).toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Order Number</span>
-                        <div className="flex items-center gap-2">
-                            <span className="font-mono text-muted-foreground" style={{ wordBreak: 'break-all' }}>{transaction.orderId}</span>
-                            <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderId)} />
-                        </div>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    );
-});
-SellTransactionCard.displayName = 'SellTransactionCard';
-
-const InviteTransactionCard = React.memo(({ transaction }: { transaction: RewardTransaction }) => {
-  const { toast } = useToast();
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => toast({ title: 'Copied!' }));
-  };
-
-  return (
-    <Card className="mb-4 bg-white text-foreground shadow-sm">
-      <CardContent className="p-4 space-y-3">
-        <div className="flex justify-between items-center">
-          <span className="rounded px-2 py-0.5 text-xs font-bold bg-purple-100 text-purple-800">Invite</span>
-          <span className={cn("font-semibold text-sm capitalize", "bg-green-100 text-green-800", "px-2 py-1 rounded-md")}>Completed</span>
-        </div>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Amount</span>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-primary">₹{transaction.amount.toFixed(2)}</span>
-              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.amount.toFixed(2))} />
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Time</span>
-            <span className="font-mono text-muted-foreground text-xs">{new Date(transaction.createdAt).toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Order Number</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-muted-foreground" style={{ wordBreak: 'break-all' }}>{transaction.orderId}</span>
-              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(transaction.orderId)} />
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
-InviteTransactionCard.displayName = 'InviteTransactionCard';
+TransactionCard.displayName = 'TransactionCard';
 
 
 export default function AllTransactionsPage() {
     const { user } = useUser();
-    const [allTransactions, setAllTransactions] = useState<CombinedTransaction[]>([]);
+    const firestore = useFirestore();
+    const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-      async function fetchTransactions() {
-        if (!user) {
-          setLoading(false);
-          return;
+        if (!user || !firestore) {
+            setLoading(false);
+            return;
         }
 
         setLoading(true);
-        const [buyRes, sellRes, inviteRes] = await Promise.all([
-          supabase.from('orders').select('*').eq('userId', user.id).order('created_at', { ascending: false }).limit(100),
-          supabase.from('sell_orders').select('*').eq('userId', user.id).order('created_at', { ascending: false }).limit(100),
-          supabase.from('transactions').select('*').eq('userId', user.id).eq('type', 'team_bonus').limit(100)
-        ]);
 
-        const buys: CombinedTransaction[] = (buyRes.data || []).map(o => ({ ...o, transactionType: 'buy' }));
-        const sells: CombinedTransaction[] = (sellRes.data || []).map(o => ({ ...o, transactionType: 'sell' }));
-        const invites: CombinedTransaction[] = (inviteRes.data || []).map(o => ({ ...o, transactionType: 'invite' }));
+        // Fetch subcollections in real-time
+        const buyRef = collection(firestore, 'users', user.uid, 'orders');
+        const sellRef = collection(firestore, 'users', user.uid, 'sellOrders');
+        const txRef = collection(firestore, 'users', user.uid, 'transactions');
 
-        const combined = [...buys, ...sells, ...invites];
-        combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        
-        setAllTransactions(combined);
-        setLoading(false);
-      }
-      fetchTransactions();
-    }, [user]);
+        const unsubBuy = onSnapshot(query(buyRef, orderBy('createdAt', 'desc'), limit(50)), (snap) => {
+            const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id, transactionType: 'buy' } as any));
+            updateState(data, 'buy');
+        });
+
+        const unsubSell = onSnapshot(query(sellRef, orderBy('createdAt', 'desc'), limit(50)), (snap) => {
+            const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id, transactionType: 'sell' } as any));
+            updateState(data, 'sell');
+        });
+
+        const unsubTx = onSnapshot(query(txRef, orderBy('createdAt', 'desc'), limit(50)), (snap) => {
+            const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id, transactionType: 'invite' } as any));
+            updateState(data, 'invite');
+        });
+
+        const updateState = (newData: Transaction[], type: string) => {
+            setAllTransactions(prev => {
+                const filtered = prev.filter(t => t.transactionType !== type);
+                const combined = [...filtered, ...newData];
+                return combined.sort((a, b) => {
+                    const timeA = a.createdAt?.seconds || 0;
+                    const timeB = b.createdAt?.seconds || 0;
+                    return timeB - timeA;
+                });
+            });
+            setLoading(false);
+        };
+
+        return () => {
+            unsubBuy();
+            unsubSell();
+            unsubTx();
+        };
+    }, [user, firestore]);
 
     return (
-        <div className="text-foreground min-h-screen">
+        <div className="text-foreground min-h-screen bg-secondary">
             <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
                 <Button asChild variant="ghost" size="icon" className="h-8 w-8">
                     <Link href="/my">
@@ -245,7 +163,7 @@ export default function AllTransactionsPage() {
             </header>
 
             <main className="p-4">
-                {loading ? (
+                {loading && allTransactions.length === 0 ? (
                      <div className="flex justify-center pt-20">
                         <Loader size="md" />
                      </div>
@@ -256,19 +174,10 @@ export default function AllTransactionsPage() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {allTransactions.map((tx, index) => {
-                            if (tx.transactionType === 'buy') {
-                                return <BuyTransactionCard key={`buy-${tx.id}-${index}`} transaction={tx as Order} />;
-                            }
-                            if (tx.transactionType === 'sell') {
-                                return <SellTransactionCard key={`sell-${tx.id}-${index}`} transaction={tx as SellOrder} />;
-                            }
-                            if (tx.transactionType === 'invite') {
-                                return <InviteTransactionCard key={`invite-${tx.id}-${index}`} transaction={tx as RewardTransaction} />;
-                            }
-                            return null;
-                        })}
-                         <p className="text-center text-sm text-muted-foreground/60">No more</p>
+                        {allTransactions.map((tx) => (
+                            <TransactionCard key={tx.id} transaction={tx} />
+                        ))}
+                         <p className="text-center text-sm text-muted-foreground/60 py-4">No more transactions</p>
                     </div>
                 )}
             </main>
