@@ -20,7 +20,7 @@ import Image from "next/image";
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { auth } from "@/firebase";
+import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 export function LoginForm() {
@@ -29,6 +29,7 @@ export function LoginForm() {
   const { translations } = useLanguage();
   const { toast } = useToast();
   const router = useRouter();
+  const auth = useAuth();
 
   const formSchema = z.object({
     phone: z
@@ -52,7 +53,10 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!auth) return;
+    if (!auth) {
+        toast({ variant: "destructive", title: "Error", description: "Authentication not available." });
+        return;
+    }
     setIsLoading(true);
     const derivedEmail = `91${values.phone}@lgpay.app`;
 
@@ -62,9 +66,11 @@ export function LoginForm() {
       router.push('/home');
     } catch (error: any) {
       console.error("Login failed:", error);
-      let msg = error.message;
-      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+      let msg = "Incorrect phone number or password.";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         msg = "Incorrect phone number or password.";
+      } else if (error.code === 'auth/too-many-requests') {
+        msg = "Too many failed attempts. Please try again later.";
       }
       toast({ variant: "destructive", title: "Login Failed", description: msg });
       form.resetField("password");
@@ -111,7 +117,7 @@ export function LoginForm() {
                   <Input type={showPassword ? "text" : "password"} placeholder={translations.enterPassword} className="pl-4 pr-10 text-base" {...field} />
                 </FormControl>
                  <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1/2 h-auto -translate-y-1/2 p-1 text-accent/80 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
               <FormMessage />
@@ -119,8 +125,8 @@ export function LoginForm() {
           )}
         />
         
-        <Button type="submit" className="w-full font-semibold btn-gradient rounded-full" disabled={isLoading}>
-          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        <Button type="submit" className="w-full font-bold text-lg btn-gradient rounded-full h-12" disabled={isLoading}>
+          {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
           {isLoading ? translations.loggingIn : translations.login}
         </Button>
       </form>

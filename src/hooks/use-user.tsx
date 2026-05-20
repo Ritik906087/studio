@@ -25,10 +25,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // During SSR or if config is missing, auth will be null
     if (!auth) {
       if (typeof window !== 'undefined') {
-        // If we're on client but auth is missing, stop loading
         setLoading(false);
       }
       return;
@@ -46,7 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   useEffect(() => {
-    if (!user || !firestore) return;
+    if (!user || !firestore) {
+      if (!user) setLoading(false);
+      return;
+    };
 
     setLoading(true);
     const unsubscribeProfile = onSnapshot(

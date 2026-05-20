@@ -38,7 +38,22 @@ export const useFirebase = () => {
   return useContext(FirebaseContext);
 };
 
-export const useFirebaseApp = () => useFirebase().app;
-export const useFirestore = () => useFirebase().firestore;
-export const useAuth = () => useFirebase().auth;
-export const useStorage = () => useFirebase().storage;
+export const useFirebaseApp = () => {
+  const context = useFirebase();
+  return context.app;
+};
+
+export const useFirestore = () => {
+  const context = useFirebase();
+  return context.firestore;
+};
+
+export const useAuth = () => {
+  const context = useFirebase();
+  return context.auth;
+};
+
+export const useStorage = () => {
+  const context = useFirebase();
+  return context.storage;
+};

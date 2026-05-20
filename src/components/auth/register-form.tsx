@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import Image from 'next/image';
 import { useLanguage } from "@/context/language-context";
 import { useRouter, useSearchParams } from "next/navigation";
-import { auth, firestore } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs, limit, serverTimestamp } from "firebase/firestore";
 
@@ -34,6 +34,8 @@ export function RegisterForm() {
   const { translations } = useLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const auth = useAuth();
+  const firestore = useFirestore();
 
   const invitationCodeFromUrl = searchParams.get("ref") || "";
 
@@ -53,18 +55,39 @@ export function RegisterForm() {
   });
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
-    if (!auth || !firestore) return;
+    if (!auth || !firestore) {
+      toast({ variant: "destructive", title: "System Error", description: "Firebase is not initialized." });
+      return;
+    }
     setIsLoading(true);
     try {
         const email = `91${values.phone}@lgpay.app`;
-        const { user } = await createUserWithEmailAndPassword(auth, email, values.password);
+        
+        // 1. Check if user already exists in Firestore (via phone)
+        const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
+        const phoneCheckSnap = await getDocs(phoneCheckQuery);
+        if (!phoneCheckSnap.empty) {
+            throw new Error("This phone number is already registered. Please login.");
+        }
 
+        // 2. Verify Inviter
         let inviterUid = null;
         const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
         const inviterSnap = await getDocs(inviterQuery);
-        if (!inviterSnap.empty) inviterUid = inviterSnap.docs[0].id;
+        if (!inviterSnap.empty) {
+            inviterUid = inviterSnap.docs[0].id;
+        } else {
+            throw new Error("Invalid invitation code.");
+        }
 
+        // 3. Create Auth User
+        const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
+        const user = userCredential.user;
+
+        // 4. Generate a unique-ish numeric ID
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
+
+        // 5. Create Firestore Profile
         await setDoc(doc(firestore, 'users', user.uid), {
             uid: user.uid,
             email: email,
@@ -75,15 +98,22 @@ export function RegisterForm() {
             inviterUid: inviterUid,
             balance: 0,
             holdBalance: 0,
+            claimedUserRewards: [],
             createdAt: serverTimestamp(),
         });
 
         toast({ title: "Registration Successful", description: "Please log in with your new account." });
+        
+        // Sign out automatically after registration to force standard login
         await signOut(auth);
         router.push("/login");
     } catch (error: any) {
       console.error("Registration failed:", error);
-      toast({ variant: "destructive", title: "Registration Failed", description: error.message });
+      let errorMessage = error.message;
+      if (error.code === 'auth/email-already-in-use') {
+          errorMessage = "An account with this phone number already exists.";
+      }
+      toast({ variant: "destructive", title: "Registration Failed", description: errorMessage });
     } finally {
       setIsLoading(false);
     }
@@ -117,8 +147,21 @@ export function RegisterForm() {
               <FormLabel>{translations.password}</FormLabel>
               <div className="relative">
                 <FormControl><Input type={showPassword ? "text" : "password"} placeholder={translations.enterPassword} className="pr-10 text-base" {...field} /></FormControl>
-                <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1/2 -translate-y-1/2" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff /> : <Eye />}</Button>
+                <Button type="button" variant="ghost" size="icon" className="absolute right-1.5 top-1/2 -translate-y-1/2" onClick={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
               </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="confirmPassword"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{translations.confirmPassword}</FormLabel>
+              <FormControl><Input type={showPassword ? "text" : "password"} placeholder={translations.enterConfirmPassword} className="text-base" {...field} /></FormControl>
               <FormMessage />
             </FormItem>
           )}
@@ -136,11 +179,14 @@ export function RegisterForm() {
           render={({ field }) => (
             <FormItem className="flex items-start space-x-3 pt-2">
               <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-              <div className="text-sm leading-none"><FormLabel>{translations.iAgreeTo} <Link href="/terms" className="text-accent font-bold">User Agreement</Link></FormLabel><FormMessage /></div>
+              <div className="text-sm leading-none"><FormLabel className="font-normal">{translations.iAgreeTo} <Link href="/terms" className="text-accent font-bold">User Agreement</Link></FormLabel><FormMessage /></div>
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full btn-gradient rounded-full h-12" disabled={isLoading}>{isLoading ? translations.registering : translations.register}</Button>
+        <Button type="submit" className="w-full btn-gradient rounded-full h-12 text-lg font-bold" disabled={isLoading}>
+            {isLoading ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : null}
+            {isLoading ? translations.registering : translations.register}
+        </Button>
       </form>
     </Form>
   );
