@@ -4,18 +4,16 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ChevronLeft, Wallet, ArrowDownUp, Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { cn } from '@/lib/utils';
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
   PhonePe: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f", bgColor: "bg-violet-600" },
@@ -48,7 +46,7 @@ const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, isCreatingOrder }:
 
 export default function BuyPage() {
   const router = useRouter();
-  const { user, profile } = useUser();
+  const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -64,7 +62,7 @@ export default function BuyPage() {
     getDocs(q).then(snap => { if (!snap.empty) setInProgressOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); });
   }, [user, firestore]);
 
-  const purchaseOptions = [100, 500, 1000, 2000, 5000].map((a, i) => ({ id: i, amount: a }));
+  const purchaseOptions = useMemo(() => [100, 500, 1000, 2000, 5000].map((a, i) => ({ id: i, amount: a })), []);
 
   const handleBuyClick = (option: any) => {
     if (inProgressOrder) { toast({ title: "Order already in progress", variant: "destructive" }); return; }
@@ -99,15 +97,33 @@ export default function BuyPage() {
 
   return (
     <div className="p-4 space-y-4 pb-24">
-      <header className="flex items-center gap-4"><Button asChild variant="ghost" size="icon"><Link href="/home"><ChevronLeft /></Link></Button><h1 className="text-xl font-bold">Buy LG</h1></header>
+      <header className="flex items-center gap-4">
+        <Button asChild variant="ghost" size="icon">
+          <Link href="/home">
+            <ChevronLeft />
+          </Link>
+        </Button>
+        <h1 className="text-xl font-bold">Buy LG</h1>
+      </header>
       <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
-        <TabsList className="grid grid-cols-3"><TabsTrigger value="upi">UPI</TabsTrigger><TabsTrigger value="bank">Bank</TabsTrigger><TabsTrigger value="usdt">USDT</TabsTrigger></TabsList>
+        <TabsList className="grid grid-cols-3">
+          <TabsTrigger value="upi">UPI</TabsTrigger>
+          <TabsTrigger value="bank">Bank</TabsTrigger>
+          <TabsTrigger value="usdt">USDT</TabsTrigger>
+        </TabsList>
       </Tabs>
-      <PurchaseGrid options={purchaseOptions} bonusPercentage={activeTab === 'bank' ? 5 : 6} onBuyClick={handleBuyClick} isCreatingOrder={isCreatingOrder} />
+      <PurchaseGrid 
+        options={purchaseOptions} 
+        bonusPercentage={activeTab === 'bank' ? 5 : 6} 
+        onBuyClick={handleBuyClick} 
+        isCreatingOrder={isCreatingOrder} 
+      />
       
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
-            <DialogHeader><DialogTitle>Select App</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Select App</DialogTitle>
+            </DialogHeader>
             <div className="grid grid-cols-2 gap-4">
                 {Object.entries(paymentMethodDetails).map(([name, details]) => (
                     <Button key={name} onClick={() => createOrder(name, selectedAmount!)} className={cn("h-20 flex flex-col gap-2", details.bgColor)}>
