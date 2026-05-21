@@ -9,7 +9,8 @@ import { ChevronLeft, Gift, PlaySquare, CircleDollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useFirestore } from '@/firebase';
+import { doc, updateDoc, getDocs, query, collection, where, arrayUnion, runTransaction, serverTimestamp, addDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
 import Image from 'next/image';
@@ -40,12 +41,11 @@ const FINAL_REWARD_ID = 'nb_final_reward';
 const FINAL_REWARD_AMOUNT = 300;
 
 const NewbieTaskItem = ({ icon, title, isCompleted, onAction, progress, goal }: { icon: React.ReactNode, title: string, isCompleted: boolean, onAction: () => void, progress?: number, goal?: number }) => {
-    
     const renderButton = () => {
         if (isCompleted) {
             return <Button size="sm" className="font-semibold h-8 text-xs px-6 bg-green-500 hover:bg-green-500 shadow-[0_4px_14px_0_rgb(0,200,83,38%)] cursor-default" disabled>Done</Button>;
         }
-        return <Button size="sm" onClick={onAction} className="font-semibold h-8 text-xs px-6 bg-gray-300 text-gray-700 hover:bg-gray-400 active:scale-95 transition-transform">Go</Button>;
+        return <Button size="sm" onClick={onAction} className="font-semibold h-8 text-xs px-6 bg-gray-200 text-gray-700 hover:bg-gray-300 active:scale-95 transition-transform">Go</Button>;
     };
     
     return (
@@ -70,130 +70,140 @@ const NewbieTaskItem = ({ icon, title, isCompleted, onAction, progress, goal }: 
 };
 
 export default function NewbieRewardsPage() {
-    const { user, loading: userLoading } = useUser();
+    const { user, profile, loading: userLoading } = useUser();
+    const firestore = useFirestore();
     const { toast } = useToast();
     const router = useRouter();
 
+    const [mounted, setMounted] = useState(false);
     const [isClaimingFinal, setIsClaimingFinal] = useState(false);
     const [taskStatus, setTaskStatus] = useState<Record<string, boolean>>({});
     const [taskProgress, setTaskProgress] = useState<Record<string, number>>({});
-    const [userProfile, setUserProfile] = useState<{claimedUserRewards?: string[], paymentMethods?: any[]}|null>(null);
-    const [profileLoading, setProfileLoading] = useState(true);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const checkTaskCompletion = useCallback(async () => {
-        if (!user || !userProfile) return;
+        if (!user || !profile || !firestore) return;
         
-        let claimed = new Set(userProfile.claimedUserRewards || []);
+        const claimed = new Set(profile.claimedUserRewards || []);
         const status: Record<string, boolean> = {};
         const progress: Record<string, number> = {};
 
-        // Check UPI Link
-        const isUpiLinked = userProfile.paymentMethods?.some(pm => ['MobiKwik', 'Freecharge'].includes(pm.name)) || false;
+        // 1. Check UPI Link
+        const isUpiLinked = profile.paymentMethods?.some((pm: any) => ['MobiKwik', 'Freecharge'].includes(pm.name)) || false;
         if (isUpiLinked && !claimed.has('nb_upi')) {
-            const { error } = await supabase.from('users').update({ claimedUserRewards: Array.from(claimed.add('nb_upi')) }).eq('id', user.id);
-            if(error) console.error(error);
+            updateDoc(doc(firestore, 'users', user.uid), { 
+                claimedUserRewards: arrayUnion('nb_upi') 
+            }).catch(console.error);
         }
         status['nb_upi'] = isUpiLinked;
         
-        // Check Purchase
-        const { data: ordersData, error: ordersError } = await supabase
-            .from('orders')
-            .select('amount')
-            .eq('userId', user.id)
-            .eq('status', 'completed');
-            
-        let totalPurchaseAmount = 0;
-        if (ordersData) {
-            ordersData.forEach(order => {
-                totalPurchaseAmount += order.amount;
-            });
-        }
+        // 2. Check Purchase Progress
+        const ordersQuery = query(
+            collection(firestore, 'users', user.uid, 'orders'),
+            where('status', '==', 'completed')
+        );
+        const ordersSnap = await getDocs(ordersQuery);
+        const totalPurchaseAmount = ordersSnap.docs.reduce((sum, d) => sum + (d.data().baseAmount || d.data().amount || 0), 0);
         
         const hasPurchased = totalPurchaseAmount >= 1000;
         if (hasPurchased && !claimed.has('nb_purchase')) {
-            const { error } = await supabase.from('users').update({ claimedUserRewards: Array.from(claimed.add('nb_purchase')) }).eq('id', user.id);
-            if(error) console.error(error);
+            updateDoc(doc(firestore, 'users', user.uid), { 
+                claimedUserRewards: arrayUnion('nb_purchase') 
+            }).catch(console.error);
         }
         status['nb_purchase'] = hasPurchased;
         progress['nb_purchase'] = totalPurchaseAmount;
 
-        // Check manual tasks
+        // 3. Manual Tasks
         status['nb_telegram'] = claimed.has('nb_telegram');
         status['nb_tutorial'] = claimed.has('nb_tutorial');
         status[FINAL_REWARD_ID] = claimed.has(FINAL_REWARD_ID);
 
         setTaskStatus(status);
         setTaskProgress(progress);
-    }, [user, userProfile, supabase]);
-
-
-    useEffect(() => {
-        async function fetchProfile() {
-            if(!user) {
-                setProfileLoading(false);
-                return;
-            }
-            const {data} = await supabase.from('users').select('claimedUserRewards, paymentMethods').eq('id', user.id).single();
-            setUserProfile(data);
-            setProfileLoading(false);
-        }
-        fetchProfile();
-    }, [user]);
+    }, [user, profile, firestore]);
 
     useEffect(() => {
-        if (userProfile) {
+        if (mounted && profile) {
             checkTaskCompletion();
         }
-    }, [userProfile, checkTaskCompletion]);
+    }, [mounted, profile, checkTaskCompletion]);
 
     const handleSimpleTask = async (taskId: string, href: string) => {
-        if (user) {
-            const { data: currentProfile } = await supabase.from('users').select('claimedUserRewards').eq('id', user.id).single();
-            const updatedRewards = Array.from(new Set([...(currentProfile?.claimedUserRewards || []), taskId]));
-            await supabase.from('users').update({ claimedUserRewards: updatedRewards }).eq('id', user.id);
-            checkTaskCompletion();
-        }
+        if (!user || !firestore) return;
 
-        if (href.startsWith('http')) {
-            window.open(href, '_blank');
-        } else if (href && href !== '#') {
-            router.push(href);
+        try {
+            await updateDoc(doc(firestore, 'users', user.uid), {
+                claimedUserRewards: arrayUnion(taskId)
+            });
+            
+            if (href.startsWith('http')) {
+                window.open(href, '_blank');
+            } else if (href && href !== '#') {
+                router.push(href);
+            }
+        } catch (e) {
+            console.error(e);
         }
     };
     
     const handleFinalClaim = async () => {
-        if (!user) return;
+        if (!user || !firestore) return;
         setIsClaimingFinal(true);
         try {
-            const { error } = await supabase.rpc('claim_final_newbie_reward', {
-                p_user_id: user.id,
-                p_reward_amount: FINAL_REWARD_AMOUNT
+            await runTransaction(firestore, async (transaction) => {
+                const userRef = doc(firestore, 'users', user.uid);
+                const userSnap = await transaction.get(userRef);
+                if (!userSnap.exists()) throw new Error("User profile not found");
+                
+                const data = userSnap.data();
+                const claimed = data.claimedUserRewards || [];
+                
+                if (claimed.includes(FINAL_REWARD_ID)) {
+                    throw new Error("Reward already claimed");
+                }
+                
+                const currentBalance = data.balance || 0;
+                transaction.update(userRef, {
+                    balance: currentBalance + FINAL_REWARD_AMOUNT,
+                    claimedUserRewards: arrayUnion(FINAL_REWARD_ID)
+                });
+
+                const txRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
+                transaction.set(txRef, {
+                    userId: user.uid,
+                    amount: FINAL_REWARD_AMOUNT,
+                    type: 'new_user_reward',
+                    description: 'Final Newbie Reward Claimed',
+                    createdAt: serverTimestamp(),
+                    orderId: `FNR${Date.now()}`
+                });
             });
-            if (error) throw error;
             
-            toast({ title: "Reward Claimed!", description: `₹${FINAL_REWARD_AMOUNT} has been added to your balance.` });
-            setTaskStatus(prev => ({ ...prev, [FINAL_REWARD_ID]: true }));
+            toast({ title: "Reward Claimed!", description: `₹${FINAL_REWARD_AMOUNT} added to your balance.` });
         } catch (error: any) {
-             toast({ variant: 'destructive', title: error.message || 'Failed to claim reward.' });
+             toast({ variant: 'destructive', title: 'Claim Failed', description: error.message });
         } finally {
             setIsClaimingFinal(false);
         }
-    }
+    };
     
-    const allTasksCompleted = newbieTasksList.every(task => taskStatus[task.id]);
-    const isFinalRewardClaimed = taskStatus[FINAL_REWARD_ID];
-    const loading = userLoading || profileLoading;
-
-    if (loading) {
+    if (!mounted || userLoading) {
         return (
             <div className="flex items-center justify-center h-screen bg-secondary">
                 <Loader size="md" />
             </div>
-        )
+        );
     }
 
+    const allTasksCompleted = newbieTasksList.every(task => taskStatus[task.id]);
+    const isFinalRewardClaimed = taskStatus[FINAL_REWARD_ID];
+
     return (
-        <div className="flex min-h-screen flex-col bg-secondary font-body">
+        <div className="flex min-h-screen flex-col bg-secondary">
           <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
             <Button asChild variant="ghost" size="icon" className="h-8 w-8">
               <Link href="/my">
@@ -205,21 +215,18 @@ export default function NewbieRewardsPage() {
           </header>
 
           <main className="flex-grow space-y-4 p-4">
-            <Card className="border-none bg-gradient-to-br from-primary via-violet-500 to-accent text-white shadow-lg shadow-primary/30">
+            <Card className="border-none bg-gradient-to-br from-primary via-blue-600 to-accent text-white shadow-lg">
                 <CardContent className="p-5 flex justify-between items-center">
                     <div>
                         <p className="text-sm opacity-90">Reward Amount</p>
-                        <p className="text-4xl font-bold mt-1">₹{FINAL_REWARD_AMOUNT}</p>
+                        <p className="text-4xl font-black mt-1">₹{FINAL_REWARD_AMOUNT}</p>
                     </div>
                      {allTasksCompleted ? (
                         isFinalRewardClaimed ? (
-                            <Button size="lg" className="font-semibold h-10 text-sm px-6 bg-green-500 hover:bg-green-500 shadow-[0_4px_14px_0_rgb(0,200,83,38%)] cursor-default" disabled>
-                                Claimed
-                            </Button>
+                            <div className="bg-green-500 px-4 py-2 rounded-lg font-bold text-sm shadow-inner">Claimed</div>
                         ) : (
                             <Button
-                                size="lg"
-                                className="bg-white text-primary font-bold rounded-lg px-5 h-10 text-sm hover:bg-white/90 shadow-[0_4px_14px_0_rgb(0,0,0,10%)] transition-all active:scale-95 animate-pulse"
+                                className="bg-white text-primary font-black rounded-lg px-6 h-10 text-sm hover:bg-white/90 animate-pulse"
                                 disabled={isClaimingFinal}
                                 onClick={handleFinalClaim}
                             >
@@ -227,7 +234,7 @@ export default function NewbieRewardsPage() {
                             </Button>
                         )
                     ) : (
-                        <div className="bg-black/20 text-white font-semibold rounded-lg px-4 py-2 text-sm">
+                        <div className="bg-black/10 text-white/80 font-bold rounded-lg px-4 py-2 text-sm border border-white/10">
                             Undone
                         </div>
                     )}
@@ -239,7 +246,7 @@ export default function NewbieRewardsPage() {
                     const isCompleted = taskStatus[task.id] || false;
                     const currentProgress = taskProgress[task.id] || 0;
                     
-                    let onAction;
+                    let onAction = () => {};
                     if (task.id === 'nb_telegram' || task.id === 'nb_tutorial') {
                         onAction = () => handleSimpleTask(task.id, task.href);
                     } else {
