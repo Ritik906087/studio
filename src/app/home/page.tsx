@@ -12,7 +12,6 @@ import {
 import {
   History,
   TrendingUp,
-  ShieldCheck,
   Zap,
   ArrowUpRight,
   ArrowDownLeft,
@@ -24,7 +23,6 @@ import React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
-import { Logo } from '@/components/logo';
 
 export default function HomePage() {
   const plugin = React.useRef(Autoplay({ delay: 3500, stopOnInteraction: false }));
@@ -32,20 +30,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col text-foreground bg-[#F5F7FB] min-h-full pb-4">
-      {/* COMPACT APP HEADER */}
-      <header className="flex items-center justify-between px-4 py-3 bg-white/70 backdrop-blur-md sticky top-0 z-50 border-b border-slate-100">
-        <Logo className="scale-[0.65] origin-left" />
-        <div className="flex items-center gap-2">
-           <button className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-500 border border-slate-100 active:scale-90 transition-transform">
-              <Bell className="h-3.5 w-3.5" />
-           </button>
-           <Link href="/my" className="h-8 w-8 rounded-full bg-teal-50 flex items-center justify-center text-primary border border-teal-100 active:scale-90 transition-transform">
-              <TrendingUp className="h-3.5 w-3.5" />
-           </Link>
-        </div>
-      </header>
-
-      <main className="px-3 py-3 space-y-3">
+      <main className="px-3 py-4 space-y-3">
         {/* ULTRA COMPACT BALANCE CARD */}
         <Card className="border-none balance-gradient text-white rounded-[20px] shadow-md shadow-teal-500/10 overflow-hidden relative">
           <div className="absolute top-0 right-0 p-3 opacity-10 pointer-events-none">

@@ -23,7 +23,6 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { useAuth } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { Logo } from '@/components/logo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -72,15 +71,7 @@ export default function MyPage() {
 
   return (
     <div className="min-h-full bg-[#F5F7FB] pb-6">
-      {/* COMPACT HEADER */}
-      <header className="flex items-center justify-between px-5 py-2 bg-white/50 backdrop-blur-md sticky top-0 z-50 border-b border-slate-100">
-        <Logo className="scale-[0.6] origin-left" />
-        <Link href="/my/settings" className="h-7 w-7 rounded-full bg-slate-50 flex items-center justify-center text-slate-500 border border-slate-100 active:scale-90 transition-transform">
-          <Settings className="h-3.5 w-3.5" />
-        </Link>
-      </header>
-
-      <main className="px-3 pt-2 space-y-3">
+      <main className="px-3 pt-4 space-y-3">
         {/* PROFILE STRIP */}
         <div className="flex items-center justify-between bg-white p-3 rounded-[20px] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-3">
@@ -104,8 +95,8 @@ export default function MyPage() {
               </div>
             </div>
           </div>
-          <Link href="/my/settings">
-             <ChevronRight className="h-4 w-4 text-slate-200" />
+          <Link href="/my/settings" className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 active:bg-slate-100">
+             <Settings className="h-4 w-4" />
           </Link>
         </div>
 
