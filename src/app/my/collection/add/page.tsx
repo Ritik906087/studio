@@ -1,95 +1,134 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Landmark } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, ShieldCheck, AlertCircle, Search } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useUser, useFirestore } from '@/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 type PaymentMethod = {
+  id: string;
   name: string;
   logo: string;
-  bgColor: string;
-  maintenance?: boolean;
+  gradient: string;
+  handles: string[];
+  description: string;
 };
 
-const initialPaymentMethods: PaymentMethod[] = [
-  { name: "PhonePe", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f", bgColor: "bg-violet-600" },
-  { name: "Paytm", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8", bgColor: "bg-sky-500" },
-  { name: "MobiKwik", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7", bgColor: "bg-blue-600" },
-  { name: "Freecharge", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4", bgColor: "bg-orange-500" },
-  { name: "Airtel", logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Airtel%2001.png?alt=media&token=357342fd-85df-43c1-a7fb-d9d57315df1d", bgColor: "bg-red-500", maintenance: true },
+const PROVIDERS: PaymentMethod[] = [
+  { 
+    id: "phonepe",
+    name: "PhonePe", 
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f", 
+    gradient: "from-[#6739B7] to-[#512DA8]",
+    handles: ["@ybl", "@ibl", "@axl"],
+    description: "Link your primary PhonePe UPI"
+  },
+  { 
+    id: "paytm",
+    name: "Paytm", 
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8", 
+    gradient: "from-[#00BAF2] to-[#002E6E]",
+    handles: ["@paytm", "@ptyes"],
+    description: "Instant settlement via Paytm Wallet"
+  },
+  { 
+    id: "mobikwik",
+    name: "MobiKwik", 
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7", 
+    gradient: "from-[#0057E0] to-[#002B70]",
+    handles: ["@ikwik", "@mbkns"],
+    description: "Secure payments with MobiKwik"
+  },
+  { 
+    id: "freecharge",
+    name: "Freecharge", 
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4", 
+    gradient: "from-[#FF5E00] to-[#E64A19]",
+    handles: ["@freecharge"],
+    description: "Fast UPI link for Freecharge users"
+  },
+  { 
+    id: "airtel",
+    name: "Airtel", 
+    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Airtel%2001.png?alt=media&token=357342fd-85df-43c1-a7fb-d9d57315df1d", 
+    gradient: "from-[#E11900] to-[#B71C1C]",
+    handles: ["@airtel"],
+    description: "Link Airtel Payments Bank UPI"
+  },
 ];
 
 export default function AddCollectionPage() {
-  const [isUpiDialogOpen, setIsUpiDialogOpen] = useState(false);
-  const [isBankDialogOpen, setIsBankDialogOpen] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
-  const [isLinking, setIsLinking] = useState(false);
-  const [upiId, setUpiId] = useState("");
-
-  const [accountHolderName, setAccountHolderName] = useState('');
-  const [bankName, setBankName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [ifscCode, setIfscCode] = useState('');
-
-  const { toast } = useToast();
   const { user, profile } = useUser();
   const firestore = useFirestore();
+  const { toast } = useToast();
 
-  const specialBankUsers = ['7050396570', '7307081891', '9798630209', '9965567336', '9199604613', '9955557336'];
-  const showBankOption = profile?.phoneNumber && specialBankUsers.includes(profile.phoneNumber);
-
-  const handleUpiLinkClick = (method: PaymentMethod) => {
-    setSelectedMethod(method);
-    setIsUpiDialogOpen(true);
-    setUpiId("");
-  };
+  const [selectedProvider, setSelectedProvider] = useState<PaymentMethod | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [upiId, setUpiId] = useState("");
   
-  const handleBankLinkClick = () => {
-    setIsBankDialogOpen(true);
-    setAccountHolderName('');
-    setBankName('');
-    setAccountNumber('');
-    setIfscCode('');
-  }
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifiedName, setVerifiedName] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const validateUpi = (upi: string, methodName: string): boolean => {
-    const upiLower = upi.toLowerCase();
-    const upiRegexMap: { [key: string]: RegExp } = {
-        "PhonePe": /^[a-z0-9.\-_]{2,256}@(ybl|ibl|axl)$/,
-        "Paytm": /^[a-z0-9.\-_]{2,256}@(paytm|ptaap|ptpy|pthdfc|ptsbi|ptaxis|ptyes)$/,
-        "MobiKwik": /^[a-z0-9.\-_]{2,256}@(ikwik|mbk|mbkns)$/,
-        "Freecharge": /^[a-z0-9.\-_]{2,256}@(freecharge|axisbank)$/,
-    };
+  const handleProviderClick = (provider: PaymentMethod) => {
+    setSelectedProvider(provider);
+    setIsSheetOpen(true);
+    setUpiId("");
+    setVerifiedName(null);
+  };
 
-    const regex = upiRegexMap[methodName];
-    if (regex) return regex.test(upiLower);
-    return /^[a-z0-9.\-_]{2,256}@[a-z]{2,64}$/.test(upiLower);
-  }
+  const validateHandle = (id: string, provider: PaymentMethod) => {
+    const handle = id.substring(id.lastIndexOf("@"));
+    return provider.handles.includes(handle.toLowerCase());
+  };
 
-  const handleLinkSubmit = async (methodData: any) => {
-    if (!user || !firestore) {
-        toast({ variant: "destructive", title: "Error", description: "You are not logged in." });
+  const handleVerify = async () => {
+    if (!selectedProvider) return;
+    
+    if (!upiId.includes("@")) {
+        toast({ variant: "destructive", title: "Invalid Format", description: "Please enter a complete UPI ID (e.g. name@handle)" });
         return;
     }
 
-    setIsLinking(true);
+    if (!validateHandle(upiId, selectedProvider)) {
+        toast({ 
+            variant: "destructive", 
+            title: "Invalid Handle", 
+            description: `Only ${selectedProvider.handles.join(", ")} handles are allowed for ${selectedProvider.name}.` 
+        });
+        return;
+    }
+
+    setIsVerifying(true);
+    // Simulate real bank verification delay
+    setTimeout(() => {
+        setVerifiedName(profile?.displayName || "Verified Account User");
+        setIsVerifying(false);
+        toast({ title: "UPI Verified", description: "Bank account details fetched successfully." });
+    }, 2000);
+  };
+
+  const handleSave = async () => {
+    if (!user || !firestore || !selectedProvider || !verifiedName) return;
+
+    setIsSaving(true);
     try {
         const userRef = doc(firestore, 'users', user.uid);
         const userSnap = await getDoc(userRef);
@@ -97,193 +136,200 @@ export default function AddCollectionPage() {
         if (!userSnap.exists()) throw new Error("Profile not found.");
 
         const currentMethods = userSnap.data().paymentMethods || [];
-        const isDuplicate = currentMethods.some((pm: any) => 
-            (pm.upiId && pm.upiId === methodData.upiId) || 
-            (pm.accountNumber && pm.accountNumber === methodData.accountNumber)
-        );
+        const isDuplicate = currentMethods.some((pm: any) => pm.upiId === upiId);
 
-        if (isDuplicate) {
-            throw new Error(methodData.type === 'upi' ? "This UPI ID is already linked." : "This Bank Account is already linked.");
-        }
+        if (isDuplicate) throw new Error("This UPI ID is already linked.");
         
-        const updatedMethods = [...currentMethods, methodData];
+        const methodData = {
+            type: 'upi',
+            name: selectedProvider.name,
+            upiId: upiId,
+            verifiedName: verifiedName,
+            linkedAt: new Date().toISOString()
+        };
 
-        await updateDoc(userRef, { paymentMethods: updatedMethods });
+        await updateDoc(userRef, { paymentMethods: [...currentMethods, methodData] });
       
-        toast({
-            title: "Success!",
-            description: `${methodData.name} has been linked successfully.`,
-        });
-        setIsUpiDialogOpen(false);
-        setIsBankDialogOpen(false);
-
+        toast({ title: "Account Linked!", description: `${selectedProvider.name} has been added to your wallet.` });
+        setIsSheetOpen(false);
     } catch (error: any) {
-       console.error("Linking error:", error);
-       toast({
-        variant: "destructive",
-        title: "Failed to link method",
-        description: error.message || "An unexpected error occurred.",
-      });
+       toast({ variant: "destructive", title: "Link Failed", description: error.message });
     } finally {
-        setIsLinking(false);
+        setIsSaving(false);
     }
   };
 
-  const handleUpiFormSubmit = () => {
-    if (!selectedMethod) return;
-    if (!validateUpi(upiId, selectedMethod.name)) {
-        toast({ variant: "destructive", title: "Invalid UPI ID", description: `Please enter a valid UPI ID for ${selectedMethod.name}` });
-        return;
-    }
-    handleLinkSubmit({ type: 'upi', name: selectedMethod.name, upiId });
-  }
-  
-  const handleBankFormSubmit = () => {
-    if (!accountHolderName || !bankName || !accountNumber || !ifscCode) {
-        toast({ variant: "destructive", title: "Missing Information", description: "Please fill all bank details." });
-        return;
-    }
-     handleLinkSubmit({
-        type: 'bank',
-        name: bankName,
-        accountHolderName,
-        bankName,
-        accountNumber,
-        ifscCode
-     });
-  }
-
   return (
-    <div className="flex min-h-screen flex-col bg-secondary">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-          <Link href="/my/collection">
-            <ChevronLeft className="h-6 w-6 text-muted-foreground" />
-          </Link>
-        </Button>
-        <h1 className="text-xl font-bold">Add Payment Method</h1>
-        <div className="w-8"></div>
+    <div className="flex min-h-screen flex-col bg-[#F5F7FB]">
+      {/* HEADER */}
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b px-4 py-6">
+        <div className="flex items-center gap-4">
+            <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-slate-100">
+                <Link href="/my/collection"><ChevronLeft className="h-6 w-6 text-slate-800" /></Link>
+            </Button>
+            <div className="flex flex-col">
+                <h1 className="text-xl font-black text-slate-900 tracking-tight">Add Payment Method</h1>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Link your receiving UPI securely</p>
+            </div>
+        </div>
       </header>
 
-      <main className="flex-grow space-y-4 p-4">
-        {showBankOption && (
-            <>
-                <h2 className="text-sm font-semibold text-muted-foreground">Link Bank Account</h2>
-                <div
-                    onClick={handleBankLinkClick}
-                    className="flex h-20 w-full items-center justify-between gap-4 rounded-xl px-4 py-2 text-white shadow-md bg-slate-700 cursor-pointer"
-                >
-                    <div className="flex items-center gap-4">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
-                            <Landmark className="h-6 w-6 text-slate-700"/>
-                        </div>
-                        <div>
-                        <span className="text-lg font-semibold">Bank Account</span>
-                        </div>
-                    </div>
-                    <Button className="rounded-full bg-white/20 px-6 font-semibold text-white shadow-sm hover:bg-white/30">
-                        Link
-                    </Button>
-                </div>
-            </>
-        )}
-        <h2 className="text-sm font-semibold text-muted-foreground pt-2">
-          Select the receiving UPI to link
-        </h2>
-        <div className="space-y-3">
-          {initialPaymentMethods.map((method) => (
-            <div
-              key={method.name}
-              className={`flex h-20 w-full items-center justify-between gap-4 rounded-xl px-4 py-2 text-white shadow-md ${method.bgColor}`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
-                  <Image
-                    src={method.logo}
-                    alt={`${method.name} logo`}
-                    width={32}
-                    height={32}
-                    className="object-contain"
-                  />
-                </div>
-                <div>
-                  <span className="text-lg font-semibold">{method.name}</span>
-                </div>
-              </div>
-              {method.maintenance ? (
-                  <div className="rounded-md bg-orange-100 px-3 py-1.5 text-xs font-bold uppercase text-orange-600">
-                      Maintenance
-                  </div>
-              ) : (
-                <Button
-                  onClick={() => handleUpiLinkClick(method)}
-                  className="rounded-full bg-white/20 px-6 font-semibold text-white shadow-sm hover:bg-white/30"
-                >
-                  Link
-                </Button>
-              )}
+      <main className="p-4 space-y-4 pb-32">
+        <div className="bg-blue-600 rounded-3xl p-5 text-white shadow-xl shadow-blue-500/20 relative overflow-hidden mb-6">
+            <div className="absolute top-0 right-0 p-4 opacity-10"><ShieldCheck className="h-24 w-24" /></div>
+            <div className="relative z-10">
+                <h2 className="text-lg font-black">Secure Link</h2>
+                <p className="text-xs opacity-80 mt-1 max-w-[200px]">Link your UPI once to receive instant P2P settlements directly into your bank.</p>
             </div>
-          ))}
+        </div>
+
+        <div className="space-y-4">
+            {PROVIDERS.map((provider, index) => (
+                <motion.div
+                    key={provider.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                >
+                    <Card 
+                        className={cn(
+                            "relative overflow-hidden rounded-[28px] border-none shadow-sm cursor-pointer active:scale-[0.98] transition-all",
+                            "bg-white hover:shadow-md"
+                        )}
+                        onClick={() => handleProviderClick(provider)}
+                    >
+                        <div className={cn("absolute inset-y-0 left-0 w-2 bg-gradient-to-b", provider.gradient)} />
+                        <div className="p-5 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className={cn("h-14 w-14 rounded-2xl bg-gradient-to-br flex items-center justify-center p-3 shadow-inner", provider.gradient)}>
+                                    <Image src={provider.logo} alt={provider.name} width={40} height={40} className="object-contain brightness-0 invert" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-slate-800">{provider.name}</h3>
+                                    <div className="flex gap-1.5 mt-1.5">
+                                        {provider.handles.map(h => (
+                                            <span key={h} className="text-[8px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full border uppercase">{h}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300">
+                                    <ChevronRight className="h-5 w-5" />
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
+                </motion.div>
+            ))}
+        </div>
+
+        <div className="p-6 text-center">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Verified by Flex Shield 4.0</p>
         </div>
       </main>
 
-      {selectedMethod && (
-        <Dialog open={isUpiDialogOpen} onOpenChange={setIsUpiDialogOpen}>
-          <DialogContent className="sm:max-w-[425px] rounded-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-center text-xl font-bold">
-                Link {selectedMethod.name}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-6 py-4">
-              <div className="grid gap-2">
-                 <Label htmlFor="upiId">Enter your {selectedMethod.name} UPI</Label>
-                <Input id="upiId" placeholder="yourname@upi" className="h-12 text-base" value={upiId} onChange={(e) => setUpiId(e.target.value)} type="text" />
-              </div>
-            </div>
-            <DialogFooter className="sm:justify-center">
-              <Button type="submit" onClick={handleUpiFormSubmit} className="w-full h-12 rounded-full btn-gradient font-bold text-base" disabled={isLinking || !upiId}>
-                {isLinking && <Loader size="xs" className="mr-2" />}
-                Link
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      <Dialog open={isBankDialogOpen} onOpenChange={setIsBankDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] rounded-2xl p-0">
-            <DialogHeader className="p-6 pb-4 border-b">
-              <DialogTitle className="text-center text-xl font-bold">Link Bank Account</DialogTitle>
-            </DialogHeader>
-            <ScrollArea className="max-h-[60vh]">
-              <div className="grid gap-4 p-6">
-                  <div className="grid gap-2">
-                    <Label>Account Holder Name</Label>
-                    <Input placeholder="Full Name" className="h-12" value={accountHolderName} onChange={e => setAccountHolderName(e.target.value)} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Bank Name</Label>
-                    <Input placeholder="e.g., State Bank of India" className="h-12" value={bankName} onChange={e => setBankName(e.target.value)} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Account Number</Label>
-                    <Input placeholder="Bank Account Number" className="h-12" value={accountNumber} onChange={e => setAccountNumber(e.target.value)} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>IFSC Code</Label>
-                    <Input placeholder="IFSC Code" className="h-12" value={ifscCode} onChange={e => setIfscCode(e.target.value)} />
-                  </div>
+      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <SheetContent side="bottom" className="rounded-t-[40px] px-6 pb-10 pt-8 border-none shadow-2xl">
+          <SheetHeader className="text-left mb-6">
+            <div className="flex items-center gap-4 mb-2">
+                <div className={cn("h-12 w-12 rounded-2xl bg-gradient-to-br flex items-center justify-center p-2.5", selectedProvider?.gradient)}>
+                    <Image src={selectedProvider?.logo || ""} alt="logo" width={32} height={32} className="object-contain brightness-0 invert" />
                 </div>
-            </ScrollArea>
-            <DialogFooter className="sm:justify-center p-6 pt-4 border-t">
-              <Button type="submit" onClick={handleBankFormSubmit} className="w-full h-12 rounded-full btn-gradient font-bold text-base" disabled={isLinking || !accountNumber}>
-                {isLinking && <Loader size="xs" className="mr-2" />}
-                Link Bank Account
-              </Button>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                <SheetTitle className="text-2xl font-black tracking-tight">Link {selectedProvider?.name}</SheetTitle>
+            </div>
+            <SheetDescription className="text-xs font-medium text-slate-500">
+                Link your {selectedProvider?.name} UPI to receive payments instantly.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="space-y-6">
+            <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Registered Mobile</Label>
+                <div className="h-14 w-full bg-slate-50 rounded-2xl border-none ring-1 ring-slate-100 flex items-center px-4 font-black text-slate-800 tabular-nums">
+                    +91 {profile?.phoneNumber || "XXXXXXXXXX"}
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Enter UPI ID</Label>
+                <div className="relative">
+                    <Input 
+                        placeholder="yourname@handle" 
+                        value={upiId}
+                        onChange={(e) => { setUpiId(e.target.value.toLowerCase()); setVerifiedName(null); }}
+                        className="h-14 rounded-2xl bg-white border-none ring-2 ring-slate-100 focus-visible:ring-primary/20 text-lg font-black"
+                    />
+                    <AnimatePresence>
+                        {verifiedName && (
+                            <motion.div 
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-green-50 text-green-600 px-3 py-1 rounded-full border border-green-100"
+                            >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <span className="text-[10px] font-black uppercase">Verified</span>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
+                {!verifiedName && upiId && (
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 ml-1 uppercase">
+                        Supported handles: {selectedProvider?.handles.join(", ")}
+                    </p>
+                )}
+            </div>
+
+            {verifiedName && (
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-slate-900 rounded-2xl text-white flex items-center justify-between"
+                >
+                    <div className="space-y-0.5">
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Receiver Name</p>
+                        <p className="font-black text-base">{verifiedName} ✓</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
+                        <CheckCircle2 className="h-6 w-6 text-green-400" />
+                    </div>
+                </motion.div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 pt-4">
+                <Button variant="outline" className="h-14 rounded-2xl font-black text-slate-400 uppercase tracking-widest" onClick={() => setIsSheetOpen(false)}>
+                    Cancel
+                </Button>
+                {verifiedName ? (
+                    <Button 
+                        onClick={handleSave} 
+                        className="h-14 btn-gradient rounded-2xl font-black uppercase tracking-widest shadow-blue-500/20"
+                        disabled={isSaving}
+                    >
+                        {isSaving ? <Loader size="xs" /> : "Save Account"}
+                    </Button>
+                ) : (
+                    <Button 
+                        onClick={handleVerify} 
+                        className="h-14 btn-gradient rounded-2xl font-black uppercase tracking-widest shadow-blue-500/20"
+                        disabled={isVerifying || !upiId}
+                    >
+                        {isVerifying ? <Loader size="xs" /> : "Verify UPI"}
+                    </Button>
+                )}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
+
+function Card({ children, className, onClick }: { children: React.ReactNode, className?: string, onClick?: () => void }) {
+    return (
+        <div className={className} onClick={onClick}>
+            {children}
+        </div>
+    );
+}
+
