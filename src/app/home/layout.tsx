@@ -1,14 +1,12 @@
-
 "use client";
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, History, UserPlus, User } from 'lucide-react';
+import { Home, History, UserPlus, User, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import React, { useState, useEffect } from 'react';
 import { Loader } from '@/components/ui/loader';
 import { useLanguage } from '@/context/language-context';
-import { useUser } from '@/hooks/use-user';
 
 export default function HomeLayout({
   children,
@@ -18,54 +16,42 @@ export default function HomeLayout({
   const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
   const { translations } = useLanguage();
-  const { profile } = useUser();
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   const navItems = [
-    { href: '/home', icon: Home, label: translations.navHome },
-    { href: '/order', icon: History, label: translations.navOrderHistory },
-    { href: '/invite', icon: UserPlus, label: translations.navInvite },
-    { href: '/my', icon: User, label: translations.navMy },
+    { href: '/home', icon: Home, label: 'Home' },
+    { href: '/order', icon: History, label: 'History' },
+    { href: '/invite', icon: UserPlus, label: 'Invite' },
+    { href: '/my', icon: User, label: 'Profile' },
   ];
 
   if (!isMounted) {
     return (
-      <div className="home-layout md:bg-gray-200">
-        <div className="relative mx-auto flex min-h-screen w-full flex-col items-center justify-center bg-background md:max-w-md md:shadow-lg">
-          <Loader size="md" />
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <Loader size="md" />
       </div>
     );
   }
 
-  const noNavRoutes = [
-    '/buy',
-    '/sell',
-    '/my/team',
-    '/my/report-problem',
-    '/my/report-status',
-    '/my/feedback',
-    '/my/collection',
-    '/my/change-password',
-    '/my/transactions',
-    '/my/settings',
-    '/my/new-user-rewards',
-    '/my/newbie-friend-rewards',
-    '/my/tutorial',
-  ];
-
-  const showNavBar = !noNavRoutes.some(route => pathname.startsWith(route));
+  const hideNavOn = ['/confirm', '/report-problem', '/key', '/login', '/register'];
+  const showNavBar = !hideNavOn.some(route => pathname.includes(route));
 
   return (
-    <div className="home-layout md:bg-gray-200">
-      <div className="relative mx-auto flex min-h-screen w-full flex-col bg-background md:max-w-md md:shadow-lg">
-        <main className={cn("flex-grow", showNavBar ? "pb-14" : "")}>{children}</main>
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-0 overflow-hidden">
+      <div className="relative flex h-screen w-full flex-col bg-[#F5F7FB] md:h-[844px] md:max-w-[390px] md:rounded-[2.5rem] md:shadow-2xl md:my-4 overflow-hidden border border-slate-200/50">
+        <main className={cn(
+          "flex-1 overflow-y-auto no-scrollbar",
+          showNavBar ? "pb-16" : ""
+        )}>
+          {children}
+        </main>
+
         {showNavBar && (
-          <footer className="fixed bottom-0 z-50 w-full border-t bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.05)] md:absolute md:max-w-md">
-            <nav className="flex h-14 items-center justify-around">
+          <footer className="fixed bottom-0 z-50 w-full md:absolute border-t border-slate-100 bg-white/80 backdrop-blur-lg px-2 shadow-2xl">
+            <nav className="flex h-16 items-center justify-around">
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
@@ -73,14 +59,16 @@ export default function HomeLayout({
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'flex flex-col items-center gap-1 p-2 text-xs transition-colors',
+                      'flex flex-col items-center gap-1 p-2 transition-all duration-300',
                       isActive
-                        ? 'font-bold text-primary'
-                        : 'text-gray-500 hover:text-primary'
+                        ? 'text-primary scale-105'
+                        : 'text-slate-400'
                     )}
                   >
-                    <item.icon className="h-5 w-5" />
-                    <span>{item.label}</span>
+                    <item.icon className={cn("h-5 w-5", isActive ? "fill-primary/10" : "")} />
+                    <span className={cn("text-[10px] font-bold tracking-tight uppercase", isActive ? "text-primary" : "text-slate-400")}>
+                      {item.label}
+                    </span>
                   </Link>
                 );
               })}

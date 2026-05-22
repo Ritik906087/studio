@@ -13,7 +13,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole } from "lucide-react";
+import { Loader2, Smartphone, LockKeyhole, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import Link from 'next/link';
 import { useLanguage } from "@/context/language-context";
@@ -21,7 +21,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import Image from "next/image";
 
 const ADMIN_PHONE = '9060873927';
 
@@ -34,91 +33,53 @@ export function LoginForm() {
   const auth = useAuth();
 
   const formSchema = z.object({
-    phone: z
-      .string()
-      .length(10, { message: translations.phoneRequired })
-      .regex(/^[6-9]\d{9}$/, {
-        message: translations.phoneInvalid,
-      }),
-    password: z
-      .string()
-      .min(1, { message: translations.passwordRequired })
-      .min(6, { message: translations.passwordMin }),
+    phone: z.string().length(10, { message: translations.phoneRequired }).regex(/^[6-9]\d{9}$/, { message: translations.phoneInvalid }),
+    password: z.string().min(6, { message: translations.passwordMin }),
   });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      phone: "",
-      password: "",
-    },
+    defaultValues: { phone: "", password: "" },
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (values.phone === ADMIN_PHONE) {
-      toast({ 
-        variant: "destructive", 
-        title: "Access Restricted", 
-        description: "Please use the admin gateway for this account." 
-      });
+      toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
       return;
     }
-
-    if (!auth) {
-        toast({ variant: "destructive", title: "Error", description: "Authentication not available." });
-        return;
-    }
+    if (!auth) return;
     setIsLoading(true);
 
-    const emailFormats = [
-      `91${values.phone}@lgpay.app`,
-      `${values.phone}@lgpay.app`
-    ];
-
-    let success = false;
-
-    for (const email of emailFormats) {
-      if (success) break;
-      try {
-        await signInWithEmailAndPassword(auth, email, values.password);
-        success = true;
-      } catch (error: any) {
-        if (email === emailFormats[emailFormats.length - 1]) {
-          console.error("Final login attempt failed:", error);
-          let msg = "Incorrect phone number or password.";
-          toast({ variant: "destructive", title: "Login Failed", description: msg });
-          form.resetField("password");
-        }
-      }
-    }
-
-    if (success) {
-      toast({ title: "Login Successful", description: "Welcome back!" });
+    const email = `91${values.phone}@lgpay.app`;
+    try {
+      await signInWithEmailAndPassword(auth, email, values.password);
+      toast({ title: "Welcome Back!" });
       router.push('/home');
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Login Failed", description: "Wrong credentials." });
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
           name="phone"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-slate-600 font-bold text-xs uppercase tracking-wider">{translations.phoneNumber}</FormLabel>
-              <div className="relative flex items-center group">
-                 <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-slate-400 group-focus-within:text-primary transition-colors border-r pr-2">
+            <FormItem className="space-y-1.5">
+              <div className="relative group">
+                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400 group-focus-within:text-primary transition-colors">
                   <Smartphone className="h-4 w-4" />
-                  <span className="font-bold">+91</span>
+                  <span className="font-bold text-sm">+91</span>
                 </div>
                 <FormControl>
                   <Input 
                     type="tel" 
                     placeholder={translations.enterPhoneNumber} 
-                    className="pl-[84px] h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary transition-all rounded-xl" 
+                    className="pl-[68px] h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary rounded-xl text-sm" 
                     maxLength={10} 
                     {...field} 
                   />
@@ -132,13 +93,7 @@ export function LoginForm() {
           control={form.control}
           name="password"
           render={({ field }) => (
-            <FormItem>
-              <div className="flex items-center justify-between">
-                <FormLabel className="text-slate-600 font-bold text-xs uppercase tracking-wider">{translations.password}</FormLabel>
-                <Link href="/forgot-password" className="text-xs font-bold text-accent hover:text-primary transition-colors">
-                  {translations.forgotPassword}
-                </Link>
-              </div>
+            <FormItem className="space-y-1.5">
               <div className="relative group">
                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
                   <LockKeyhole className="h-4 w-4" />
@@ -147,22 +102,26 @@ export function LoginForm() {
                   <Input 
                     type={showPassword ? "text" : "password"} 
                     placeholder={translations.enterPassword} 
-                    className="pl-10 pr-10 h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary transition-all rounded-xl" 
+                    className="px-10 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary rounded-xl text-sm" 
                     {...field} 
                   />
                 </FormControl>
-                 <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 text-slate-400 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>
+                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
+                </button>
+              </div>
+              <div className="flex justify-end">
+                <Link href="/forgot-password" weights="bold" className="text-[10px] font-black text-teal-600 uppercase tracking-wider">
+                  {translations.forgotPassword}
+                </Link>
               </div>
               <FormMessage className="text-[10px]" />
             </FormItem>
           )}
         />
         
-        <Button type="submit" className="w-full font-black text-base btn-gradient rounded-xl h-14 mt-4" disabled={isLoading}>
-          {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-          {isLoading ? translations.loggingIn : translations.login}
+        <Button type="submit" className="w-full btn-gradient rounded-xl h-12 text-sm mt-2" disabled={isLoading}>
+          {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : translations.login}
         </Button>
       </form>
     </Form>
