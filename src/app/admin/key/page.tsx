@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,7 +14,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Loader2, Eye, EyeOff, ShieldCheck, AlertCircle, Database, Server, Terminal } from "lucide-react";
+import { Loader2, Eye, EyeOff, ShieldCheck, Terminal, Server, Database } from "lucide-react";
 import { useState } from "react";
 import { useFirestore } from "@/firebase";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
@@ -58,7 +57,6 @@ export default function AdminKeyPage() {
       let isVerified = hardcodedPassword === values.password;
 
       if (!isVerified) {
-        // Fallback to Firestore check for dynamically added admins
         const adminQuery = query(
           collection(firestore, 'admins'),
           where('masterId', '==', values.phone),
@@ -73,12 +71,11 @@ export default function AdminKeyPage() {
         throw new Error("Access Denied: Invalid Security Credentials.");
       }
 
-      // Session Setup
       const sessionData = {
         token: 'admin_' + Math.random().toString(36).substr(2, 12),
         masterId: values.phone,
         authenticated: true,
-        expires: Date.now() + (12 * 60 * 60 * 1000) // 12 hours
+        expires: Date.now() + (12 * 60 * 60 * 1000)
       };
       localStorage.setItem('flex_admin_session', JSON.stringify(sessionData));
 

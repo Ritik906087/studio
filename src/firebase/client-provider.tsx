@@ -16,12 +16,13 @@ export const FirebaseClientProvider = ({ children }: { children: ReactNode }) =>
       const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
       const auth = getAuth(app);
       
-      // Use initializeFirestore with forced long polling and auto-detection.
+      // Use initializeFirestore with forced long polling.
       // This specifically addresses the "Could not reach Cloud Firestore backend" error 
-      // common in workstation and proxy environments.
+      // common in workstation and proxy environments. 
+      // Note: experimentalForceLongPolling and experimentalAutoDetectLongPolling 
+      // cannot be used together.
       const firestore = initializeFirestore(app, {
         experimentalForceLongPolling: true,
-        experimentalAutoDetectLongPolling: true,
         ignoreUndefinedProperties: true,
       });
       
