@@ -4,8 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChevronLeft, Loader2, Search, CheckCircle2, Shield, Info, ArrowRight } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, Shield, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
@@ -19,7 +18,6 @@ export default function BuyPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'p2p' | 'usdt'>('p2p');
   const [isMatching, setIsMatching] = useState(false);
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
 
@@ -64,6 +62,7 @@ export default function BuyPage() {
         );
 
         const sellSnap = await getDocs(sellOrdersQuery);
+        // Find a seller who has enough liquidity
         const sellerDoc = sellSnap.docs.find(d => d.data().remainingAmount >= amount);
 
         const displayOrderId = generateOrderId();
@@ -72,12 +71,14 @@ export default function BuyPage() {
         const buyOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
 
         if (!sellerDoc) {
-            // 2. FALLBACK: USE ADMIN PAYMENT SERVER
-            console.log("No seller found. Routing to Admin Payment Server.");
+            // 2. FALLBACK: NO PEER SELLER FOUND -> USE ADMIN PAYMENT SERVER
+            console.log("No seller found. Routing to Admin Master Portal.");
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
             
-            if (adminPMSnap.empty) throw new Error("Liquidity Pool Busy. Try later.");
+            if (adminPMSnap.empty) {
+                throw new Error("Liquidity Pool is currently busy. Please try again in 5 minutes.");
+            }
 
             const adminMethod = adminPMSnap.docs[0].data();
 
@@ -88,20 +89,20 @@ export default function BuyPage() {
                     amount: totalAmount,
                     baseAmount: amount,
                     bonusPercentage: bonus,
-                    paymentType: 'bank_transfer',
+                    paymentType: 'admin_transfer',
                     paymentProvider: 'ADMIN_SERVER',
                     status: 'pending_payment',
                     sellerId: 'ADMIN',
                     sellerWithdrawalDetails: {
                         type: 'upi',
-                        name: adminMethod.upiHolderName || 'Admin Master',
+                        name: adminMethod.upiHolderName || 'Admin Master Portal',
                         upiId: adminMethod.upiId
                     },
                     createdAt: serverTimestamp(),
                 });
             });
 
-            toast({ title: "Secure Link Ready", description: "Matched with Admin Liquidity Pool." });
+            toast({ title: "Portal Link Ready", description: "Matched with Admin Liquidity Pool." });
             router.push(`/buy/confirm/${buyOrderRef.id}`);
             return;
         }
@@ -113,7 +114,7 @@ export default function BuyPage() {
             const freshSellerData = freshSellerSnap.data();
 
             if (!freshSellerData || freshSellerData.remainingAmount < amount || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
-                throw new Error("Seller status changed. Retrying rotation...");
+                throw new Error("Rotation timeout. Retrying link...");
             }
 
             const newRemaining = freshSellerData.remainingAmount - amount;
@@ -157,7 +158,7 @@ export default function BuyPage() {
                 baseAmount: amount,
                 bonusPercentage: bonus,
                 paymentType: 'p2p_upi',
-                paymentProvider: 'Auto-Matched',
+                paymentProvider: 'P2P-Matched',
                 status: 'pending_payment',
                 sellerId: freshSellerData.userId,
                 sellerWithdrawalDetails: freshSellerData.withdrawalMethod,
@@ -166,7 +167,7 @@ export default function BuyPage() {
             });
         });
 
-        toast({ title: "Match Success!", description: "Liquidity secured. Complete payment within 10 minutes." });
+        toast({ title: "Match Success!", description: "Liquidity secured via P2P Partner." });
         router.push(`/buy/confirm/${buyOrderRef.id}`);
 
     } catch (e: any) {
@@ -179,58 +180,61 @@ export default function BuyPage() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#F5F7FB]">
-      <header className="flex items-center gap-3 p-4 bg-white sticky top-0 z-50 border-b">
+      <header className="flex items-center gap-3 p-4 bg-white sticky top-0 z-50 border-b shadow-sm">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
           <Link href="/home"><ChevronLeft className="h-5 w-5" /></Link>
         </Button>
-        <h1 className="text-lg font-black text-slate-800">Buy Assets</h1>
+        <h1 className="text-lg font-black text-slate-800">Recharge Assets</h1>
       </header>
 
       <main className="p-4 space-y-4">
-        <Card className="border-none bg-primary text-white overflow-hidden rounded-2xl relative shadow-lg shadow-blue-500/20">
+        <Card className="border-none bg-primary text-white overflow-hidden rounded-3xl relative shadow-lg shadow-blue-500/20">
              <div className="absolute top-0 right-0 p-4 opacity-10"><Shield className="h-20 w-20" /></div>
-             <CardContent className="p-5">
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Instant Liquidity</p>
-                <h3 className="text-xl font-black mt-1">P2P Auto-Rotation</h3>
-                <p className="text-[10px] mt-2 font-medium bg-white/20 inline-block px-2 py-0.5 rounded-full border border-white/10">Secure Pool Active</p>
+             <CardContent className="p-6">
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Rotation Engine</p>
+                <h3 className="text-xl font-black mt-1">P2P Secure Pool</h3>
+                <div className="flex gap-2 mt-3">
+                    <span className="text-[8px] font-black bg-white/20 px-2 py-0.5 rounded-full border border-white/10 uppercase">Anti-Fraud v4</span>
+                    <span className="text-[8px] font-black bg-white/20 px-2 py-0.5 rounded-full border border-white/10 uppercase">Verified P2P</span>
+                </div>
              </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-2.5 pb-20">
+        <div className="flex flex-col gap-3 pb-20">
             {purchaseOptions.map((amt) => (
                 <Card 
                     key={amt} 
-                    className="p-4 border-none shadow-sm rounded-2xl active:bg-blue-50 transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white" 
+                    className="p-5 border-none shadow-sm rounded-3xl active:bg-blue-50 transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
                     onClick={() => !isMatching && handleP2PMatch(amt)}
                 >
                     <div className="flex items-center gap-4 relative z-10">
-                        <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                            <Shield className="h-5 w-5 text-primary" />
+                        <div className="h-12 w-12 bg-blue-50 rounded-2xl flex items-center justify-center">
+                            <Shield className="h-6 w-6 text-primary" />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Buy Amount</p>
-                            <p className="text-lg font-black text-slate-800 leading-none">₹{amt.toLocaleString()}</p>
-                            <p className="text-[9px] font-bold text-teal-600 mt-1 uppercase">+6% BONUS FP</p>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Buy Volume</p>
+                            <p className="text-xl font-black text-slate-800 leading-none">₹{amt.toLocaleString()}</p>
+                            <p className="text-[10px] font-black text-teal-600 mt-1.5 uppercase tracking-tighter">Bonus: +6% FP Assets</p>
                         </div>
                     </div>
-                    <div className="bg-primary text-white p-2 rounded-lg group-active:scale-90 transition-transform shadow-md shadow-primary/20">
-                        <ArrowRight className="h-4 w-4" />
+                    <div className="bg-primary text-white p-2.5 rounded-xl group-active:scale-90 transition-transform shadow-lg shadow-primary/20">
+                        <ArrowRight className="h-5 w-5" />
                     </div>
                 </Card>
             ))}
         </div>
 
         {isMatching && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 text-center">
-                 <Card className="w-full max-w-xs animate-in zoom-in-95 duration-200 p-8 rounded-[32px] border-none shadow-2xl">
-                     <div className="relative w-20 h-20 mx-auto mb-6">
-                        <Loader2 className="w-20 h-20 text-primary animate-spin" />
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-6 text-center">
+                 <Card className="w-full max-w-xs animate-in zoom-in-95 duration-200 p-10 rounded-[40px] border-none shadow-2xl">
+                     <div className="relative w-24 h-24 mx-auto mb-8">
+                        <Loader2 className="w-24 h-24 text-primary animate-spin" />
                         <div className="absolute inset-0 flex items-center justify-center">
-                            <Search className="h-8 w-8 text-primary animate-pulse" />
+                            <Search className="h-10 w-10 text-primary animate-pulse" />
                         </div>
                      </div>
-                     <h3 className="font-black text-xl text-slate-800">Finding Match</h3>
-                     <p className="text-xs text-slate-400 mt-2 font-medium">Rotating liquidity pool... checking P2P and Server availability.</p>
+                     <h3 className="font-black text-xl text-slate-800">Matching Pool</h3>
+                     <p className="text-xs text-slate-400 mt-2 font-medium leading-relaxed px-4">Rotating liquidity... Checking P2P Sellers and Admin Server fallback.</p>
                  </Card>
             </div>
         )}

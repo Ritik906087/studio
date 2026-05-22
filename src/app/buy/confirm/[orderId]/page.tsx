@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
@@ -79,27 +78,31 @@ function PaymentDetailsContent() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
-                const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId!);
-                const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId!);
+                
+                // If it's a P2P match, we need to release seller liquidity
+                if (order.matchedSellOrderId && order.sellerId !== 'ADMIN') {
+                    const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId);
 
-                const sellerSnap = await transaction.get(sellerOrderRef);
-                if (!sellerSnap.exists()) throw new Error("Seller record not found.");
+                    const sellerSnap = await transaction.get(sellerOrderRef);
+                    if (sellerSnap.exists()) {
+                        const sellerData = sellerSnap.data();
+                        const newRemaining = (sellerData.remainingAmount || 0) + order.baseAmount;
+                        const newStatus = sellerData.status === 'processing' ? 'partially_filled' : sellerData.status;
 
-                const sellerData = sellerSnap.data();
-                const newRemaining = (sellerData.remainingAmount || 0) + order.baseAmount;
-                const newStatus = sellerData.status === 'processing' ? 'partially_filled' : sellerData.status;
+                        transaction.update(sellerOrderRef, {
+                            remainingAmount: newRemaining,
+                            status: newStatus,
+                            matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
+                        });
 
-                transaction.update(sellerOrderRef, {
-                    remainingAmount: newRemaining,
-                    status: newStatus,
-                    matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
-                });
-
-                transaction.update(sellerUserOrderRef, {
-                    remainingAmount: newRemaining,
-                    status: newStatus,
-                    matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
-                });
+                        transaction.update(sellerUserOrderRef, {
+                            remainingAmount: newRemaining,
+                            status: newStatus,
+                            matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
+                        });
+                    }
+                }
 
                 transaction.update(buyerOrderRef, {
                     status: 'cancelled',
@@ -108,7 +111,7 @@ function PaymentDetailsContent() {
                 });
             });
 
-            toast({ title: 'Order Cancelled', description: 'Liquidity has been released back to pool.' });
+            toast({ title: 'Order Cancelled', description: 'Liquidity has been released.' });
             router.push('/home');
         } catch (e: any) {
             console.error("Cancellation Error:", e);
@@ -162,19 +165,22 @@ function PaymentDetailsContent() {
 
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
-                const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId!);
-                const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId!);
+                
+                if (order.matchedSellOrderId && order.sellerId !== 'ADMIN') {
+                    const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId);
 
-                const sellerSnap = await transaction.get(sellerOrderRef);
-                if (!sellerSnap.exists()) throw new Error("Seller record lost. Contact support.");
+                    const sellerSnap = await transaction.get(sellerOrderRef);
+                    if (sellerSnap.exists()) {
+                        const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
+                        const updatedMatches = matchedOrders.map((m: any) => 
+                            m.buyOrderId === orderId ? { ...m, status: 'pending_confirmation', utr: utr } : m
+                        );
+                        transaction.update(sellerOrderRef, { matchedBuyOrders: updatedMatches });
+                        transaction.update(sellerUserOrderRef, { matchedBuyOrders: updatedMatches });
+                    }
+                }
 
-                const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
-                const updatedMatches = matchedOrders.map((m: any) => 
-                    m.buyOrderId === orderId ? { ...m, status: 'pending_confirmation', utr: utr } : m
-                );
-
-                transaction.update(sellerOrderRef, { matchedBuyOrders: updatedMatches });
-                transaction.update(sellerUserOrderRef, { matchedBuyOrders: updatedMatches });
                 transaction.update(buyerOrderRef, {
                     status: 'pending_confirmation',
                     utr: utr,
@@ -183,7 +189,7 @@ function PaymentDetailsContent() {
                 });
             });
 
-            toast({ title: 'Payment Submitted', description: 'Waiting for seller to verify your payment.' });
+            toast({ title: 'Payment Submitted', description: 'Waiting for verification.' });
             router.push(`/order/${orderId}`);
         } catch (e: any) {
             console.error("Submission Error:", e);
@@ -239,7 +245,7 @@ function PaymentDetailsContent() {
 
                 <Card className="border-none shadow-sm rounded-2xl bg-white overflow-hidden">
                     <CardHeader className="bg-slate-50 p-4 border-b">
-                        <CardTitle className="text-sm font-bold text-slate-800">Seller Collection Details</CardTitle>
+                        <CardTitle className="text-sm font-bold text-slate-800">{order.sellerId === 'ADMIN' ? 'Admin Master Portal' : 'Seller Collection Details'}</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 space-y-4">
                         <div className="flex flex-col items-center py-4 space-y-3">

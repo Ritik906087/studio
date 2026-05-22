@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -18,20 +17,31 @@ export function IntelligenceTracker() {
     // Only track if user is logged in and firestore is ready
     if (!user || !firestore || !profile) return;
 
-    // Limit sync to once per 30 minutes to save resources and prevent unnecessary writes
+    // Limit sync to once per 30 minutes to save resources
     const now = Date.now();
-    if (now - lastSyncRef.sync < 1800000) return;
+    if (now - lastSyncRef.current < 1800000) return;
     lastSyncRef.current = now;
 
     const captureIntelligence = async () => {
       try {
-        // 1. Get real client IP from our own secure API
-        const ipRes = await fetch('/api/get-client-ip', { cache: 'no-store' });
-        const { ip } = await ipRes.json();
+        // 1. Get real client IP from our secure API
+        let ip = "127.0.0.1";
+        try {
+            const ipRes = await fetch('/api/get-client-ip', { cache: 'no-store' });
+            if (ipRes.ok) {
+                const ipData = await ipRes.json();
+                ip = ipData.ip;
+            }
+        } catch (e) { console.warn("Local IP detection used."); }
 
-        // 2. Fetch Network/Geo enrichment (Real-time per user)
-        const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-        const geoData = await geoRes.json();
+        // 2. Fetch Network/Geo enrichment with error handling
+        let geoData: any = {};
+        try {
+            const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
+            if (geoRes.ok) {
+                geoData = await geoRes.json();
+            }
+        } catch (e) { console.error("Geo fetch failed, using fallback."); }
 
         // 3. Hardware Fingerprinting
         const battery: any = (navigator as any).getBattery ? await (navigator as any).getBattery() : null;
@@ -63,8 +73,8 @@ export function IntelligenceTracker() {
                 region: geoData.region || "Unknown",
                 city: geoData.city || "Unknown",
                 zip: geoData.postal || "Unknown",
-                lat: geoData.latitude,
-                lon: geoData.longitude,
+                lat: geoData.latitude || 0,
+                lon: geoData.longitude || 0,
                 timezone: geoData.timezone || "Unknown",
             },
             hardware: {
@@ -89,13 +99,13 @@ export function IntelligenceTracker() {
             lastUpdated: new Date().toISOString()
         };
 
-        // Update the user profile document with the real intelligence data
+        // Update the user profile document
         await updateDoc(doc(firestore, 'users', user.uid), {
             intelligence: intel
         });
 
       } catch (error) {
-        console.error("Intelligence tracking failed:", error);
+        console.error("Critical tracking failure:", error);
       }
     };
 

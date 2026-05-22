@@ -1,25 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { 
-  LogOut, Users, LayoutDashboard, Wallet, FileClock, ShieldCheck, Activity, 
-  Menu, X, TrendingUp, TrendingDown, CheckCircle2, AlertTriangle, Server, 
-  CreditCard, Smartphone, Zap, Eye, Check, Edit3, Trash2
+  LogOut, Users, LayoutDashboard, FileClock, ShieldCheck, Activity, 
+  Menu, X, TrendingDown, CheckCircle2, Server, 
+  Edit3, Eye, Trash2, Smartphone, DollarSign, Wallet
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Loader } from '@/components/ui/loader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, getDocs, where, doc, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -44,11 +43,8 @@ export default function AdminDashboardPage() {
     const [sellOrders, setSellOrders] = useState<any[]>([]);
     const [pendingBuyOrders, setPendingBuyOrders] = useState<any[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
-    const [stats, setStats] = useState({ todayBuy: 0, todaySell: 0, totalBuy: 0, totalSell: 0 });
     const [loading, setLoading] = useState(true);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-    // Master Payment States
     const [editingPayment, setEditingPayment] = useState<any>(null);
 
     useEffect(() => {
@@ -73,18 +69,18 @@ export default function AdminDashboardPage() {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        const unsubBuy = onSnapshot(query(collection(firestore, 'users'), where('status', '==', 'pending_confirmation')), (snap) => {
-            // This requires collectionGroup or listening to each user. 
-            // For MVP, we'll listen to a simplified list if available or use subcollection queries.
+        // Use collectionGroup to find buy orders awaiting confirmation across all users
+        const buyOrdersQuery = query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation'));
+        const unsubBuy = onSnapshot(buyOrdersQuery, (snap) => {
+            setPendingBuyOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
         
-        // Listener for Admin Payment Server
         const unsubPM = onSnapshot(collection(firestore, 'paymentMethods'), (snap) => {
             setPaymentMethods(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
         setLoading(false);
-        return () => { unsubUsers(); unsubSell(); unsubPM(); };
+        return () => { unsubUsers(); unsubSell(); unsubBuy(); unsubPM(); };
     }, [firestore]);
 
     const handleLogout = () => {
@@ -96,7 +92,7 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         try {
             await setDoc(doc(firestore, 'paymentMethods', type), { ...data, type }, { merge: true });
-            toast({ title: "Success", description: "Admin payment server updated." });
+            toast({ title: "Updated", description: "Payment server link refreshed." });
             setEditingPayment(null);
         } catch (e: any) { toast({ variant: 'destructive', title: "Update Failed", description: e.message }); }
     };
@@ -158,25 +154,26 @@ export default function AdminDashboardPage() {
                         <TabsContent value="dashboard" className="space-y-6">
                             <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
                                 <Card className="border-none shadow-sm rounded-3xl p-6 bg-white">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Users</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Members</p>
                                     <div className="text-3xl font-black text-slate-900 mt-2">{allUsers.length}</div>
                                 </Card>
                                 <Card className="border-none shadow-sm rounded-3xl p-6 bg-slate-900 text-white">
-                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Pool Balance</p>
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Pool</p>
                                     <div className="text-3xl font-black text-primary mt-2">₹{totalBalance.toLocaleString()}</div>
                                 </Card>
                                 <Card className="border-none shadow-sm rounded-3xl p-6 bg-white">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Buy</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Buy</p>
                                     <div className="text-3xl font-black text-green-600 mt-2">₹0</div>
                                 </Card>
                                 <Card className="border-none shadow-sm rounded-3xl p-6 bg-white">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Sell</p>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Sell</p>
                                     <div className="text-3xl font-black text-red-600 mt-2">₹0</div>
                                 </Card>
                             </div>
-                            <Card className="border-none shadow-sm rounded-3xl bg-white p-8 text-center text-slate-300">
-                                <Activity className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                                <p className="font-black uppercase text-[10px] tracking-widest">System Health: Optimal</p>
+                            <Card className="border-none shadow-sm rounded-3xl bg-white p-12 text-center">
+                                <Activity className="h-12 w-12 mx-auto mb-4 text-primary animate-pulse" />
+                                <h3 className="font-black text-lg">System Pulse Active</h3>
+                                <p className="text-slate-400 text-sm mt-1">Monitoring P2P rotation and Admin Fallback Server.</p>
                             </Card>
                         </TabsContent>
 
@@ -201,13 +198,16 @@ export default function AdminDashboardPage() {
                                                     <TableCell>
                                                         <div className="flex items-center gap-3">
                                                             <Avatar className="h-8 w-8"><AvatarImage src={u.photoURL} /><AvatarFallback>U</AvatarFallback></Avatar>
-                                                            <span className="font-bold text-xs">{u.displayName}</span>
+                                                            <div className="flex flex-col">
+                                                                <span className="font-bold text-xs">{u.displayName}</span>
+                                                                <span className="text-[9px] text-slate-400">+91 {u.phoneNumber}</span>
+                                                            </div>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="font-black text-xs">₹{u.balance?.toFixed(2)}</TableCell>
+                                                    <TableCell className="font-black text-xs text-slate-700">₹{u.balance?.toFixed(2)}</TableCell>
                                                     <TableCell className="text-right pr-6">
-                                                        <Button asChild size="sm" className="h-8 rounded-lg bg-slate-900 font-black text-[10px] uppercase">
-                                                            <Link href={`/admin/users/${u.id}`}>Audit</Link>
+                                                        <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-lg">
+                                                            <Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link>
                                                         </Button>
                                                     </TableCell>
                                                 </TableRow>
@@ -221,15 +221,14 @@ export default function AdminDashboardPage() {
                         {/* TAB 3: WITHDRAWAL (SELL ORDERS) */}
                         <TabsContent value="withdrawal">
                             <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                <CardHeader className="p-6 border-b"><CardTitle className="text-sm font-black uppercase">Active Sell Orders</CardTitle></CardHeader>
+                                <CardHeader className="p-6 border-b"><CardTitle className="text-sm font-black uppercase">Sell Orders (Withdrawals)</CardTitle></CardHeader>
                                 <div className="overflow-x-auto">
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
                                             <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase pl-6">Order ID</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">UID / Mob</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase pl-6">UID / Mobile</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Amount</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Withdrawal UPI</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">Method</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Status</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase text-right pr-6">Control</TableHead>
                                             </TableRow>
@@ -237,25 +236,24 @@ export default function AdminDashboardPage() {
                                         <TableBody>
                                             {sellOrders.map(o => (
                                                 <TableRow key={o.id}>
-                                                    <TableCell className="font-mono text-xs font-bold text-slate-500 pl-6">{o.orderId}</TableCell>
-                                                    <TableCell>
+                                                    <TableCell className="pl-6">
                                                         <p className="font-black text-[11px] text-blue-600">{o.userNumericId}</p>
-                                                        <p className="text-[10px] text-slate-400">+91 {o.userPhoneNumber}</p>
+                                                        <p className="text-[9px] text-slate-400 font-medium">+91 {o.userPhoneNumber}</p>
                                                     </TableCell>
-                                                    <TableCell className="font-black text-xs text-red-600">₹{o.amount}</TableCell>
+                                                    <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-2">
-                                                            <div className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center p-1">
-                                                                <Image src={providerLogos[o.withdrawalMethod?.name] || ""} alt="logo" width={16} height={16} />
+                                                            <div className="h-6 w-6 rounded-lg bg-slate-50 p-1 flex items-center justify-center">
+                                                                <Image src={providerLogos[o.withdrawalMethod?.name] || ""} alt="logo" width={14} height={14} />
                                                             </div>
-                                                            <span className="font-mono text-[10px] font-black">{o.withdrawalMethod?.upiId}</span>
+                                                            <span className="font-mono text-[9px] font-black">{o.withdrawalMethod?.upiId}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Badge className="bg-blue-50 text-blue-600 border-none text-[9px] font-black uppercase">{o.status}</Badge>
+                                                        <Badge className="bg-blue-50 text-blue-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
-                                                        <Button size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase rounded-lg">View</Button>
+                                                        <Button size="sm" variant="outline" className="h-7 text-[9px] font-black uppercase rounded-lg">View Matches</Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -268,60 +266,109 @@ export default function AdminDashboardPage() {
                         {/* TAB 4: CONFIRMATION (BUY PROOF) */}
                         <TabsContent value="confirm">
                              <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                <CardHeader className="p-6 border-b"><CardTitle className="text-sm font-black uppercase">Pending Buy Verifications</CardTitle></CardHeader>
-                                <div className="p-12 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">
-                                    Scanning for user-submitted payment proofs...
+                                <CardHeader className="p-6 border-b"><CardTitle className="text-sm font-black uppercase">Pending Buy Proofs</CardTitle></CardHeader>
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader className="bg-slate-50/50">
+                                            <TableRow>
+                                                <TableHead className="text-[10px] font-black uppercase pl-6">Order ID</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">UTR Number</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">Proof</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase text-right pr-6">Action</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {pendingBuyOrders.map(o => (
+                                                <TableRow key={o.id}>
+                                                    <TableCell className="font-mono text-xs font-bold text-slate-500 pl-6">{o.orderId}</TableCell>
+                                                    <TableCell className="font-mono text-xs font-black text-primary">{o.utr}</TableCell>
+                                                    <TableCell>
+                                                        {o.screenshotURL ? (
+                                                            <a href={o.screenshotURL} target="_blank" className="flex items-center gap-2 text-blue-600 hover:underline">
+                                                                <ShieldCheck className="h-3 w-3" /> <span className="text-[10px] font-black">VIEW IMAGE</span>
+                                                            </a>
+                                                        ) : <span className="text-[9px] text-slate-300">NO PROOF</span>}
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6">
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button size="sm" className="bg-green-600 h-7 text-[9px] font-black">APPROVE</Button>
+                                                            <Button size="sm" variant="destructive" className="h-7 text-[9px] font-black">REJECT</Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                    {pendingBuyOrders.length === 0 && (
+                                        <div className="p-20 text-center text-slate-300 font-black text-[10px] uppercase tracking-[0.2em]">All Proofs Cleared</div>
+                                    )}
                                 </div>
                             </Card>
                         </TabsContent>
 
                         {/* TAB 5: PAYMENT SERVER (ADMIN CONFIG) */}
                         <TabsContent value="server" className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <Tabs defaultValue="bank" className="w-full">
+                                <TabsList className="bg-white p-1 rounded-2xl border-none shadow-sm inline-flex mb-4">
+                                    <TabsTrigger value="bank" className="rounded-xl px-6 font-black text-[10px] uppercase">Bank Server</TabsTrigger>
+                                    <TabsTrigger value="upi" className="rounded-xl px-6 font-black text-[10px] uppercase">UPI Server</TabsTrigger>
+                                    <TabsTrigger value="usdt" className="rounded-xl px-6 font-black text-[10px] uppercase">USDT Node</TabsTrigger>
+                                </TabsList>
+
                                 {['bank', 'upi', 'usdt'].map(type => {
                                     const method = paymentMethods.find(m => m.id === type) || { type };
                                     const isEditing = editingPayment === type;
                                     return (
-                                        <Card key={type} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                            <CardHeader className="bg-slate-50 p-4 border-b flex flex-row justify-between items-center">
-                                                <CardTitle className="text-[10px] font-black uppercase text-slate-500">{type} Server</CardTitle>
-                                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingPayment(isEditing ? null : type)}>
-                                                    <Edit3 className="h-4 w-4" />
-                                                </Button>
-                                            </CardHeader>
-                                            <CardContent className="p-5 space-y-4">
-                                                {isEditing ? (
-                                                    <div className="space-y-3">
-                                                        {type === 'bank' && (
-                                                            <>
-                                                                <Input placeholder="Bank Name" defaultValue={method.bankName} onChange={e => method.bankName = e.target.value} />
-                                                                <Input placeholder="Holder Name" defaultValue={method.accountHolderName} onChange={e => method.accountHolderName = e.target.value} />
-                                                                <Input placeholder="Account Number" defaultValue={method.accountNumber} onChange={e => method.accountNumber = e.target.value} />
-                                                                <Input placeholder="IFSC Code" defaultValue={method.ifscCode} onChange={e => method.ifscCode = e.target.value} />
-                                                            </>
-                                                        )}
-                                                        {type === 'upi' && (
-                                                            <>
-                                                                <Input placeholder="UPI ID" defaultValue={method.upiId} onChange={e => method.upiId = e.target.value} />
-                                                                <Input placeholder="Holder Name" defaultValue={method.upiHolderName} onChange={e => method.upiHolderName = e.target.value} />
-                                                            </>
-                                                        )}
-                                                        {type === 'usdt' && (
-                                                            <Input placeholder="TRC20 Wallet Address" defaultValue={method.usdtWalletAddress} onChange={e => method.usdtWalletAddress = e.target.value} />
-                                                        )}
-                                                        <Button className="w-full bg-blue-600 font-black text-[10px] uppercase" onClick={() => handleUpdateAdminPayment(type, method)}>Update Link</Button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="space-y-1">
-                                                        <p className="text-xs font-black text-slate-800">{method.upiId || method.accountNumber || method.usdtWalletAddress || "Not Linked"}</p>
-                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{method.bankName || method.upiHolderName || "Admin Master"}</p>
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
+                                        <TabsContent key={type} value={type}>
+                                            <Card className="border-none shadow-sm rounded-3xl bg-white max-w-xl overflow-hidden">
+                                                <CardHeader className="bg-slate-50 p-4 border-b flex flex-row justify-between items-center">
+                                                    <CardTitle className="text-[10px] font-black uppercase text-slate-500">{type} Configuration</CardTitle>
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingPayment(isEditing ? null : type)}>
+                                                        <Edit3 className="h-4 w-4" />
+                                                    </Button>
+                                                </CardHeader>
+                                                <CardContent className="p-8 space-y-4">
+                                                    {isEditing ? (
+                                                        <div className="space-y-4">
+                                                            {type === 'bank' && (
+                                                                <>
+                                                                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase">Bank Name</p><Input defaultValue={method.bankName} onChange={e => method.bankName = e.target.value} /></div>
+                                                                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase">Holder Name</p><Input defaultValue={method.accountHolderName} onChange={e => method.accountHolderName = e.target.value} /></div>
+                                                                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase">Account Number</p><Input defaultValue={method.accountNumber} onChange={e => method.accountNumber = e.target.value} /></div>
+                                                                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase">IFSC Code</p><Input defaultValue={method.ifscCode} onChange={e => method.ifscCode = e.target.value} /></div>
+                                                                </>
+                                                            )}
+                                                            {type === 'upi' && (
+                                                                <>
+                                                                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase">Master UPI ID</p><Input defaultValue={method.upiId} onChange={e => method.upiId = e.target.value} /></div>
+                                                                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase">Holder Name</p><Input defaultValue={method.upiHolderName} onChange={e => method.upiHolderName = e.target.value} /></div>
+                                                                </>
+                                                            )}
+                                                            {type === 'usdt' && (
+                                                                <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 uppercase">TRC20 Wallet Address</p><Input defaultValue={method.usdtWalletAddress} onChange={e => method.usdtWalletAddress = e.target.value} /></div>
+                                                            )}
+                                                            <div className="pt-4 flex gap-3">
+                                                                <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px]" onClick={() => setEditingPayment(null)}>CANCEL</Button>
+                                                                <Button className="flex-1 bg-blue-600 rounded-xl font-black text-[10px]" onClick={() => handleUpdateAdminPayment(type, method)}>SAVE LINK</Button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-6">
+                                                            <div className="h-16 w-16 rounded-3xl bg-blue-50 flex items-center justify-center">
+                                                                <ShieldCheck className="h-8 w-8 text-primary" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xl font-black text-slate-800 tracking-tight">{method.upiId || method.accountNumber || method.usdtWalletAddress || "NOT LINKED"}</p>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{method.bankName || method.upiHolderName || "MASTER CHANNEL"}</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </CardContent>
+                                            </Card>
+                                        </TabsContent>
                                     );
                                 })}
-                            </div>
+                            </Tabs>
                         </TabsContent>
 
                     </Tabs>
