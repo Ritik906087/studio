@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2, Info, Send, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, Copy, Upload, Loader2, Info, Send, AlertTriangle, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import Image from 'next/image';
@@ -35,55 +35,23 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { sendOrderConfirmationToTelegram } from '@/lib/telegram';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
-import type { PostgrestError } from '@supabase/supabase-js';
-
-
-type AdminPaymentMethod = {
-    id: string;
-    type: 'bank' | 'upi' | 'usdt';
-    bankName?: string;
-    accountHolderName?: string;
-    accountNumber?: string;
-    ifscCode?: string;
-    upiHolderName?: string;
-    upiId?: string;
-    usdtWalletAddress?: string;
-}
-
-type WithdrawalMethod = {
-    type: 'upi' | 'bank';
-    name: string;
-    upiId?: string;
-    bankName?: string;
-    accountHolderName?: string;
-    accountNumber?: string;
-    ifscCode?: string;
-    upiHolderName?: string;
-}
+import { useFirestore, useDoc, useStorage } from '@/firebase';
+import { doc, updateDoc, runTransaction, serverTimestamp, getDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 type Order = {
     id: string;
     amount: number;
     baseAmount: number;
     status: string;
-    created_at: string;
+    createdAt: any;
     orderId: string;
     paymentType: 'bank' | 'upi' | 'usdt' | 'p2p_upi' | 'p2p_bank';
     paymentProvider: string;
-    adminPaymentMethodId?: string;
     sellerId?: string;
-    sellerWithdrawalDetails?: WithdrawalMethod;
+    sellerWithdrawalDetails?: any;
     matchedSellOrderId?: string;
-    matchedSellOrderPath?: string;
-    submittedAt?: string;
 };
-
-type UserProfile = {
-    paymentMethods?: { name: string; upiId: string }[];
-    numericId?: string;
-};
-
 
 const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
   PhonePe: {
@@ -108,7 +76,6 @@ const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } }
   },
 };
 
-
 const formatTime = (seconds: number) => {
     if (seconds < 0) return '00:00';
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -120,170 +87,85 @@ function PaymentDetailsContent() {
     const router = useRouter();
     const params = useParams();
     const searchParams = useSearchParams();
-    const pathname = usePathname();
     const { toast } = useToast();
-    const { user } = useUser();
+    const { user, profile } = useUser();
+    const firestore = useFirestore();
+    const storage = useStorage();
 
     const orderId = params.orderId as string;
-    const type = searchParams.get('type') as Order['paymentType'];
-    const provider = searchParams.get('provider');
-
     const [utr, setUtr] = useState('');
     const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
-    const [isUpdatingProvider, setIsUpdatingProvider] = useState(false);
-    const [isChangeDialogOpen, setIsChangeDialogOpen] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [timeLeft, setTimeLeft] = useState<number | null>(null);
-
-    const [isVerificationDialogOpen, setIsVerificationDialogOpen] = useState(false);
-    const [methodToVerify, setMethodToVerify] = useState<string | null>(null);
-    const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
-    const [cancelReason, setCancelReason] = useState('');
-    const [otherReason, setOtherReason] = useState('');
     const [isCancelling, setIsCancelling] = useState(false);
-    
-    const [loading, setLoading] = useState(true);
-    const [order, setOrder] = useState<Order | null>(null);
-    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-    const [allPaymentMethods, setAllPaymentMethods] = useState<AdminPaymentMethod[]>([]);
+    const [timeLeft, setTimeLeft] = useState<number | null>(null);
+    const [cancelReason, setCancelReason] = useState('');
+    const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const isUSDT = type === 'usdt';
+    const orderRef = useMemo(() => {
+        if (!firestore || !user || !orderId) return null;
+        return doc(firestore, 'users', user.uid, 'orders', orderId);
+    }, [firestore, user, orderId]);
 
-    const cancellationReasons = [
-        "I don't want to continue payment",
-        "Want to use another payment method",
-        "Bank system is under maintenance",
-        "UPI payment error",
-        "Other reasons"
-    ];
+    const { data: order, loading } = useDoc<Order>(orderRef);
 
-    const handleCancelOrder = useCallback(async (isAutoCancel = false, reason = "Order expired") => {
-        if (!order || !user) return;
+    const handleCancelOrder = useCallback(async (reason = "User cancelled") => {
+        if (!order || !user || !firestore || isCancelling) return;
         
         setIsCancelling(true);
         try {
-            const { error } = await supabase.rpc('cancel_buy_order', {
-                p_order_id: order.id,
-                p_cancellation_reason: isAutoCancel ? 'Order timed out' : reason,
+            await runTransaction(firestore, async (transaction) => {
+                const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', order.id);
+                const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId!);
+                const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId!);
+
+                const sellerSnap = await transaction.get(sellerOrderRef);
+                if (!sellerSnap.exists()) throw new Error("Seller record not found.");
+
+                const sellerData = sellerSnap.data();
+                const newRemaining = sellerData.remainingAmount + order.baseAmount;
+                const newStatus = sellerData.status === 'processing' ? 'partially_filled' : sellerData.status;
+
+                // 1. Update Seller root record
+                transaction.update(sellerOrderRef, {
+                    remainingAmount: newRemaining,
+                    status: newStatus,
+                    matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id)
+                });
+
+                // 2. Update Seller user record
+                transaction.update(sellerUserOrderRef, {
+                    remainingAmount: newRemaining,
+                    status: newStatus,
+                    matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id)
+                });
+
+                // 3. Update Buyer order
+                transaction.update(buyerOrderRef, {
+                    status: 'cancelled',
+                    cancellationReason: reason,
+                    cancelledAt: serverTimestamp()
+                });
             });
 
-            if (error) throw error;
-            
-            if (!isAutoCancel) {
-                toast({ title: 'Order Cancelled' });
-                router.push('/order');
-            } else {
-                toast({ title: 'Order Timeout', variant: 'destructive' });
-                router.push('/order');
-            }
-
+            toast({ title: 'Order Cancelled', description: 'Liquidity has been released back to pool.' });
+            router.push('/order');
         } catch (e: any) {
-            console.error("Error cancelling order:", e);
-            toast({ variant: 'destructive', title: 'Error', description: `Could not cancel the order. ${e.message}` });
+            console.error("Cancellation Error:", e);
+            toast({ variant: 'destructive', title: 'Error', description: e.message });
         } finally {
             setIsCancelling(false);
-            setIsCancelDialogOpen(false);
         }
-    }, [order, user, router, toast]);
+    }, [order, user, firestore, router, toast, isCancelling]);
 
     useEffect(() => {
-        if (!user || !orderId) return;
-
-        async function fetchData() {
-            setLoading(true);
-            const orderPromise = supabase.from('orders').select('*').eq('id', orderId).eq('userId', user.id).single();
-            const profilePromise = supabase.from('users').select('paymentMethods, numericId').eq('uid', user.id).single();
-            const adminMethodsPromise = supabase.from('payment_methods').select('*');
-
-            const [orderResult, profileResult, adminMethodsResult] = await Promise.all([orderPromise, profilePromise, adminMethodsPromise]);
-
-            if (orderResult.error || !orderResult.data) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Order not found.' });
-                router.push('/order');
-                return;
-            }
-            setOrder(orderResult.data as Order);
-
-            if (profileResult.data) {
-                setUserProfile(profileResult.data as UserProfile);
-            }
-            if (adminMethodsResult.data) {
-                setAllPaymentMethods(adminMethodsResult.data as AdminPaymentMethod[]);
-            }
-            setLoading(false);
-        }
-        fetchData();
-    }, [user, orderId, router, toast]);
-
-    const paymentTargetDetails = useMemo(() => {
-        if (loading) return null;
-        if (type === 'p2p_upi' || type === 'p2p_bank') {
-            return order?.sellerWithdrawalDetails || null;
-        }
-        if (!allPaymentMethods.length || !type) return null;
-        return allPaymentMethods.find(m => m.type === type);
-    }, [order, loading, type, allPaymentMethods]);
-
-    const handleConfirmCancellation = async () => {
-        let finalReason = cancelReason;
-        if (cancelReason === 'Other reasons') {
-            if (!otherReason.trim()) {
-                toast({ variant: 'destructive', title: 'Please provide a reason.' });
-                return;
-            }
-            finalReason = otherReason.trim();
-        }
-        if (!finalReason) {
-            toast({ variant: 'destructive', title: 'Please select a reason.' });
-            return;
-        }
-        await handleCancelOrder(false, finalReason);
-    };
-
-    const handlePaymentMethodChange = async (newProvider: string) => {
-        if (!order) return;
-        
-        const isVerified = userProfile?.paymentMethods?.some(pm => pm.name === newProvider);
-        if (!isVerified) {
-            setMethodToVerify(newProvider);
-            setIsChangeDialogOpen(false);
-            setIsVerificationDialogOpen(true);
+        if (!order || order.status !== 'pending_payment') {
+            if(order && order.status !== 'pending_payment') router.push(`/order/${orderId}`);
             return;
         }
 
-        setIsUpdatingProvider(true);
-        try {
-            const { error } = await supabase.from('orders').update({ paymentProvider: newProvider }).eq('id', order.id);
-            if (error) throw error;
-            
-            const newSearchParams = new URLSearchParams(searchParams.toString());
-            newSearchParams.set('provider', newProvider);
-            router.replace(`${pathname}?${newSearchParams.toString()}`, { scroll: false });
-
-            setIsChangeDialogOpen(false);
-            toast({ title: 'Payment method updated!' });
-        } catch (e: any) {
-            console.error("Error changing payment method:", e);
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not change payment method.' });
-        } finally {
-            setIsUpdatingProvider(false);
-        }
-    };
-    
-    useEffect(() => {
-        if (order && order.status !== 'pending_payment') {
-            router.push(`/order/${orderId}`);
-            return;
-        }
-
-        if (!order || !order.created_at) {
-            setTimeLeft(0);
-            return;
-        }
-
-        const createdAt = new Date(order.created_at);
-        const expiryTime = new Date(createdAt.getTime() + 10 * 60 * 1000); // 10 minutes
+        const createdAt = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
+        const expiryTime = new Date(createdAt.getTime() + 10 * 60 * 1000);
 
         const interval = setInterval(() => {
             const now = new Date();
@@ -292,526 +174,166 @@ function PaymentDetailsContent() {
             if (secondsLeft <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                handleCancelOrder(true, 'Order timed out');
+                handleCancelOrder("Order timed out (10 mins)");
             } else {
                 setTimeLeft(secondsLeft);
             }
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [order, router, orderId, handleCancelOrder]);
+    }, [order, orderId, router, handleCancelOrder]);
 
-
-    const details = useMemo(() => {
-        if (!paymentTargetDetails) return null;
-        
-        const target = paymentTargetDetails as any;
-        if (target.type === 'bank') {
-            return {
-                'Bank Name': target.bankName,
-                'Account Holder': target.accountHolderName,
-                'Account Number': target.accountNumber,
-                'IFSC Code': target.ifscCode,
-            };
-        }
-        if (target.type === 'upi') {
-            const detailsObj: { [key: string]: string | undefined } = {
-                'UPI ID': target.upiId,
-            };
-            const recipientName = target.upiHolderName || target.name;
-            if (recipientName) {
-                detailsObj['Recipient Name'] = recipientName;
-            }
-            return detailsObj;
-        }
-        if (target.type === 'usdt') {
-            return { 'USDT Address (TRC20)': target.usdtWalletAddress };
-        }
-        return null;
-    }, [paymentTargetDetails]);
-
-    const copyToClipboard = (text: string | undefined) => {
-        if (!text) return;
-        navigator.clipboard.writeText(text).then(() => {
-            toast({ title: 'Copied to clipboard!' });
-        });
-    };
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 950 * 1024) { 
-                toast({
-                    variant: 'destructive',
-                    title: 'File is too large',
-                    description: 'Please upload an image smaller than 950KB.'
-                });
-                e.target.value = "";
-                setScreenshotFile(null);
-                return;
-            }
-            setScreenshotFile(file);
-            toast({ title: 'Screenshot selected!', description: 'Ready to submit.' });
-        }
-    };
-    
     const handleConfirm = async () => {
-        if (isUSDT) {
-            if (!utr || utr.length < 50) {
-                toast({ variant: 'destructive', title: 'Invalid Transaction Hash', description: 'Please provide a valid TxID.' });
-                return;
-            }
-        } else {
-            if (!utr || utr.length !== 12 || !/^\d+$/.test(utr)) {
-                toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please provide a valid 12-digit UTR.' });
-                return;
-            }
+        if (!utr || utr.length !== 12 || !/^\d+$/.test(utr)) {
+            toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please enter a valid 12-digit UTR number.' });
+            return;
         }
         if (!screenshotFile) {
-            toast({ variant: 'destructive', title: 'Missing Screenshot', description: 'Please upload your payment proof screenshot.' });
+            toast({ variant: 'destructive', title: 'Proof Required', description: 'Please upload a payment screenshot.' });
             return;
         }
-        if (!order || !user) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not initialize. Please try again.' });
-            return;
-        }
-    
+        if (!user || !firestore || !storage) return;
+
         setIsConfirming(true);
-    
         try {
-            const fileExt = screenshotFile.name.split('.').pop();
-            const filePath = `${user.id}/${order.id}/${Date.now()}.${fileExt}`;
-            const { error: uploadError } = await supabase.storage.from('payment-proofs').upload(filePath, screenshotFile);
-            if (uploadError) throw uploadError;
+            // 1. Upload Screenshot
+            const screenshotRef = ref(storage, `orders/${user.uid}/${orderId}/${Date.now()}.png`);
+            await uploadBytes(screenshotRef, screenshotFile);
+            const downloadUrl = await getDownloadURL(screenshotRef);
 
-            const { data: { publicUrl } } = supabase.storage.from('payment-proofs').getPublicUrl(filePath);
+            // 2. Update Order Status
+            await runTransaction(firestore, async (transaction) => {
+                const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
+                const sellerOrderRef = doc(firestore, 'sellOrders', order!.matchedSellOrderId!);
+                const sellerUserOrderRef = doc(firestore, 'users', order!.sellerId!, 'sellOrders', order!.matchedSellOrderId!);
 
-            const { error: rpcError } = await supabase.rpc('submit_buy_order_proof', {
-                p_order_id: order.id,
-                p_utr: utr,
-                p_screenshot_url: publicUrl,
+                const sellerSnap = await transaction.get(sellerOrderRef);
+                if (!sellerSnap.exists()) throw new Error("Seller record lost. Contact support.");
+
+                const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
+                const updatedMatches = matchedOrders.map((m: any) => 
+                    m.buyOrderId === orderId ? { ...m, status: 'pending_confirmation', utr: utr } : m
+                );
+
+                transaction.update(sellerOrderRef, { matchedBuyOrders: updatedMatches });
+                transaction.update(sellerUserOrderRef, { matchedBuyOrders: updatedMatches });
+                transaction.update(buyerOrderRef, {
+                    status: 'pending_confirmation',
+                    utr: utr,
+                    screenshotURL: downloadUrl,
+                    submittedAt: serverTimestamp()
+                });
             });
 
-            if (rpcError) throw rpcError;
-    
-            if (userProfile && details) {
-                try {
-                    const receiverDetailsForTg = Object.fromEntries(
-                        Object.entries(details).map(([key, value]) => [key, String(value)])
-                    );
-                    await sendOrderConfirmationToTelegram({
-                        orderId: order.orderId,
-                        userNumericId: userProfile.numericId,
-                        amount: order.baseAmount,
-                        utr: utr,
-                        receiverDetails: receiverDetailsForTg,
-                    });
-                } catch (tgError) {
-                    console.error("Failed to send Telegram notification:", tgError);
-                }
-            }
-
-            toast({ title: 'Payment Submitted!', description: 'Your proof is under review.' });
+            toast({ title: 'Payment Submitted', description: 'Waiting for seller to verify your payment.' });
             router.push(`/order/${orderId}`);
-        } catch (error: any) {
-            console.error("Error submitting payment proof: ", error);
-            toast({ variant: 'destructive', title: 'Submission Failed', description: error.message || 'Failed to save order details.' });
+        } catch (e: any) {
+            console.error("Submission Error:", e);
+            toast({ variant: 'destructive', title: 'Failed', description: e.message });
+        } finally {
             setIsConfirming(false);
         }
     };
-    
-    const verifiedBuyUpiMethods = useMemo(() => {
-        if (!userProfile?.paymentMethods) return [];
-        return userProfile.paymentMethods.filter(pm => 
-            ['MobiKwik', 'Freecharge'].includes(pm.name)
-        );
-    }, [userProfile]);
 
-    const currentProviderDetails = provider ? paymentMethodDetails[provider] : null;
-    
-    const usdtAmount = useMemo(() => {
-        if (order && type === 'usdt') {
-            return order.amount / 110;
-        }
-        return 0;
-    }, [order, type]);
+    if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
+    if (!order) return <div className="p-8 text-center font-bold">Order not found.</div>;
 
-
-    if (loading) {
-        return (
-             <div className="flex flex-col min-h-screen">
-                <header className="flex items-center p-4 bg-white sticky top-0 z-10 border-b">
-                    <Skeleton className="h-8 w-8 rounded-full" />
-                    <Skeleton className="h-6 w-32 mx-auto" />
-                </header>
-                 <main className="flex-grow p-4 space-y-4">
-                    <Card>
-                        <CardHeader>
-                           <Skeleton className="h-6 w-40" />
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <Skeleton className="h-5 w-full" />
-                            <Skeleton className="h-5 w-full" />
-                            <Skeleton className="h-5 w-full" />
-                            <Skeleton className="h-5 w-full" />
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardContent className="p-4 space-y-4">
-                            <Skeleton className="h-8 w-full" />
-                            <Skeleton className="h-10 w-full" />
-                            <Skeleton className="h-10 w-full" />
-                        </CardContent>
-                    </Card>
-                 </main>
-                 <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
-                    <Skeleton className="h-12 w-full"/>
-                    <Skeleton className="h-12 w-full"/>
-                 </footer>
-            </div>
-        )
-    }
-
-    if (!details) {
-        return (
-             <div className="flex flex-col min-h-screen">
-                <header className="flex items-center p-4 bg-white sticky top-0 z-10 border-b">
-                    <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8">
-                        <ChevronLeft className="h-6 w-6 text-muted-foreground" />
-                    </Button>
-                    <h1 className="text-xl font-bold mx-auto pr-8">Payment Error</h1>
-                </header>
-                 <main className="flex-grow p-4">
-                    <Card>
-                        <CardContent className="p-8 text-center text-destructive">
-                           Payment details are not configured by the admin yet. Please try again later.
-                        </CardContent>
-                    </Card>
-                 </main>
-            </div>
-        )
-    }
-
-    if (isUSDT) {
-        return (
-            <div className="flex flex-col min-h-screen">
-                <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
-                    <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8" disabled={isConfirming}>
-                        <ChevronLeft className="h-6 w-6 text-muted-foreground" />
-                    </Button>
-                    <h1 className="text-xl font-bold">USDT Buy</h1>
-                    <div className="w-8"></div>
-                </header>
-
-                <main className="flex-grow p-4 space-y-4">
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center gap-2">
-                             <Image src="https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/InShot_20260307_173853268.png?alt=media&token=3cf559c6-bf02-46f1-93cc-6df9cf306657" width={48} height={48} alt="USDT Logo" />
-                             <p className="text-3xl font-bold">{usdtAmount.toFixed(2)} USDT</p>
-                             <p className="text-sm text-destructive text-center">The amount received is subject to the actual transfer amount. No less than 5.00 USDT</p>
-                        </CardContent>
-                        <CardFooter className="flex-col items-stretch bg-secondary/30 p-4 space-y-3">
-                             <div className="flex justify-between items-center text-sm">
-                                <span className="text-muted-foreground">Countdown</span>
-                                {timeLeft !== null && timeLeft > 0 && <span className="font-mono font-bold text-destructive">{formatTime(timeLeft)}</span>}
-                             </div>
-                              <div className="flex justify-between items-center text-sm">
-                                <span className="text-muted-foreground">Order Number</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono" style={{wordBreak: 'break-all'}}>{order?.orderId}</span>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(order?.orderId ?? '')}><Copy className="h-4 w-4" /></Button>
-                                </div>
-                             </div>
-                        </CardFooter>
-                    </Card>
-
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center gap-4">
-                            <Image
-                                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(details['USDT Address (TRC20)']!)}&size=200x200&qzone=2`}
-                                width={200}
-                                height={200}
-                                alt="Payment QR Code"
-                                className="rounded-lg border p-1 bg-white"
-                            />
-                            <div className="text-center w-full space-y-2">
-                                <p className="text-sm text-muted-foreground">Wallet Address</p>
-                                <div className="flex items-center gap-2 bg-secondary p-2 rounded-lg">
-                                    <p className="font-mono text-xs flex-1" style={{wordBreak: 'break-all'}}>{details['USDT Address (TRC20)']}</p>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={() => copyToClipboard(details['USDT Address (TRC20)']!)}><Copy className="h-4 w-4" /></Button>
-                                </div>
-                                 <p className="text-sm text-muted-foreground pt-2">Network</p>
-                                <p className="font-semibold">USDT-TRC20</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card>
-                        <CardContent className="p-4 space-y-2 text-xs text-muted-foreground">
-                            <p>• Minimum deposit amount: 5 USDT. Deposits less than the minimum amount will not be credited to the account.</p>
-                            <p>• Please do not deposit any non-currency assets to the above address, otherwise the assets will be irrecoverable.</p>
-                            <p>• Please make sure that the operating environment is safe to prevent the information from being tampered with or leaked.</p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card>
-                      <CardContent className="p-4 space-y-4">
-                          <div className="space-y-2">
-                              <Label htmlFor="utr">Transaction Hash (TxID)</Label>
-                              <Input id="utr" placeholder={'Enter 64-character TxID'} value={utr} onChange={(e) => setUtr(e.target.value)} disabled={isConfirming} />
-                          </div>
-                          <div className="space-y-2">
-                               <Label>Upload Screenshot</Label>
-                               <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isConfirming} accept="image/*" />
-                               <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming}>
-                                  {screenshotFile ? (
-                                      <Image src={URL.createObjectURL(screenshotFile)} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
-                                  ) : (
-                                      <>
-                                          <Upload className="h-4 w-4"/>
-                                          Click to upload screenshot
-                                      </>
-                                  )}
-                              </Button>
-                          </div>
-                      </CardContent>
-                    </Card>
-                </main>
-                
-                <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button 
-                                variant="destructive" 
-                                className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" 
-                                disabled={isConfirming}
-                            >CANCEL</Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                            <AlertDialogTitle>Are you sure to cancel?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                This action cannot be undone. This will permanently cancel your order.
-                            </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                                onClick={() => setIsCancelDialogOpen(true)}
-                                className='bg-red-500 hover:bg-red-600'
-                                >Continue</AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-
-                    <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || !utr || !screenshotFile}>
-                        {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
-                    </Button>
-                </footer>
-
-                 <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Cancel Order</DialogTitle>
-                            <DialogDescription>Please select a reason for cancellation.</DialogDescription>
-                        </DialogHeader>
-                        <div className="py-4 space-y-4">
-                            <RadioGroup value={cancelReason} onValueChange={setCancelReason} className="space-y-2">
-                                {cancellationReasons.map(reason => (
-                                    <div key={reason} className="flex items-center space-x-3">
-                                        <RadioGroupItem value={reason} id={reason} />
-                                        <Label htmlFor={reason} className="font-normal">{reason}</Label>
-                                    </div>
-                                ))}
-                            </RadioGroup>
-                            {cancelReason === 'Other reasons' && (
-                                <Textarea 
-                                    placeholder="Please fill in other reasons" 
-                                    value={otherReason} 
-                                    onChange={(e) => setOtherReason(e.target.value)} 
-                                    className="mt-2"
-                                />
-                            )}
-                            <div className="flex items-start gap-3 rounded-lg bg-yellow-100 p-3 text-yellow-900 text-xs mt-4">
-                                <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                                <p>
-                                    If you have already transferred money to the other party's collection account, please do not cancel the order to avoid causing losses to you.
-                                </p>
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="ghost" onClick={() => setIsCancelDialogOpen(false)} disabled={isCancelling}>Back</Button>
-                            <Button 
-                                variant="destructive" 
-                                onClick={handleConfirmCancellation}
-                                disabled={isCancelling || !cancelReason || (cancelReason === 'Other reasons' && !otherReason.trim())}
-                            >
-                                {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Confirm Cancellation
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            </div>
-        )
-    }
+    const details = order.sellerWithdrawalDetails;
+    const currentProvider = order.paymentProvider === 'Auto-Matched' ? 'P2P Transfer' : order.paymentProvider;
 
     return (
-        <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
             <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
-                <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8" disabled={isConfirming || isUpdatingProvider}>
+                <Button onClick={() => setIsCancelDialogOpen(true)} variant="ghost" size="icon" className="h-8 w-8">
                     <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
                 <h1 className="text-xl font-bold">Confirm Payment</h1>
                 <div className="flex flex-col items-center">
-                    {timeLeft !== null && timeLeft > 0 && (
-                        <>
-                            <p className="text-xs text-muted-foreground">Expires in</p>
-                            <p className="text-lg font-mono font-bold text-destructive">{formatTime(timeLeft)}</p>
-                        </>
-                    )}
+                    <span className="text-[10px] font-bold text-destructive uppercase tracking-tighter">Expires in</span>
+                    <span className="font-mono font-black text-destructive text-lg">{formatTime(timeLeft || 0)}</span>
                 </div>
             </header>
 
-            <main className="flex-grow p-4 space-y-4">
-                 <Card className="bg-yellow-50 border border-yellow-200">
-                    <CardContent className="p-3 flex items-start gap-3 text-yellow-800">
-                        <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                        <p className="text-sm">
-                            Please pay from the UPI app you have selected. If your name/time doesn't match but the UPI ID/Account Number is correct, your payment will be processed without issues. Paying from an unselected method may cause failure.
-                        </p>
-                    </CardContent>
-                </Card>
-
-                {(type === 'upi' || type === 'p2p_upi') && currentProviderDetails && provider && (
-                    <Card className={cn("text-white shadow-md", currentProviderDetails.bgColor)}>
-                        <CardContent className="p-3 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
-                                    <Image
-                                        src={currentProviderDetails.logo}
-                                        alt={`${provider} logo`}
-                                        width={32}
-                                        height={32}
-                                        className="object-contain"
-                                    />
-                                </div>
-                                <div>
-                                    <p className="text-xs">Paying with</p>
-                                    <p className="font-bold text-lg">{provider}</p>
-                                </div>
-                            </div>
-                            <Button 
-                                onClick={() => setIsChangeDialogOpen(true)}
-                                variant="ghost" 
-                                className="bg-white/20 text-white hover:bg-white/30 h-auto px-4 py-1.5 rounded-full"
-                                disabled={isConfirming || isUpdatingProvider || type === 'p2p_upi'}
-                            >
-                                {isUpdatingProvider ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Change'}
-                            </Button>
-                        </CardContent>
-                    </Card>
-                )}
-                
-                <Card>
-                    <CardHeader>
-                        <CardTitle>{type === 'bank' || type === 'p2p_bank' ? 'Bank Transfer' : type === 'usdt' ? 'USDT (TRC20) Payment' : 'Pay via UPI'}</CardTitle>
+            <main className="p-3 space-y-4 pb-24">
+                <Card className="border-none shadow-sm rounded-2xl bg-white">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-bold text-slate-500 uppercase tracking-widest">Transaction Details</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4 text-sm">
-                        <div className="flex justify-between items-center pt-0">
-                            <span className="text-muted-foreground text-base">Amount to be paid</span>
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-2xl text-primary">₹{order?.baseAmount}</span>
-                                <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-8 w-8" 
-                                    onClick={() => copyToClipboard(order?.baseAmount?.toString() ?? '')}
-                                    disabled={isConfirming || isUpdatingProvider}
-                                >
-                                    <Copy className="h-5 w-5 text-muted-foreground" />
-                                </Button>
-                            </div>
-                        </div>
+                    <CardContent className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Order Number</span>
-                            <div className="flex items-center gap-2">
-                                <span className="font-mono" style={{wordBreak: 'break-all'}}>{order?.orderId}</span>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(order?.orderId ?? '')} disabled={isConfirming || isUpdatingProvider}>
-                                    <Copy className="h-4 w-4" />
-                                </Button>
+                            <span className="text-slate-400 font-medium">Payable Amount</span>
+                            <span className="text-2xl font-black text-primary">₹{order.baseAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-400 font-medium">Order ID</span>
+                            <div className="flex items-center gap-1">
+                                <span className="font-mono text-slate-800">{order.orderId}</span>
+                                <Copy className="h-3 w-3 text-slate-300 cursor-pointer" onClick={() => { navigator.clipboard.writeText(order.orderId); toast({ title: 'Copied!' }); }} />
                             </div>
                         </div>
-                        <div className="border-t border-dashed -mx-4 my-4"></div>
-                        {details && Object.entries(details).map(([key, value]) => (
-                            <div key={key} className="flex justify-between items-center">
-                                <span className="text-muted-foreground">{key}</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-right" style={{wordBreak: 'break-all'}}>{value}</span>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0" onClick={() => copyToClipboard(value!)} disabled={isConfirming || isUpdatingProvider}>
-                                        <Copy className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
                     </CardContent>
                 </Card>
 
-                {(type === 'upi' || type === 'p2p_upi') && details && details['UPI ID'] && order && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Scan QR to Pay</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex flex-col items-center gap-2">
+                <Card className="border-none shadow-sm rounded-2xl bg-white overflow-hidden">
+                    <CardHeader className="bg-slate-50 p-4 border-b">
+                        <CardTitle className="text-sm font-bold text-slate-800">Seller Collection Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-4">
+                        <div className="flex flex-col items-center py-4 space-y-3">
                              <Image
-                                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(
-                                    `upi://pay?pa=${details['UPI ID']}&pn=${encodeURIComponent(details['Recipient Name']! || 'Recipient')}&am=${order.baseAmount}&tn=${order.orderId}`
-                                )}&size=200x200&qzone=2`}
-                                width={200}
+                                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(`upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order.baseAmount}&tn=${order.orderId}`)}&size=200x200&qzone=2`}
+                                width={180}
                                 height={200}
                                 alt="Payment QR Code"
-                                className="rounded-lg border p-1 bg-white"
+                                className="rounded-xl border-4 border-white shadow-md"
                             />
-                            <p className="text-sm text-muted-foreground text-center">
-                                Scan with any UPI app to pay.
-                            </p>
-                        </CardContent>
-                    </Card>
-                )}
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scan to Pay via UPI</p>
+                        </div>
+                        <div className="space-y-3 border-t border-dashed pt-4">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-400 font-medium">Recipient Name</span>
+                                <span className="font-bold text-slate-800">{details?.accountHolderName || details?.name || 'P2P Seller'}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-400 font-medium">UPI ID</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-mono font-black text-primary">{details?.upiId}</span>
+                                    <Copy className="h-3.5 w-3.5 text-slate-300 cursor-pointer" onClick={() => { navigator.clipboard.writeText(details?.upiId); toast({ title: 'Copied!' }); }} />
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                <Card>
+                <Card className="border-none shadow-sm rounded-2xl bg-white">
                     <CardContent className="p-4 space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="utr">{isUSDT ? 'Transaction Hash (TxID)' : 'UTR / Reference Number'}</Label>
+                            <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Submit Payment Proof</Label>
                             <Input 
-                                id="utr"
-                                type={isUSDT ? "text" : "tel"}
-                                inputMode={isUSDT ? "text" : "numeric"}
-                                placeholder={isUSDT ? 'Enter 64-character TxID' : 'Enter 12-digit UTR number'} 
-                                value={utr}
-                                onChange={(e) => {
-                                    if (!isUSDT) {
-                                        const value = e.target.value.replace(/\D/g, ''); // Remove non-digits
-                                        setUtr(value);
-                                    } else {
-                                        setUtr(e.target.value);
-                                    }
-                                }}
-                                maxLength={isUSDT ? 64 : 12} 
-                                disabled={isConfirming || isUpdatingProvider} 
+                                placeholder="Enter 12-digit UTR Number" 
+                                value={utr} 
+                                onChange={e => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                                className="h-12 rounded-xl bg-slate-50 border-none font-mono text-lg font-black"
+                                type="tel"
                             />
                         </div>
                         <div className="space-y-2">
-                             <Label>Upload Screenshot</Label>
-                             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" disabled={isConfirming || isUpdatingProvider} accept="image/*" />
-                             <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full flex items-center justify-center gap-2 border-dashed h-24" disabled={isConfirming || isUpdatingProvider}>
+                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={e => setScreenshotFile(e.target.files?.[0] || null)} />
+                            <Button 
+                                variant="outline" 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-full h-14 border-dashed rounded-xl bg-slate-50 text-slate-500 font-bold"
+                            >
                                 {screenshotFile ? (
-                                    <Image src={URL.createObjectURL(screenshotFile)} alt="Screenshot preview" width={80} height={80} className="object-contain h-full" />
+                                    <div className="flex items-center gap-2 text-primary">
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        {screenshotFile.name.slice(0, 20)}...
+                                    </div>
                                 ) : (
-                                    <>
-                                        <Upload className="h-4 w-4"/>
-                                        Click to upload screenshot
-                                    </>
+                                    <div className="flex items-center gap-2">
+                                        <Upload className="h-4 w-4" />
+                                        Upload Screenshot
+                                    </div>
                                 )}
                             </Button>
                         </div>
@@ -819,151 +341,38 @@ function PaymentDetailsContent() {
                 </Card>
             </main>
 
-            <footer className="p-4 grid grid-cols-2 gap-4 bg-white border-t sticky bottom-0">
-                <AlertDialog>
+            <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-md border-t grid grid-cols-2 gap-3">
+                 <AlertDialog>
                     <AlertDialogTrigger asChild>
-                        <Button 
-                            variant="destructive" 
-                            className="h-12 text-base font-bold bg-red-500 hover:bg-red-600 text-white" 
-                            disabled={isConfirming || isUpdatingProvider}
-                        >CANCEL</Button>
+                        <Button variant="outline" className="h-12 rounded-xl text-slate-500 font-black" disabled={isConfirming || isCancelling}>CANCEL</Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent>
+                    <AlertDialogContent className="rounded-[24px]">
                         <AlertDialogHeader>
-                        <AlertDialogTitle>Are you sure to cancel?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. This will permanently cancel your order.
-                        </AlertDialogDescription>
+                            <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
+                            <AlertDialogDescription>Abusing the cancel button will lock your account. Only cancel if you haven't paid.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => setIsCancelDialogOpen(true)}
-                            className='bg-red-500 hover:bg-red-600'
-                            >Continue</AlertDialogAction>
+                            <AlertDialogCancel className="rounded-xl">Go Back</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleCancelOrder("User Manual Cancel")} className="bg-destructive hover:bg-destructive/90 rounded-xl">Confirm Cancel</AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
-                </AlertDialog>
+                 </AlertDialog>
 
-
-                <Button onClick={handleConfirm} className="h-12 text-base font-bold bg-green-500 hover:bg-green-600 text-white" disabled={isConfirming || isUpdatingProvider || !utr || !screenshotFile}>
-                    {isConfirming ? <Loader2 className="h-6 w-6 animate-spin"/> : 'CONFIRM'}
+                <Button 
+                    onClick={handleConfirm} 
+                    className="h-12 btn-gradient rounded-xl font-black shadow-teal-500/20" 
+                    disabled={isConfirming || isCancelling || utr.length !== 12 || !screenshotFile}
+                >
+                    {isConfirming ? <Loader2 className="h-5 w-5 animate-spin" /> : "I HAVE PAID"}
                 </Button>
             </footer>
-
-            <Dialog open={isChangeDialogOpen} onOpenChange={setIsChangeDialogOpen}>
-              <DialogContent className="sm:max-w-md p-0">
-                <DialogHeader className="p-4 border-b">
-                  <DialogTitle className="text-lg font-semibold text-center">Change Payment Method</DialogTitle>
-                </DialogHeader>
-                <div className="p-4 space-y-3">
-                  {verifiedBuyUpiMethods.map((method) => {
-                      const details = paymentMethodDetails[method.name as keyof typeof paymentMethodDetails];
-                      if (!details) return null;
-                      return (
-                          <button 
-                              key={method.upiId}
-                              onClick={() => handlePaymentMethodChange(method.name)}
-                              disabled={isUpdatingProvider}
-                              className="w-full flex items-center p-3 rounded-lg border hover:bg-secondary transition-colors disabled:opacity-50"
-                          >
-                              {isUpdatingProvider ? (
-                                <Loader2 className="h-5 w-5 mr-4 animate-spin" />
-                              ) : (
-                                <Image src={details.logo} alt={method.name} width={32} height={32} className="mr-4" />
-                              )}
-                              <div className="text-left">
-                                  <span className="font-medium">{method.name}</span>
-                                  <p className="text-xs font-mono text-muted-foreground">{method.upiId}</p>
-                              </div>
-                          </button>
-                      )
-                  })}
-                   {verifiedBuyUpiMethods.length === 0 && (
-                      <div className="text-center text-sm text-muted-foreground p-4">
-                          <p>No MobiKwik or Freecharge accounts linked.</p>
-                          <Button asChild variant="link" className="mt-2">
-                              <Link href="/my/collection/add">Link an account</Link>
-                          </Button>
-                      </div>
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            <AlertDialog open={isVerificationDialogOpen} onOpenChange={setIsVerificationDialogOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="font-bold text-orange-500">Verification Required</AlertDialogTitle>
-                        <AlertDialogDescription className="text-red-500">
-                            To use {methodToVerify}, you need to link it to your account first. Please complete the verification.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
-                            onClick={() => router.push('/my/collection/add')}
-                            className="bg-green-600 hover:bg-green-700">
-                            Verify
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-             <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Cancel Order</DialogTitle>
-                        <DialogDescription>Please select a reason for cancellation.</DialogDescription>
-                    </DialogHeader>
-                    <div className="py-4 space-y-4">
-                        <RadioGroup value={cancelReason} onValueChange={setCancelReason} className="space-y-2">
-                            {cancellationReasons.map(reason => (
-                                <div key={reason} className="flex items-center space-x-3">
-                                    <RadioGroupItem value={reason} id={reason} />
-                                    <Label htmlFor={reason} className="font-normal">{reason}</Label>
-                                </div>
-                            ))}
-                        </RadioGroup>
-                        {cancelReason === 'Other reasons' && (
-                            <Textarea 
-                                placeholder="Please fill in other reasons" 
-                                value={otherReason} 
-                                onChange={(e) => setOtherReason(e.target.value)} 
-                                className="mt-2"
-                            />
-                        )}
-                        <div className="flex items-start gap-3 rounded-lg bg-yellow-100 p-3 text-yellow-900 text-xs mt-4">
-                            <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                            <p>
-                                If you have already transferred money to the other party's collection account, please do not cancel the order to avoid causing losses to you.
-                            </p>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="ghost" onClick={() => setIsCancelDialogOpen(false)} disabled={isCancelling}>Back</Button>
-                        <Button 
-                            variant="destructive" 
-                            onClick={handleConfirmCancellation}
-                            disabled={isCancelling || !cancelReason || (cancelReason === 'Other reasons' && !otherReason.trim())}
-                        >
-                            {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Confirm Cancellation
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }
 
-
 export default function ConfirmPage() {
   return (
-    <Suspense fallback={
-        <div className="flex items-center justify-center min-h-screen">
-            <Loader2 className="h-8 w-8 animate-spin"/>
-        </div>
-    }>
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>}>
       <PaymentDetailsContent />
     </Suspense>
   )

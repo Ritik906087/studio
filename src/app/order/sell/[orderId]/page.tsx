@@ -4,16 +4,17 @@
 import React, { useMemo, Suspense, useState, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useFirestore, useDoc } from '@/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Copy } from 'lucide-react';
+import { ChevronLeft, Copy, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Loader } from '@/components/ui/loader';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,8 +33,9 @@ type SellOrder = {
     amount: number;
     remainingAmount: number;
     status: 'pending' | 'partially_filled' | 'completed' | 'failed' | 'processing';
-    created_at: string;
+    createdAt: any;
     matchedBuyOrders?: MatchedBuyOrder[];
+    userId: string;
 };
 
 type MatchedBuyOrder = {
@@ -42,70 +44,51 @@ type MatchedBuyOrder = {
     amount: number;
     status: 'pending_payment' | 'pending_confirmation' | 'completed' | 'failed' | 'cancelled';
     created_at: string;
-    buyerOrderId?: string;
     utr?: string;
 };
 
 const statusConfig: { [key: string]: { style: string; text: string } } = {
-  completed: { style: "bg-green-100 text-green-800", text: "Completed" },
-  failed: { style: "bg-red-100 text-red-800", text: "Failed" },
-  cancelled: { style: "bg-red-100 text-red-800", text: "Cancelled" },
-  pending: { style: "bg-yellow-100 text-yellow-800", text: "Pending" },
-  partially_filled: { style: "bg-blue-100 text-blue-800", text: "Partially Filled" },
-  processing: { style: "bg-blue-100 text-blue-800", text: "Processing" },
-  pending_payment: { style: "bg-yellow-100 text-yellow-800", text: "Pending Payment" },
-  pending_confirmation: { style: "bg-blue-100 text-blue-800", text: "Confirming" },
+  completed: { style: "bg-green-100 text-green-700", text: "Completed" },
+  failed: { style: "bg-red-100 text-red-700", text: "Failed" },
+  cancelled: { style: "bg-red-100 text-red-700", text: "Cancelled" },
+  pending: { style: "bg-yellow-100 text-yellow-700", text: "Matching..." },
+  partially_filled: { style: "bg-blue-100 text-blue-700", text: "Partially Filled" },
+  processing: { style: "bg-blue-100 text-blue-700", text: "Verification" },
+  pending_payment: { style: "bg-yellow-100 text-yellow-700", text: "Awaiting Pay" },
+  pending_confirmation: { style: "bg-blue-600 text-white", text: "Confirm Receipt" },
 };
 
-
-const MatchedOrderCard = ({ order }: { order: MatchedBuyOrder }) => {
-  const currentStatus = statusConfig[order.status] || { style: "bg-gray-100 text-gray-800", text: order.status.replace(/_/g, ' ') };
-  const { toast } = useToast();
-  const copyToClipboard = (text: string | undefined) => {
-    if(!text) return;
-    navigator.clipboard.writeText(text).then(() => toast({ title: 'Copied!' }));
-  };
+const MatchedOrderCard = ({ order, onConfirm }: { order: MatchedBuyOrder, onConfirm: (id: string) => void }) => {
+  const currentStatus = statusConfig[order.status] || { style: "bg-gray-100 text-gray-800", text: order.status };
+  const isAwaitingConfirmation = order.status === 'pending_confirmation';
 
   return (
-    <Card className="bg-white shadow-sm">
+    <Card className="bg-white border-none shadow-sm rounded-2xl overflow-hidden">
       <CardContent className="p-4 space-y-3">
         <div className="flex justify-between items-center">
-          <span className="rounded px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-800">
-            Matched
-          </span>
-          <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>
+          <div className="px-2 py-0.5 rounded-full bg-blue-50 text-primary font-black text-[9px] uppercase tracking-widest">Matched Buyer</div>
+          <span className={cn("font-black text-[9px] uppercase px-2 py-0.5 rounded-md", currentStatus.style)}>{currentStatus.text}</span>
         </div>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Amount</span>
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-primary">₹{order.amount.toFixed(2)}</span>
-              <Copy className="h-3 w-3 text-gray-400 cursor-pointer" onClick={() => copyToClipboard(order.amount.toFixed(2))} />
+        
+        <div className="grid grid-cols-2 gap-4">
+            <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">Amount</p>
+                <p className="font-black text-slate-800">₹{order.amount.toFixed(2)}</p>
             </div>
-          </div>
-          {order.utr && (
-            <div className="flex justify-between items-start gap-4">
-              <span className="text-muted-foreground shrink-0">UTR</span>
-              <div className="flex items-center gap-2 text-right">
-                <span className="font-mono text-muted-foreground break-all">{order.utr}</span>
-                <Copy className="h-3 w-3 text-gray-400 cursor-pointer flex-shrink-0" onClick={() => copyToClipboard(order.utr)} />
-              </div>
+            <div>
+                <p className="text-[9px] font-bold text-slate-400 uppercase">UTR Number</p>
+                <p className="font-mono text-[10px] font-black text-primary truncate">{order.utr || 'NOT SUBMITTED'}</p>
             </div>
-          )}
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Time</span>
-            <span className="font-mono text-muted-foreground text-xs">{new Date(order.created_at).toLocaleString()}</span>
-          </div>
-          {order.buyerOrderId && (
-            <div className="flex justify-between items-start gap-4">
-              <span className="text-muted-foreground shrink-0">Buyer Order ID</span>
-              <div className="flex items-center gap-2 text-right">
-                <span className="font-mono text-muted-foreground break-all">{order.buyerOrderId}</span>
-                <Copy className="h-3 w-3 text-gray-400 cursor-pointer flex-shrink-0" onClick={() => copyToClipboard(order.buyerOrderId)} />
-              </div>
-            </div>
-          )}
         </div>
+
+        {isAwaitingConfirmation && (
+            <Button 
+                onClick={() => onConfirm(order.buyOrderId)} 
+                className="w-full h-10 btn-gradient rounded-xl font-black text-xs shadow-teal-500/10"
+            >
+                CONFIRM RECEIPT (₹{order.amount})
+            </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -116,186 +99,212 @@ function SellOrderStatusContent() {
     const router = useRouter();
     const orderId = params.orderId as string;
     const { user } = useUser();
+    const firestore = useFirestore();
     const { toast } = useToast();
 
-    const [isCancelling, setIsCancelling] = useState(false);
-    const [sellOrder, setSellOrder] = useState<SellOrder | null>(null);
-    const [sellOrderLoading, setSellOrderLoading] = useState(true);
+    const [isActionLoading, setIsActionLoading] = useState(false);
 
-    useEffect(() => {
-        if(!user || !orderId) {
-            setSellOrderLoading(false);
-            return;
-        };
+    const sellOrderRef = useMemo(() => {
+        if(!firestore || !user || !orderId) return null;
+        return doc(firestore, 'sellOrders', orderId);
+    }, [firestore, user, orderId]);
 
-        const fetchOrder = async () => {
-            setSellOrderLoading(true);
-            const { data, error } = await supabase.from('sell_orders').select('*').eq('id', orderId).eq('userId', user.id).single();
-            if (error) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Sell order not found.' });
-            } else {
-                setSellOrder(data as SellOrder);
-            }
-            setSellOrderLoading(false);
-        };
-        
-        fetchOrder();
+    const { data: sellOrder, loading: sellOrderLoading } = useDoc<SellOrder>(sellOrderRef);
 
-        const channel = supabase.channel(`public:sell_orders:id=eq.${orderId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'sell_orders', filter: `id=eq.${orderId}`}, payload => {
-                setSellOrder(payload.new as SellOrder);
-            })
-            .subscribe();
+    const handleConfirmReceipt = async (buyOrderId: string) => {
+        if (!user || !firestore || !sellOrder || isActionLoading) return;
 
-        return () => {
-            supabase.removeChannel(channel);
+        setIsActionLoading(true);
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                // 1. Get references
+                const buyerOrderRef = doc(firestore, 'users', sellOrder.matchedBuyOrders!.find(m => m.buyOrderId === buyOrderId)!.buyerId, 'orders', buyOrderId);
+                const sellerOrderRef = doc(firestore, 'sellOrders', sellOrder.id);
+                const sellerUserOrderRef = doc(firestore, 'users', user.uid, 'sellOrders', sellOrder.id);
+                const buyerProfileRef = doc(firestore, 'users', sellOrder.matchedBuyOrders!.find(m => m.buyOrderId === buyOrderId)!.buyerId);
+
+                // 2. Fetch fresh data
+                const buyerSnap = await transaction.get(buyerProfileRef);
+                const sellSnap = await transaction.get(sellerOrderRef);
+                const buyerOrderSnap = await transaction.get(buyerOrderRef);
+
+                if (!buyerSnap.exists() || !sellSnap.exists()) throw new Error("Reference missing.");
+                
+                const matchAmount = matchedOrders.find(m => m.buyOrderId === buyOrderId)!.amount;
+
+                // 3. Update status in matches
+                const updatedMatches = sellSnap.data().matchedBuyOrders.map((m: any) => 
+                    m.buyOrderId === buyOrderId ? { ...m, status: 'completed' } : m
+                );
+
+                // Check if ALL matches are completed and remaining is 0
+                const allCompleted = updatedMatches.every((m: any) => m.status === 'completed') && sellSnap.data().remainingAmount === 0;
+
+                transaction.update(sellerOrderRef, { 
+                    matchedBuyOrders: updatedMatches,
+                    status: allCompleted ? 'completed' : 'processing'
+                });
+                transaction.update(sellerUserOrderRef, { 
+                    matchedBuyOrders: updatedMatches,
+                    status: allCompleted ? 'completed' : 'processing'
+                });
+
+                transaction.update(buyerOrderRef, { status: 'completed', completedAt: serverTimestamp() });
+
+                // 4. Credit Buyer Wallet
+                const currentBuyerBalance = buyerSnap.data().balance || 0;
+                // Add the full "amount" (base + 6% bonus)
+                transaction.update(buyerProfileRef, { balance: currentBuyerBalance + buyerOrderSnap.data().amount });
+            });
+
+            toast({ title: 'Payment Confirmed', description: 'Transaction completed for this match.' });
+        } catch (e: any) {
+            console.error("Confirm Error:", e);
+            toast({ variant: 'destructive', title: 'Error', description: e.message });
+        } finally {
+            setIsActionLoading(false);
         }
+    };
+    
+    const handleCancelRemaining = async () => {
+        if (!sellOrder || !user || !firestore || sellOrder.remainingAmount <= 0) return;
+    
+        setIsActionLoading(true);
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const userRef = doc(firestore, 'users', user.uid);
+                const sellerOrderRef = doc(firestore, 'sellOrders', sellOrder.id);
+                const sellerUserOrderRef = doc(firestore, 'users', user.uid, 'sellOrders', sellOrder.id);
 
-    }, [user, orderId, toast]);
+                const userSnap = await transaction.get(userRef);
+                const sellSnap = await transaction.get(sellerOrderRef);
+
+                if(!userSnap.exists() || !sellSnap.exists()) throw new Error("Sync error.");
+
+                const refundAmt = sellSnap.data().remainingAmount;
+                
+                // 1. Refund seller wallet
+                transaction.update(userRef, {
+                    balance: userSnap.data().balance + refundAmt,
+                    holdBalance: userSnap.data().holdBalance - refundAmt
+                });
+
+                // 2. Mark order as failed/partially complete
+                const hasMatches = (sellSnap.data().matchedBuyOrders || []).length > 0;
+                const finalStatus = hasMatches ? 'processing' : 'cancelled';
+
+                transaction.update(sellerOrderRef, { 
+                    remainingAmount: 0, 
+                    status: finalStatus,
+                    cancellationReason: 'User cancelled unmatched portion'
+                });
+                transaction.update(sellerUserOrderRef, { 
+                    remainingAmount: 0, 
+                    status: finalStatus 
+                });
+            });
+
+            toast({ title: 'Unmatched Cancelled', description: 'Remaining balance refunded to wallet.' });
+        } catch (e: any) {
+            console.error("Refund Error:", e);
+            toast({ variant: 'destructive', title: 'Failed', description: e.message });
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
 
     const matchedOrders = useMemo(() => {
         if (!sellOrder || !sellOrder.matchedBuyOrders) return [];
         return [...sellOrder.matchedBuyOrders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }, [sellOrder]);
     
-    const handleCancelRemaining = useCallback(async () => {
-        if (!sellOrder || !user || sellOrder.remainingAmount <= 0) {
-            toast({ variant: 'destructive', title: 'Cannot cancel', description: 'No remaining amount to cancel.' });
-            return;
-        }
-    
-        setIsCancelling(true);
-    
-        try {
-           const { error } = await supabase.rpc('cancel_sell_order_remains', {
-               p_order_id: sellOrder.id,
-               p_user_id: user.id
-           });
+    const progress = sellOrder ? ((sellOrder.amount - sellOrder.remainingAmount) / sellOrder.amount) * 100 : 0;
 
-           if(error) throw error;
-    
-            toast({ title: 'Order Updated', description: 'The remaining amount has been cancelled and refunded.' });
-        } catch (error: any) {
-            console.error("Failed to cancel remaining order:", error);
-            toast({ variant: 'destructive', title: 'Cancellation Failed', description: error.message });
-        } finally {
-            setIsCancelling(false);
-        }
-    }, [sellOrder, user, toast]);
-
-    const loading = sellOrderLoading;
-    
-    const amount = sellOrder?.amount || 0;
-    const remainingAmount = sellOrder?.remainingAmount ?? amount;
-    const progress = amount > 0 ? ((amount - remainingAmount) / amount) * 100 : 0;
-    
-    const currentStatus = sellOrder ? statusConfig[sellOrder.status] : null;
-
-    if (loading) {
-        return (
-            <div className="p-4 space-y-4">
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-48 w-full" />
-                <Skeleton className="h-32 w-full" />
-            </div>
-        )
-    }
-    
-    if (!sellOrder) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen text-center p-4">
-                <h1 className="text-xl font-bold">Sell Order not found.</h1>
-                <Button asChild className="mt-4">
-                    <Link href="/order">Go to Orders</Link>
-                </Button>
-            </div>
-        )
-    }
+    if (sellOrderLoading) return <div className="p-4 space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-64 w-full" /></div>;
+    if (!sellOrder) return <div className="p-8 text-center"><p className="font-bold">Order not found.</p><Button asChild variant="link"><Link href="/home">Home</Link></Button></div>;
 
     return (
-        <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
             <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-10 border-b">
-                <Button asChild onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8">
+                <Button onClick={() => router.push('/order')} variant="ghost" size="icon" className="h-8 w-8">
                      <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
-                <h1 className="text-xl font-bold">Sell Order Status</h1>
-                {sellOrder && sellOrder.remainingAmount > 0 && !['completed', 'failed'].includes(sellOrder.status) ? (
+                <h1 className="text-lg font-black mx-auto pr-8">P2P Sell Tracker</h1>
+            </header>
+
+            <main className="p-3 space-y-4">
+                <Card className="border-none shadow-sm rounded-[32px] bg-white overflow-hidden">
+                    <CardHeader className="pb-2">
+                        <div className="flex justify-between items-center">
+                            <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest">Order Progress</CardTitle>
+                            <span className={cn("text-[10px] font-black uppercase px-2 py-0.5 rounded-md", statusConfig[sellOrder.status]?.style)}>
+                                {statusConfig[sellOrder.status]?.text}
+                            </span>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-4">
+                        <div className="text-center">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Total Target</p>
+                            <p className="text-3xl font-black text-slate-800 tracking-tighter">₹{sellOrder.amount.toFixed(2)}</p>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase">
+                                <span>Filled: ₹{(sellOrder.amount - sellOrder.remainingAmount).toFixed(2)}</span>
+                                <span>Remaining: ₹{sellOrder.remainingAmount.toFixed(2)}</span>
+                            </div>
+                            <Progress value={progress} className="h-2 rounded-full" />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {sellOrder.remainingAmount > 0 && !['completed', 'failed'].includes(sellOrder.status) && (
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm" disabled={isCancelling}>
-                                Cancel
+                            <Button variant="outline" className="w-full h-12 rounded-2xl text-red-500 border-red-50 font-black text-xs uppercase" disabled={isActionLoading}>
+                                Stop Matching & Refund Remaining
                             </Button>
                         </AlertDialogTrigger>
-                        <AlertDialogContent>
+                        <AlertDialogContent className="rounded-[32px]">
                             <AlertDialogHeader>
-                                <AlertDialogTitle>Cancel Unmatched Amount?</AlertDialogTitle>
+                                <AlertDialogTitle>Cancel Unmatched Portion?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                    This will cancel the unfilled part of your sell order (₹{sellOrder.remainingAmount.toFixed(2)}) and refund it to your wallet. Matched orders will not be affected.
+                                    ₹{sellOrder.remainingAmount.toFixed(2)} will be refunded to your wallet immediately. Already matched buyers can still pay.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                                <AlertDialogCancel>Back</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleCancelRemaining} disabled={isCancelling} className="bg-destructive hover:bg-destructive/90">
-                                    {isCancelling ? <Loader size="xs" /> : "Confirm"}
-                                </AlertDialogAction>
+                                <AlertDialogCancel className="rounded-xl">Wait More</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleCancelRemaining} className="bg-destructive hover:bg-destructive/90 rounded-xl">Confirm Refund</AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
-                ) : <div className="w-16"></div>}
-            </header>
+                )}
 
-            <main className="flex-grow p-4 space-y-6">
-                 <Card>
-                    <CardHeader>
-                        <div className="flex justify-between items-start">
-                            <CardTitle>Sell Order Progress</CardTitle>
-                             {currentStatus && <span className={cn("font-semibold text-sm capitalize", currentStatus.style, "px-2 py-1 rounded-md")}>{currentStatus.text}</span>}
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="text-center">
-                            <p className="text-sm text-muted-foreground">Total Sell Amount</p>
-                            <p className="text-4xl font-bold text-primary">₹{(sellOrder.amount || 0).toFixed(2)}</p>
-                        </div>
-                        <div>
-                            <Progress value={progress} className="h-3" />
-                            <div className="flex justify-between mt-2 text-sm font-medium">
-                                <span>Filled: ₹{(amount - remainingAmount).toFixed(2)}</span>
-                                <span>Remaining: ₹{remainingAmount.toFixed(2)}</span>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Matched Buy Orders</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {matchedOrders && matchedOrders.length > 0 ? (
-                            <div className="space-y-3">
-                                {matchedOrders.map((buyOrder, idx) => (
-                                    <MatchedOrderCard key={buyOrder.buyOrderId + idx} order={buyOrder} />
-                                ))}
-                            </div>
-                        ) : (
-                             <p className="text-center text-muted-foreground py-4">No buyers matched yet.</p>
-                        )}
-                    </CardContent>
-                </Card>
+                <div className="space-y-3">
+                    <h3 className="px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">Matched Liquidity</h3>
+                    {matchedOrders.length > 0 ? (
+                        matchedOrders.map((m) => (
+                            <MatchedOrderCard key={m.buyOrderId} order={m} onConfirm={handleConfirmReceipt} />
+                        ))
+                    ) : (
+                        <Card className="border-none shadow-sm rounded-2xl bg-white p-12 text-center opacity-30">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                            <p className="text-[10px] font-black uppercase mt-4">Rotating liquidity... searching buyers</p>
+                        </Card>
+                    )}
+                </div>
+
+                <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex gap-3">
+                     <AlertCircle className="h-5 w-5 text-primary shrink-0" />
+                     <p className="text-[10px] text-slate-500 font-medium leading-relaxed">Ensure you check your bank/UPI app account before confirming any receipt. Confirmation cannot be undone.</p>
+                </div>
             </main>
         </div>
     );
 }
 
-
 export default function SellOrderStatusPage() {
   return (
-    <Suspense fallback={
-        <div className="flex items-center justify-center min-h-screen">
-            <Loader size="md"/>
-        </div>
-    }>
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>}>
       <SellOrderStatusContent />
     </Suspense>
   );
