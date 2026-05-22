@@ -25,6 +25,7 @@ import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc, useStorage } from '@/firebase';
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Loader } from '@/components/ui/loader';
 
 type Order = {
     id: string;
@@ -108,7 +109,7 @@ function PaymentDetailsContent() {
             });
 
             toast({ title: 'Order Cancelled', description: 'Liquidity has been released back to pool.' });
-            router.push('/order');
+            router.push('/home');
         } catch (e: any) {
             console.error("Cancellation Error:", e);
             toast({ variant: 'destructive', title: 'Error', description: e.message });
@@ -193,14 +194,14 @@ function PaymentDetailsContent() {
     };
 
     const details = order?.sellerWithdrawalDetails;
-    const upiUrl = details?.upiId 
-        ? `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order?.baseAmount}&tn=${order?.orderId}`
-        : '';
-    const qrCodeUrl = upiUrl 
-        ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200&qzone=2`
-        : '';
+    
+    const qrCodeUrl = useMemo(() => {
+        if (!details?.upiId || !order?.baseAmount || !order?.orderId) return '';
+        const upiUrl = `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order.baseAmount}&tn=${order.orderId}`;
+        return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200&qzone=2`;
+    }, [details, order]);
 
-    if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
+    if (loading) return <div className="p-8 flex justify-center"><Loader size="md" /></div>;
     if (!order) return <div className="p-8 text-center font-bold">Order not found.</div>;
 
     return (
@@ -224,7 +225,7 @@ function PaymentDetailsContent() {
                     <CardContent className="space-y-3">
                         <div className="flex justify-between items-center">
                             <span className="text-slate-400 font-medium">Payable Amount</span>
-                            <span className="text-2xl font-black text-primary">₹{order.baseAmount.toFixed(2)}</span>
+                            <span className="text-2xl font-black text-primary">₹{order.baseAmount?.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
                             <span className="text-slate-400 font-medium">Order ID</span>
@@ -266,7 +267,7 @@ function PaymentDetailsContent() {
                                 <span className="text-slate-400 font-medium">UPI ID</span>
                                 <div className="flex items-center gap-2">
                                     <span className="font-mono font-black text-primary">{details?.upiId}</span>
-                                    <Copy className="h-3.5 w-3.5 text-slate-300 cursor-pointer" onClick={() => { navigator.clipboard.writeText(details?.upiId); toast({ title: 'Copied!' }); }} />
+                                    <Copy className="h-3.5 w-3.5 text-slate-300 cursor-pointer" onClick={() => { navigator.clipboard.writeText(details?.upiId || ''); toast({ title: 'Copied!' }); }} />
                                 </div>
                             </div>
                         </div>
@@ -331,7 +332,7 @@ function PaymentDetailsContent() {
                     className="h-12 btn-gradient rounded-xl font-black shadow-teal-500/20" 
                     disabled={isConfirming || isCancelling || utr.length !== 12 || !screenshotFile}
                 >
-                    {isConfirming ? <Loader2 className="h-5 w-5 animate-spin" /> : "I HAVE PAID"}
+                    {isConfirming ? <Loader size="xs" /> : "I HAVE PAID"}
                 </Button>
             </footer>
         </div>
@@ -340,7 +341,7 @@ function PaymentDetailsContent() {
 
 export default function ConfirmPage() {
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>}>
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader size="md" /></div>}>
       <PaymentDetailsContent />
     </Suspense>
   )
