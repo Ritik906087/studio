@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { 
   LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
-  Edit3, Eye, Smartphone, Wallet, ArrowRight, Check
+  Edit3, Eye, Smartphone, Wallet, ArrowRight, Check, History
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -91,7 +91,7 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         try {
             await setDoc(doc(firestore, 'paymentMethods', type), { ...data, type }, { merge: true });
-            toast({ title: "Updated", description: "Payment link refreshed." });
+            toast({ title: "Server Updated", description: "Payment link refreshed." });
             setEditingPayment(null);
         } catch (e: any) { toast({ variant: 'destructive', title: "Update Failed" }); }
     };

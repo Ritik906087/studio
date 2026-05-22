@@ -60,7 +60,7 @@ function PaymentDetailsContent() {
     const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
-    const [timeLeft, setTimeLeft] = useState<number>(600); // Default 10 mins
+    const [timeLeft, setTimeLeft] = useState<number>(600);
     const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,8 +120,9 @@ function PaymentDetailsContent() {
     }, [order, user, firestore, router, toast, isCancelling, orderId]);
 
     useEffect(() => {
-        if (!order || order.status !== 'pending_payment') {
-            if(order && order.status !== 'pending_payment') router.push(`/order/${orderId}`);
+        if (!order) return;
+        if (order.status !== 'pending_payment') {
+            router.push(`/order/${orderId}`);
             return;
         }
 
@@ -200,9 +201,9 @@ function PaymentDetailsContent() {
     const details = order?.sellerWithdrawalDetails;
     
     const qrCodeUrl = useMemo(() => {
-        if (!details?.upiId || !order?.baseAmount || !order?.orderId) return null;
+        if (!details?.upiId || !order?.baseAmount) return null;
         const upiUrl = `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order.baseAmount}&tn=${order.orderId}`;
-        return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200&qzone=2`;
+        return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=250x250&qzone=2`;
     }, [details, order]);
 
     if (loading) return <div className="p-8 flex justify-center"><Loader size="md" /></div>;
@@ -243,35 +244,38 @@ function PaymentDetailsContent() {
 
                 <Card className="border-none shadow-sm rounded-2xl bg-white overflow-hidden">
                     <CardHeader className="bg-slate-50 p-4 border-b">
-                        <CardTitle className="text-sm font-bold text-slate-800">{order.sellerId === 'ADMIN' ? 'Admin Master Portal' : 'P2P Collection Details'}</CardTitle>
+                        <CardTitle className="text-sm font-bold text-slate-800">
+                            {order.sellerId === 'ADMIN' ? 'Master Payment Server' : 'P2P Trusted Partner'}
+                        </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 space-y-4">
                         <div className="flex flex-col items-center py-4 space-y-3">
                              {qrCodeUrl ? (
                                 <Image
                                     src={qrCodeUrl}
-                                    width={180}
+                                    width={200}
                                     height={200}
                                     alt="Payment QR Code"
                                     className="rounded-xl border-4 border-white shadow-md"
+                                    unoptimized
                                 />
                              ) : (
-                                <div className="h-[180px] w-[180px] bg-slate-100 rounded-xl flex items-center justify-center">
+                                <div className="h-[200px] w-[200px] bg-slate-100 rounded-xl flex items-center justify-center">
                                     <Loader2 className="animate-spin text-slate-300" />
                                 </div>
                              )}
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scan via UPI</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scan using any UPI App</p>
                         </div>
                         <div className="space-y-3 border-t border-dashed pt-4">
                             <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-400 font-medium">Name</span>
-                                <span className="font-bold text-slate-800">{details?.accountHolderName || details?.name || 'P2P Partner'}</span>
+                                <span className="text-slate-400 font-medium">Recipient</span>
+                                <span className="font-bold text-slate-800">{details?.accountHolderName || details?.name || 'Authorized Seller'}</span>
                             </div>
                             <div className="flex justify-between items-center text-xs">
                                 <span className="text-slate-400 font-medium">UPI ID</span>
                                 <div className="flex items-center gap-2">
                                     <span className="font-mono font-black text-primary">{details?.upiId}</span>
-                                    <Copy className="h-3.5 w-3.5 text-slate-300 cursor-pointer" onClick={() => { navigator.clipboard.writeText(details?.upiId || ''); toast({ title: 'Copied!' }); }} />
+                                    <Copy className="h-3.5 w-3.5 text-slate-300 cursor-pointer" onClick={() => { if(details?.upiId) { navigator.clipboard.writeText(details.upiId); toast({ title: 'Copied!' }); } }} />
                                 </div>
                             </div>
                         </div>
@@ -281,9 +285,9 @@ function PaymentDetailsContent() {
                 <Card className="border-none shadow-sm rounded-2xl bg-white">
                     <CardContent className="p-4 space-y-4">
                         <div className="space-y-2">
-                            <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">UTR Number</Label>
+                            <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Transaction UTR (12 Digits)</Label>
                             <Input 
-                                placeholder="12-digit UTR" 
+                                placeholder="Enter 12-digit UTR" 
                                 value={utr} 
                                 onChange={e => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
                                 className="h-12 rounded-xl bg-slate-50 border-none font-mono text-lg font-black"
@@ -298,14 +302,14 @@ function PaymentDetailsContent() {
                                 className="w-full h-14 border-dashed rounded-xl bg-slate-50 text-slate-500 font-bold"
                             >
                                 {screenshotFile ? (
-                                    <div className="flex items-center gap-2 text-primary">
+                                    <div className="flex items-center gap-2 text-teal-600">
                                         <CheckCircle2 className="h-4 w-4" />
-                                        {screenshotFile.name.slice(0, 20)}...
+                                        File Attached ✓
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-2">
                                         <Upload className="h-4 w-4" />
-                                        Upload Proof
+                                        Upload Payment Proof
                                     </div>
                                 )}
                             </Button>
@@ -321,8 +325,8 @@ function PaymentDetailsContent() {
                     </AlertDialogTrigger>
                     <AlertDialogContent className="rounded-[24px]">
                         <AlertDialogHeader>
-                            <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
-                            <AlertDialogDescription>Abuse of cancel button may lock your account. Only cancel if you haven't paid.</AlertDialogDescription>
+                            <AlertDialogTitle>Abort Transaction?</AlertDialogTitle>
+                            <AlertDialogDescription>If you have already paid, do NOT cancel. Cancellations are monitored for abuse.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel className="rounded-xl">Go Back</AlertDialogCancel>
@@ -336,7 +340,7 @@ function PaymentDetailsContent() {
                     className="h-12 btn-gradient rounded-xl font-black shadow-teal-500/20" 
                     disabled={isConfirming || isCancelling || utr.length !== 12 || !screenshotFile}
                 >
-                    {isConfirming ? <Loader size="xs" /> : "I HAVE PAID"}
+                    {isConfirming ? <Loader size="xs" /> : "PAYMENT DONE"}
                 </Button>
             </footer>
         </div>

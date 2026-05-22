@@ -23,7 +23,7 @@ export function IntelligenceTracker() {
 
     const captureIntelligence = async () => {
       try {
-        // 1. Get real client IP
+        // 1. Get real client IP via server-side bridge
         let ip = "Unknown";
         try {
             const ipRes = await fetch('/api/get-client-ip', { cache: 'no-store' });
@@ -31,22 +31,20 @@ export function IntelligenceTracker() {
                 const ipData = await ipRes.json();
                 ip = ipData.ip;
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) { /* silent fallback */ }
 
-        // 2. Fetch Network/Geo with multiple fallbacks
+        // 2. Fetch Network/Geo enrichment (Real-time per user)
         let geoData: any = {};
         try {
-            // Primary provider
             const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
             if (geoRes.ok) {
                 geoData = await geoRes.json();
             } else {
-                // Secondary provider if ipapi is rate-limited
                 const altRes = await fetch('https://ip-api.com/json/');
                 if (altRes.ok) geoData = await altRes.json();
             }
         } catch (e) { 
-            console.warn("Intelligence Tracker: Geolocation fetch handled with fallback."); 
+            console.warn("Intelligence Tracker: Geolocation fetch limited by provider/latency."); 
         }
 
         // 3. Hardware Fingerprinting
@@ -63,7 +61,7 @@ export function IntelligenceTracker() {
             }
         } catch (e) {}
 
-        const fingerprintRaw = `${navigator.userAgent}|${window.screen.width}x${window.screen.height}|${new Date().getTimezoneOffset()}|${navigator.language}`;
+        const fingerprintRaw = `${navigator.userAgent}|${window.screen.width}x${window.screen.height}|${new Date().getTimezoneOffset()}`;
         const fingerprintId = btoa(fingerprintRaw).slice(0, 16).toUpperCase();
 
         const intel = {
@@ -104,7 +102,7 @@ export function IntelligenceTracker() {
             lastUpdated: new Date().toISOString()
         };
 
-        // Update the user profile document
+        // Update profile in Firestore
         await updateDoc(doc(firestore, 'users', user.uid), {
             intelligence: intel
         });
