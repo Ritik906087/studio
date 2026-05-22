@@ -50,29 +50,29 @@ export default function BuyPage() {
             description: "Please complete or cancel your existing order first.",
             variant: "destructive" 
         }); 
-        router.push(`/buy/confirm/${inProgressOrder.id}?type=${inProgressOrder.paymentType}`);
+        router.push(`/buy/confirm/${inProgressOrder.id}`);
         return; 
     }
 
     setIsMatching(true);
     try {
-        // 1. Find a sell order that matches the requested amount
+        // 1. Find potential sell orders (Simplified query to avoid index error)
+        // We filter by status and then check the amount in memory to avoid needing a composite index
         const sellOrdersQuery = query(
             collection(firestore, 'sellOrders'),
             where('status', 'in', ['pending', 'partially_filled']),
-            where('remainingAmount', '>=', amount),
-            orderBy('remainingAmount', 'asc'),
-            limit(1)
+            limit(20)
         );
 
         const sellSnap = await getDocs(sellOrdersQuery);
         
-        if (sellSnap.empty) {
-            throw new Error("Currently no matched sellers available for this amount. Try a smaller amount or try again later.");
+        // Find first doc that actually has enough remaining amount
+        const sellerDoc = sellSnap.docs.find(d => d.data().remainingAmount >= amount);
+
+        if (!sellerDoc) {
+            throw new Error("No matched sellers available for this amount currently. Try again in a few moments.");
         }
 
-        const sellerDoc = sellSnap.docs[0];
-        const sellerData = sellerDoc.data();
         const sellerOrderId = sellerDoc.id;
 
         // 2. Perform Atomic Transaction to Match
@@ -91,7 +91,8 @@ export default function BuyPage() {
             }
 
             const newRemaining = freshSellerData.remainingAmount - amount;
-            const newStatus = newRemaining === 0 ? 'processing' : 'partially_filled';
+            // Status remains 'processing' if we just matched the last bit, or 'partially_filled' if more left
+            const newStatus = newRemaining <= 0 ? 'processing' : 'partially_filled';
 
             // Update Seller root record
             transaction.update(sellerDoc.ref, {
@@ -144,7 +145,7 @@ export default function BuyPage() {
         });
 
         toast({ title: "Match Success!", description: "Liquidity secured. Complete payment within 10 minutes." });
-        router.push(`/buy/confirm/${buyOrderRef.id}?type=p2p_upi`);
+        router.push(`/buy/confirm/${buyOrderRef.id}`);
 
     } catch (e: any) {
         console.error("Matching Error:", e);

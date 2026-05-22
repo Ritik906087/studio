@@ -117,11 +117,14 @@ function SellOrderStatusContent() {
         setIsActionLoading(true);
         try {
             await runTransaction(firestore, async (transaction) => {
+                const match = sellOrder.matchedBuyOrders?.find(m => m.buyOrderId === buyOrderId);
+                if (!match) throw new Error("Match not found.");
+
                 // 1. Get references
-                const buyerOrderRef = doc(firestore, 'users', sellOrder.matchedBuyOrders!.find(m => m.buyOrderId === buyOrderId)!.buyerId, 'orders', buyOrderId);
+                const buyerOrderRef = doc(firestore, 'users', match.buyerId, 'orders', buyOrderId);
                 const sellerOrderRef = doc(firestore, 'sellOrders', sellOrder.id);
                 const sellerUserOrderRef = doc(firestore, 'users', user.uid, 'sellOrders', sellOrder.id);
-                const buyerProfileRef = doc(firestore, 'users', sellOrder.matchedBuyOrders!.find(m => m.buyOrderId === buyOrderId)!.buyerId);
+                const buyerProfileRef = doc(firestore, 'users', match.buyerId);
 
                 // 2. Fetch fresh data
                 const buyerSnap = await transaction.get(buyerProfileRef);
@@ -130,14 +133,12 @@ function SellOrderStatusContent() {
 
                 if (!buyerSnap.exists() || !sellSnap.exists()) throw new Error("Reference missing.");
                 
-                const matchAmount = matchedOrders.find(m => m.buyOrderId === buyOrderId)!.amount;
-
                 // 3. Update status in matches
                 const updatedMatches = sellSnap.data().matchedBuyOrders.map((m: any) => 
                     m.buyOrderId === buyOrderId ? { ...m, status: 'completed' } : m
                 );
 
-                // Check if ALL matches are completed and remaining is 0
+                // Check if ALL matches are completed AND remaining is 0
                 const allCompleted = updatedMatches.every((m: any) => m.status === 'completed') && sellSnap.data().remainingAmount === 0;
 
                 transaction.update(sellerOrderRef, { 
@@ -154,7 +155,7 @@ function SellOrderStatusContent() {
                 // 4. Credit Buyer Wallet
                 const currentBuyerBalance = buyerSnap.data().balance || 0;
                 // Add the full "amount" (base + 6% bonus)
-                transaction.update(buyerProfileRef, { balance: currentBuyerBalance + buyerOrderSnap.data().amount });
+                transaction.update(buyerProfileRef, { balance: currentBuyerBalance + (buyerOrderSnap.data()?.amount || 0) });
             });
 
             toast({ title: 'Payment Confirmed', description: 'Transaction completed for this match.' });
@@ -185,8 +186,8 @@ function SellOrderStatusContent() {
                 
                 // 1. Refund seller wallet
                 transaction.update(userRef, {
-                    balance: userSnap.data().balance + refundAmt,
-                    holdBalance: userSnap.data().holdBalance - refundAmt
+                    balance: (userSnap.data()?.balance || 0) + refundAmt,
+                    holdBalance: (userSnap.data()?.holdBalance || 0) - refundAmt
                 });
 
                 // 2. Mark order as failed/partially complete
@@ -221,7 +222,7 @@ function SellOrderStatusContent() {
     const progress = sellOrder ? ((sellOrder.amount - sellOrder.remainingAmount) / sellOrder.amount) * 100 : 0;
 
     if (sellOrderLoading) return <div className="p-4 space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-64 w-full" /></div>;
-    if (!sellOrder) return <div className="p-8 text-center"><p className="font-bold">Order not found.</p><Button asChild variant="link"><Link href="/home">Home</Link></Button></div>;
+    if (!sellOrder) return <div className="p-8 text-center"><p className="font-bold">Order not found.</p><Button asChild variant="link" href="/home">Home</Button></div>;
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
@@ -232,7 +233,7 @@ function SellOrderStatusContent() {
                 <h1 className="text-lg font-black mx-auto pr-8">P2P Sell Tracker</h1>
             </header>
 
-            <main className="p-3 space-y-4">
+            <main className="p-3 space-y-4 overflow-y-auto no-scrollbar pb-24">
                 <Card className="border-none shadow-sm rounded-[32px] bg-white overflow-hidden">
                     <CardHeader className="pb-2">
                         <div className="flex justify-between items-center">

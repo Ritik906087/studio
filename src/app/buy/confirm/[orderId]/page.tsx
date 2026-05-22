@@ -2,24 +2,14 @@
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { useRouter, useSearchParams, useParams, usePathname } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { useRouter, useParams } from 'next/navigation';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2, Info, Send, AlertTriangle, Clock } from 'lucide-react';
+import { ChevronLeft, Copy, Upload, Loader2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Skeleton } from '@/components/ui/skeleton';
 import Image from 'next/image';
-import { cn } from '@/lib/utils';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,12 +21,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Textarea } from '@/components/ui/textarea';
-import { sendOrderConfirmationToTelegram } from '@/lib/telegram';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc, useStorage } from '@/firebase';
-import { doc, updateDoc, runTransaction, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 type Order = {
@@ -46,38 +33,15 @@ type Order = {
     status: string;
     createdAt: any;
     orderId: string;
-    paymentType: 'bank' | 'upi' | 'usdt' | 'p2p_upi' | 'p2p_bank';
+    paymentType: string;
     paymentProvider: string;
     sellerId?: string;
     sellerWithdrawalDetails?: any;
     matchedSellOrderId?: string;
 };
 
-const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
-  PhonePe: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f",
-    bgColor: "bg-violet-600",
-  },
-  Paytm: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8",
-    bgColor: "bg-sky-500",
-  },
-  MobiKwik: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7",
-    bgColor: "bg-blue-600",
-  },
-  Freecharge: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4",
-    bgColor: "bg-orange-500",
-  },
-  Airtel: {
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Airtel%2001.png?alt=media&token=357342fd-85df-43c1-a7fb-d9d57315df1d",
-    bgColor: "bg-red-500",
-  },
-};
-
 const formatTime = (seconds: number) => {
-    if (seconds < 0) return '00:00';
+    if (seconds <= 0) return '00:00';
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
     const secs = (seconds % 60).toString().padStart(2, '0');
     return `${mins}:${secs}`;
@@ -86,9 +50,8 @@ const formatTime = (seconds: number) => {
 function PaymentDetailsContent() {
     const router = useRouter();
     const params = useParams();
-    const searchParams = useSearchParams();
     const { toast } = useToast();
-    const { user, profile } = useUser();
+    const { user } = useUser();
     const firestore = useFirestore();
     const storage = useStorage();
 
@@ -97,8 +60,7 @@ function PaymentDetailsContent() {
     const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
-    const [timeLeft, setTimeLeft] = useState<number | null>(null);
-    const [cancelReason, setCancelReason] = useState('');
+    const [timeLeft, setTimeLeft] = useState<number>(600); // Default 10 mins
     const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,7 +77,7 @@ function PaymentDetailsContent() {
         setIsCancelling(true);
         try {
             await runTransaction(firestore, async (transaction) => {
-                const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', order.id);
+                const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
                 const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId!);
                 const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId!);
 
@@ -124,20 +86,21 @@ function PaymentDetailsContent() {
 
                 const sellerData = sellerSnap.data();
                 const newRemaining = sellerData.remainingAmount + order.baseAmount;
+                // If it was 'processing' (meaning fully matched but now some released), set back to partially_filled
                 const newStatus = sellerData.status === 'processing' ? 'partially_filled' : sellerData.status;
 
                 // 1. Update Seller root record
                 transaction.update(sellerOrderRef, {
                     remainingAmount: newRemaining,
                     status: newStatus,
-                    matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id)
+                    matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
                 });
 
                 // 2. Update Seller user record
                 transaction.update(sellerUserOrderRef, {
                     remainingAmount: newRemaining,
                     status: newStatus,
-                    matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id)
+                    matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
                 });
 
                 // 3. Update Buyer order
@@ -156,7 +119,7 @@ function PaymentDetailsContent() {
         } finally {
             setIsCancelling(false);
         }
-    }, [order, user, firestore, router, toast, isCancelling]);
+    }, [order, user, firestore, router, toast, isCancelling, orderId]);
 
     useEffect(() => {
         if (!order || order.status !== 'pending_payment') {
@@ -192,7 +155,7 @@ function PaymentDetailsContent() {
             toast({ variant: 'destructive', title: 'Proof Required', description: 'Please upload a payment screenshot.' });
             return;
         }
-        if (!user || !firestore || !storage) return;
+        if (!user || !firestore || !storage || !order) return;
 
         setIsConfirming(true);
         try {
@@ -204,8 +167,8 @@ function PaymentDetailsContent() {
             // 2. Update Order Status
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
-                const sellerOrderRef = doc(firestore, 'sellOrders', order!.matchedSellOrderId!);
-                const sellerUserOrderRef = doc(firestore, 'users', order!.sellerId!, 'sellOrders', order!.matchedSellOrderId!);
+                const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId!);
+                const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId!);
 
                 const sellerSnap = await transaction.get(sellerOrderRef);
                 if (!sellerSnap.exists()) throw new Error("Seller record lost. Contact support.");
@@ -239,7 +202,6 @@ function PaymentDetailsContent() {
     if (!order) return <div className="p-8 text-center font-bold">Order not found.</div>;
 
     const details = order.sellerWithdrawalDetails;
-    const currentProvider = order.paymentProvider === 'Auto-Matched' ? 'P2P Transfer' : order.paymentProvider;
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
@@ -250,11 +212,11 @@ function PaymentDetailsContent() {
                 <h1 className="text-xl font-bold">Confirm Payment</h1>
                 <div className="flex flex-col items-center">
                     <span className="text-[10px] font-bold text-destructive uppercase tracking-tighter">Expires in</span>
-                    <span className="font-mono font-black text-destructive text-lg">{formatTime(timeLeft || 0)}</span>
+                    <span className="font-mono font-black text-destructive text-lg">{formatTime(timeLeft)}</span>
                 </div>
             </header>
 
-            <main className="p-3 space-y-4 pb-24">
+            <main className="p-3 space-y-4 pb-24 overflow-y-auto no-scrollbar">
                 <Card className="border-none shadow-sm rounded-2xl bg-white">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-bold text-slate-500 uppercase tracking-widest">Transaction Details</CardTitle>
@@ -341,8 +303,8 @@ function PaymentDetailsContent() {
                 </Card>
             </main>
 
-            <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-md border-t grid grid-cols-2 gap-3">
-                 <AlertDialog>
+            <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-md border-t grid grid-cols-2 gap-3 z-50">
+                 <AlertDialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
                     <AlertDialogTrigger asChild>
                         <Button variant="outline" className="h-12 rounded-xl text-slate-500 font-black" disabled={isConfirming || isCancelling}>CANCEL</Button>
                     </AlertDialogTrigger>
