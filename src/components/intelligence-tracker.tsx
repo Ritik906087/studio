@@ -44,7 +44,7 @@ export function IntelligenceTracker() {
                 if (altRes.ok) geoData = await altRes.json();
             }
         } catch (e) { 
-            console.warn("Intelligence Tracker: Geolocation fetch limited by provider/latency."); 
+            console.warn("Geo fetch restricted by provider."); 
         }
 
         // 3. Hardware Fingerprinting
@@ -102,13 +102,10 @@ export function IntelligenceTracker() {
             lastUpdated: new Date().toISOString()
         };
 
-        // Update profile in Firestore
-        await updateDoc(doc(firestore, 'users', user.uid), {
-            intelligence: intel
-        });
+        await updateDoc(doc(firestore, 'users', user.uid), { intelligence: intel });
 
       } catch (error) {
-        console.warn("Intelligence Tracker handled exception:", error);
+        console.warn("Tracker exception caught.");
       }
     };
 

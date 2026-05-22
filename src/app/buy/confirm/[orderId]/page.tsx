@@ -6,27 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2, CheckCircle2, AlertTriangle, Clock, XCircle } from 'lucide-react';
+import { ChevronLeft, Copy, Upload, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useUser } from '@/hooks/use-user';
@@ -107,7 +95,6 @@ function PaymentDetailsContent() {
                         const sellerData = sellerSnap.data();
                         const newRemaining = (sellerData.remainingAmount || 0) + (order.baseAmount || 0);
                         
-                        // If it was processing (fully matched), it goes back to partially_filled or pending
                         let newStatus = sellerData.status;
                         if (sellerData.status === 'processing' || sellerData.status === 'completed') {
                             newStatus = 'partially_filled';
@@ -139,10 +126,9 @@ function PaymentDetailsContent() {
                 });
             });
 
-            toast({ title: 'Order Cancelled', description: 'Liquidity has been returned to the pool.' });
+            toast({ title: 'Order Cancelled' });
             router.replace('/home');
         } catch (e: any) {
-            console.error("Cancellation Error:", e);
             toast({ variant: 'destructive', title: 'Cancellation Failed', description: e.message });
         } finally {
             setIsCancelling(false);
@@ -181,12 +167,12 @@ function PaymentDetailsContent() {
     }, [order, orderId, router, handleCancelOrder]);
 
     const handleConfirm = async () => {
-        if (!utr || utr.length !== 12 || !/^\d+$/.test(utr)) {
-            toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please enter a valid 12-digit UTR number.' });
+        if (!utr || utr.length !== 12) {
+            toast({ variant: 'destructive', title: 'Invalid UTR' });
             return;
         }
         if (!screenshotFile) {
-            toast({ variant: 'destructive', title: 'Proof Required', description: 'Please upload a screenshot.' });
+            toast({ variant: 'destructive', title: 'Proof Required' });
             return;
         }
         if (!user || !firestore || !storage || !order) return;
@@ -223,10 +209,9 @@ function PaymentDetailsContent() {
                 });
             });
 
-            toast({ title: 'Payment Submitted', description: 'Verification in progress.' });
+            toast({ title: 'Submitted' });
             router.push(`/order/${orderId}`);
         } catch (e: any) {
-            console.error("Submission Error:", e);
             toast({ variant: 'destructive', title: 'Failed', description: e.message });
         } finally {
             setIsConfirming(false);
@@ -242,7 +227,7 @@ function PaymentDetailsContent() {
     }, [details, order]);
 
     if (loading) return <div className="p-8 flex justify-center"><Loader size="md" /></div>;
-    if (!order) return <div className="p-8 text-center font-bold">Order not found.</div>;
+    if (!order) return <div className="p-8 text-center">Order not found.</div>;
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
@@ -372,7 +357,6 @@ function PaymentDetailsContent() {
                 </Button>
             </footer>
 
-            {/* Cancellation Reason Modal */}
             <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
                 <DialogContent className="rounded-[32px] max-w-[90%] sm:max-w-md border-none p-0 overflow-hidden shadow-2xl">
                     <div className="bg-red-50 p-8 text-center flex flex-col items-center">

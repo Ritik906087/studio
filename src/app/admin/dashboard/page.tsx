@@ -7,14 +7,13 @@ import { useRouter } from 'next/navigation';
 import { 
   LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
-  Edit3, Eye, Smartphone, Wallet, ArrowRight, Check, History
+  Edit3, Eye, Wallet, ArrowRight, Check
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
-import { Loader } from '@/components/ui/loader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, updateDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -25,7 +24,7 @@ import Image from 'next/image';
 
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
-const providerLogos: any = {
+const providerLogos: Record<string, string> = {
   PhonePe: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f",
   Paytm: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8",
   MobiKwik: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7",
@@ -43,7 +42,6 @@ export default function AdminDashboardPage() {
     const [sellOrders, setSellOrders] = useState<any[]>([]);
     const [pendingBuyOrders, setPendingBuyOrders] = useState<any[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [editingPayment, setEditingPayment] = useState<string | null>(null);
 
@@ -59,7 +57,6 @@ export default function AdminDashboardPage() {
 
     useEffect(() => {
         if (!firestore) return;
-        setLoading(true);
 
         const unsubUsers = onSnapshot(query(collection(firestore, 'users'), orderBy('createdAt', 'desc')), (snap) => {
             setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -78,7 +75,6 @@ export default function AdminDashboardPage() {
             setPaymentMethods(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        setLoading(false);
         return () => { unsubUsers(); unsubSell(); unsubBuy(); unsubPM(); };
     }, [firestore]);
 
@@ -265,9 +261,11 @@ export default function AdminDashboardPage() {
                                                     <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-2">
-                                                            <div className="h-6 w-6 rounded-lg bg-slate-50 p-1 flex items-center justify-center">
-                                                                <Image src={providerLogos[o.withdrawalMethod?.name] || ""} alt="" width={14} height={14} />
-                                                            </div>
+                                                            {providerLogos[o.withdrawalMethod?.name] && (
+                                                                <div className="h-6 w-6 rounded-lg bg-slate-50 p-1 flex items-center justify-center">
+                                                                    <Image src={providerLogos[o.withdrawalMethod?.name]} alt="" width={14} height={14} />
+                                                                </div>
+                                                            )}
                                                             <span className="font-mono text-[9px] font-black">{o.withdrawalMethod?.upiId}</span>
                                                         </div>
                                                     </TableCell>
@@ -302,7 +300,7 @@ export default function AdminDashboardPage() {
                                                         <div className="flex flex-col gap-1">
                                                             <span className="font-mono text-xs font-black text-primary">{o.utr}</span>
                                                             {o.screenshotURL ? (
-                                                                <a href={o.screenshotURL} target="_blank" className="flex items-center gap-1 text-[9px] text-blue-600 font-bold hover:underline">
+                                                                <a href={o.screenshotURL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[9px] text-blue-600 font-bold hover:underline">
                                                                     VIEW IMAGE <ArrowRight className="h-2 w-2" />
                                                                 </a>
                                                             ) : <span className="text-[9px] text-slate-300 italic">No Image</span>}
