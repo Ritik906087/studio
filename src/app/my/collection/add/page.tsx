@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Landmark } from "lucide-react";
 import Link from "next/link";
@@ -16,12 +16,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useUser, useFirestore } from '@/firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
 
 type PaymentMethod = {
   name: string;
@@ -45,29 +43,17 @@ export default function AddCollectionPage() {
   const [isLinking, setIsLinking] = useState(false);
   const [upiId, setUpiId] = useState("");
 
-  // Bank form state
   const [accountHolderName, setAccountHolderName] = useState('');
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [ifscCode, setIfscCode] = useState('');
 
   const { toast } = useToast();
-  const { user } = useUser();
-  const [userProfile, setUserProfile] = useState<{phoneNumber: string} | null>(null);
-
-  useEffect(() => {
-    async function fetchProfile() {
-      if(user) {
-        const {data} = await supabase.from('users').select('phoneNumber').eq('id', user.id).single();
-        setUserProfile(data);
-      }
-    }
-    fetchProfile();
-  }, [user]);
+  const { user, profile } = useUser();
+  const firestore = useFirestore();
 
   const specialBankUsers = ['7050396570', '7307081891', '9798630209', '9965567336', '9199604613', '9955557336'];
-  const showBankOption = userProfile?.phoneNumber && specialBankUsers.includes(userProfile.phoneNumber);
-  
+  const showBankOption = profile?.phoneNumber && specialBankUsers.includes(profile.phoneNumber);
 
   const handleUpiLinkClick = (method: PaymentMethod) => {
     setSelectedMethod(method);
@@ -93,49 +79,43 @@ export default function AddCollectionPage() {
     };
 
     const regex = upiRegexMap[methodName];
-    if (regex) {
-        return regex.test(upiLower);
-    }
+    if (regex) return regex.test(upiLower);
     return /^[a-z0-9.\-_]{2,256}@[a-z]{2,64}$/.test(upiLower);
   }
 
   const handleLinkSubmit = async (methodData: any) => {
-    if (!user) {
-        toast({ variant: "destructive", title: "You are not logged in.", description: "Please log in and try again." });
+    if (!user || !firestore) {
+        toast({ variant: "destructive", title: "Error", description: "You are not logged in." });
         return;
     }
 
     setIsLinking(true);
     try {
-        const { data: userProfile, error: fetchError } = await supabase
-            .from('users')
-            .select('paymentMethods')
-            .eq('id', user.id)
-            .single();
+        const userRef = doc(firestore, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+        
+        if (!userSnap.exists()) throw new Error("Profile not found.");
 
-        if(fetchError) throw fetchError;
+        const currentMethods = userSnap.data().paymentMethods || [];
+        const isDuplicate = currentMethods.some((pm: any) => 
+            (pm.upiId && pm.upiId === methodData.upiId) || 
+            (pm.accountNumber && pm.accountNumber === methodData.accountNumber)
+        );
 
-        const currentMethods = userProfile?.paymentMethods || [];
-        const isDuplicate = currentMethods.some((pm: any) => (pm.upiId && pm.upiId === methodData.upiId) || (pm.accountNumber && pm.accountNumber === methodData.accountNumber));
         if (isDuplicate) {
             throw new Error(methodData.type === 'upi' ? "This UPI ID is already linked." : "This Bank Account is already linked.");
         }
         
         const updatedMethods = [...currentMethods, methodData];
 
-        const { error: updateError } = await supabase
-            .from('users')
-            .update({ paymentMethods: updatedMethods })
-            .eq('id', user.id);
-        
-        if (updateError) throw updateError;
+        await updateDoc(userRef, { paymentMethods: updatedMethods });
       
-      toast({
-        title: "Success!",
-        description: `${methodData.name} has been linked successfully.`,
-      });
-      setIsUpiDialogOpen(false);
-      setIsBankDialogOpen(false);
+        toast({
+            title: "Success!",
+            description: `${methodData.name} has been linked successfully.`,
+        });
+        setIsUpiDialogOpen(false);
+        setIsBankDialogOpen(false);
 
     } catch (error: any) {
        console.error("Linking error:", error);
@@ -152,11 +132,7 @@ export default function AddCollectionPage() {
   const handleUpiFormSubmit = () => {
     if (!selectedMethod) return;
     if (!validateUpi(upiId, selectedMethod.name)) {
-        toast({ 
-            variant: "destructive", 
-            title: "Invalid UPI ID", 
-            description: `Please enter a valid UPI ID for ${selectedMethod.name}` 
-        });
+        toast({ variant: "destructive", title: "Invalid UPI ID", description: `Please enter a valid UPI ID for ${selectedMethod.name}` });
         return;
     }
     handleLinkSubmit({ type: 'upi', name: selectedMethod.name, upiId });
@@ -251,7 +227,6 @@ export default function AddCollectionPage() {
         </div>
       </main>
 
-      {/* UPI Dialog */}
       {selectedMethod && (
         <Dialog open={isUpiDialogOpen} onOpenChange={setIsUpiDialogOpen}>
           <DialogContent className="sm:max-w-[425px] rounded-2xl">
@@ -276,7 +251,6 @@ export default function AddCollectionPage() {
         </Dialog>
       )}
 
-      {/* Bank Dialog */}
       <Dialog open={isBankDialogOpen} onOpenChange={setIsBankDialogOpen}>
         <DialogContent className="sm:max-w-[425px] rounded-2xl p-0">
             <DialogHeader className="p-6 pb-4 border-b">

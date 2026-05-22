@@ -1,59 +1,44 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useUser } from '@/hooks/use-user';
-import { supabase } from '@/lib/supabase';
+import { useUser, useFirestore } from '@/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader } from '@/components/ui/loader';
 import { useRouter } from 'next/navigation';
 
-type UserProfile = {
-  numericId: string;
-};
-
 export default function FeedbackPage() {
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { user } = useUser();
+  const { user, profile } = useUser();
+  const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
-
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-
-  useEffect(() => {
-    async function fetchProfile() {
-      if (user) {
-        const { data } = await supabase.from('users').select('numericId').eq('id', user.id).single();
-        if (data) setUserProfile(data);
-      }
-    }
-    fetchProfile();
-  }, [user]);
 
   const handleSubmit = async () => {
     if (!message.trim()) {
       toast({ variant: 'destructive', title: 'Please enter your feedback.' });
       return;
     }
-    if (!user || !userProfile) {
-      toast({ variant: 'destructive', title: 'You must be logged in to submit feedback.' });
+    if (!user || !profile || !firestore) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Session data not found.' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('feedback').insert({
-        userId: user.id,
-        userNumericId: userProfile.numericId,
+      await addDoc(collection(firestore, 'feedback'), {
+        userId: user.uid,
+        userNumericId: profile.numericId,
         message: message,
+        createdAt: serverTimestamp(),
       });
-      if (error) throw error;
       toast({ title: 'Feedback Submitted', description: 'Thank you for your suggestion!' });
       setMessage('');
       router.push('/my');
@@ -66,7 +51,7 @@ export default function FeedbackPage() {
   };
 
   return (
-    <>
+    <div className="flex min-h-screen flex-col bg-secondary">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
           <Link href="/my">
@@ -78,13 +63,14 @@ export default function FeedbackPage() {
       </header>
 
       <main className="flex-grow space-y-4 p-4">
-        <Card className="bg-white">
+        <Card className="bg-white border-none shadow-sm rounded-2xl">
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="text-sm text-muted-foreground mb-4 font-medium">
               We value your feedback! Please share any suggestions or ideas to help us improve.
             </p>
             <Textarea
               placeholder="Enter your suggestions here..."
+              className="bg-slate-50 border-none rounded-xl focus-visible:ring-primary/20"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={8}
@@ -93,13 +79,12 @@ export default function FeedbackPage() {
         </Card>
         <Button
           onClick={handleSubmit}
-          className="w-full h-12 btn-gradient font-bold"
+          className="w-full h-14 btn-gradient rounded-2xl font-black text-base shadow-teal-500/20"
           disabled={isSubmitting || !message.trim()}
         >
-          {isSubmitting ? <Loader size="xs" className="mr-2" /> : null}
-          Submit Feedback
+          {isSubmitting ? <Loader size="xs" className="mr-2" /> : "SUBMIT FEEDBACK"}
         </Button>
       </main>
-    </>
+    </div>
   );
 }
