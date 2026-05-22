@@ -73,7 +73,7 @@ export default function MyPage() {
   return (
     <div className="min-h-full bg-[#F0F7FF] pb-24 no-scrollbar">
       {/* NO HEADER - START CONTENT IMMEDIATELY */}
-      <main className="px-3 pt-4 space-y-3">
+      <main className="px-3 pt-2 space-y-3">
         {/* COMPACT PROFILE STRIP */}
         <div className="flex items-center justify-between bg-white p-3 rounded-[20px] border border-blue-50 shadow-sm">
           <div className="flex items-center gap-3">
@@ -150,7 +150,7 @@ export default function MyPage() {
         </div>
 
         {/* LOGOUT BUTTON */}
-        <div className="pt-4 pb-4">
+        <div className="pt-4 pb-12">
           <Button onClick={handleLogout} variant="outline" className="w-full h-11 border-red-50 text-red-500 font-bold text-[11px] rounded-[16px] flex items-center justify-center gap-2 active:bg-red-50 uppercase tracking-wide">
             <LogOut className="h-4 w-4" />
             Sign Out

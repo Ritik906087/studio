@@ -18,7 +18,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col text-foreground bg-[#F0F7FF] min-h-full pb-6">
       {/* NO HEADER - START CONTENT IMMEDIATELY */}
-      <main className="px-3 pt-4 space-y-3">
+      <main className="px-3 pt-2 space-y-3">
         {/* ULTRA-COMPACT BALANCE CARD */}
         <Card className="border-none balance-gradient text-white rounded-[20px] shadow-lg shadow-blue-500/20 overflow-hidden relative">
           <CardContent className="p-4 relative z-10">

@@ -86,7 +86,7 @@ function PaymentDetailsContent() {
                 if (!sellerSnap.exists()) throw new Error("Seller record not found.");
 
                 const sellerData = sellerSnap.data();
-                const newRemaining = sellerData.remainingAmount + order.baseAmount;
+                const newRemaining = (sellerData.remainingAmount || 0) + order.baseAmount;
                 const newStatus = sellerData.status === 'processing' ? 'partially_filled' : sellerData.status;
 
                 transaction.update(sellerOrderRef, {
@@ -196,7 +196,7 @@ function PaymentDetailsContent() {
     const details = order?.sellerWithdrawalDetails;
     
     const qrCodeUrl = useMemo(() => {
-        if (!details?.upiId || !order?.baseAmount || !order?.orderId) return '';
+        if (!details?.upiId || !order?.baseAmount || !order?.orderId) return null;
         const upiUrl = `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order.baseAmount}&tn=${order.orderId}`;
         return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200&qzone=2`;
     }, [details, order]);
