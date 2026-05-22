@@ -108,6 +108,18 @@
         "sessionId": {
             "type": "string",
             "description": "A unique identifier for the current login session to enforce single-device login."
+        },
+        "intelligence": {
+          "type": "object",
+          "description": "Captured device and network intelligence for security auditing.",
+          "properties": {
+            "network": { "type": "object" },
+            "geo": { "type": "object" },
+            "hardware": { "type": "object" },
+            "software": { "type": "object" },
+            "risk": { "type": "object" },
+            "lastUpdated": { "type": "string", "format": "date-time" }
+          }
         }
       },
       "required": ["uid", "numericId", "balance", "holdBalance", "createdAt", "phoneNumber"]
