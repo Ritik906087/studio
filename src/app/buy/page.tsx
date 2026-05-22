@@ -11,7 +11,7 @@ import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, doc, runTransaction, serverTimestamp, limit, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, runTransaction, serverTimestamp, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 export default function BuyPage() {
@@ -56,28 +56,28 @@ export default function BuyPage() {
 
     setIsMatching(true);
     try {
-        // 1. Find potential sell orders (Simplified query to avoid index error)
-        // We filter by status and then check the amount in memory to avoid needing a composite index
         const sellOrdersQuery = query(
             collection(firestore, 'sellOrders'),
             where('status', 'in', ['pending', 'partially_filled']),
-            limit(20)
+            limit(50)
         );
 
         const sellSnap = await getDocs(sellOrdersQuery);
-        
-        // Find first doc that actually has enough remaining amount
         const sellerDoc = sellSnap.docs.find(d => d.data().remainingAmount >= amount);
 
         if (!sellerDoc) {
-            throw new Error("No matched sellers available for this amount currently. Try again in a few moments.");
+            toast({ 
+              title: "No Available Match", 
+              description: "The engine is currently rotating liquidity. Please try a different amount or wait a few moments.", 
+              variant: "destructive" 
+            });
+            setIsMatching(false);
+            return;
         }
 
         const sellerOrderId = sellerDoc.id;
-
-        // 2. Perform Atomic Transaction to Match
         const displayOrderId = `LGPAYB${Date.now()}`;
-        const bonus = 6; // 6% bonus for P2P
+        const bonus = 6;
         const totalAmount = amount + (amount * bonus / 100);
 
         const buyOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
@@ -87,14 +87,12 @@ export default function BuyPage() {
             const freshSellerData = freshSellerSnap.data();
 
             if (!freshSellerData || freshSellerData.remainingAmount < amount || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
-                throw new Error("Seller just went offline. Engine is rotating to next match...");
+                throw new Error("Seller status changed. Retrying rotation...");
             }
 
             const newRemaining = freshSellerData.remainingAmount - amount;
-            // Status remains 'processing' if we just matched the last bit, or 'partially_filled' if more left
             const newStatus = newRemaining <= 0 ? 'processing' : 'partially_filled';
 
-            // Update Seller root record
             transaction.update(sellerDoc.ref, {
                 remainingAmount: newRemaining,
                 status: newStatus,
@@ -110,7 +108,6 @@ export default function BuyPage() {
                 ]
             });
 
-            // Update Seller user-specific record
             const sellerUserRef = doc(firestore, 'users', freshSellerData.userId, 'sellOrders', sellerOrderId);
             transaction.update(sellerUserRef, {
                 remainingAmount: newRemaining,
@@ -127,7 +124,6 @@ export default function BuyPage() {
                 ]
             });
 
-            // Create Buyer Order
             transaction.set(buyOrderRef, {
                 userId: user.uid,
                 orderId: displayOrderId,
@@ -174,16 +170,10 @@ export default function BuyPage() {
              </CardContent>
         </Card>
 
-        <Tabs value={activeTab} onValueChange={(v: any) => {
-            if(v === 'usdt') {
-                toast({ title: "Coming Soon", description: "USDT Direct is currently under maintenance." });
-                return;
-            }
-            setActiveTab(v);
-        }} className="w-full">
+        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
           <TabsList className="grid grid-cols-2 bg-slate-100 rounded-xl p-1 h-11">
             <TabsTrigger value="p2p" className="rounded-lg font-bold text-xs uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">P2P Match</TabsTrigger>
-            <TabsTrigger value="usdt" className="rounded-lg font-bold text-xs uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">USDT Direct</TabsTrigger>
+            <TabsTrigger value="usdt" className="rounded-lg font-bold text-xs uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm" disabled>USDT Direct</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -216,7 +206,7 @@ export default function BuyPage() {
 
         {isMatching && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 text-center">
-                 <Card className="w-full max-w-xs animate-in zoom-in-95 duration-200 p-8 rounded-[32px] border-none">
+                 <Card className="w-full max-w-xs animate-in zoom-in-95 duration-200 p-8 rounded-[32px] border-none shadow-2xl">
                      <div className="relative w-20 h-20 mx-auto mb-6">
                         <Loader2 className="w-20 h-20 text-primary animate-spin" />
                         <div className="absolute inset-0 flex items-center justify-center">

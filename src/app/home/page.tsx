@@ -17,7 +17,7 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col text-foreground bg-[#F5F7FB] min-h-full pb-4">
-      {/* COMPACT TOP STRIP */}
+      {/* APP STRIP */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
@@ -44,7 +44,7 @@ export default function HomePage() {
           <CardContent className="p-4 relative z-10">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-white/70 text-[9px] font-black uppercase tracking-[0.2em]">Total Balance</p>
+                <p className="text-white/70 text-[9px] font-black uppercase tracking-[0.2em]">Total Assets</p>
                 <div className="flex items-baseline gap-1 mt-0.5">
                   <p className="text-2xl font-black tabular-nums tracking-tighter">
                     ₹{profile?.balance?.toFixed(2) || '0.00'}
@@ -111,7 +111,7 @@ export default function HomePage() {
               </div>
               <div className="min-w-0">
                  <h4 className="font-bold text-[11px] text-slate-800 leading-none">P2P Security Active</h4>
-                 <p className="text-[9px] text-slate-400 mt-1 truncate font-medium">Auto-rotation engine protecting your trades.</p>
+                 <p className="text-[9px] text-slate-400 mt-1 truncate font-medium">Liquidity engine rotating for fast trades.</p>
               </div>
               <ArrowUpRight className="h-3 w-3 text-slate-300 ml-auto" />
            </div>
