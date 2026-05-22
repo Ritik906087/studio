@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Card,
@@ -16,7 +15,6 @@ import {
   ShieldCheck, 
   Globe, 
   Smartphone, 
-  User as UserIcon, 
   Wallet, 
   Zap, 
   MapPin, 
@@ -25,7 +23,6 @@ import {
   Power, 
   Ban,
   Cpu,
-  Monitor,
   BatteryMedium,
   Wifi,
   MoreVertical,
@@ -40,7 +37,6 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader } from '@/components/ui/loader';
 import { useFirestore } from '@/firebase';
@@ -108,17 +104,16 @@ export default function UserDetailsPage() {
     const [amount, setAmount] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
-
-    // Real-Time Analytics State
     const [realAnalytics, setRealAnalytics] = useState<any>(null);
 
     useEffect(() => {
         const fetchIPData = async () => {
             try {
+                // Fetch real-time public network intelligence
                 const response = await fetch('https://ipapi.co/json/');
                 const data = await response.json();
                 
-                // Get real browser data
+                // Get real browser/hardware data
                 const battery: any = (navigator as any).getBattery ? await (navigator as any).getBattery() : null;
                 const connection: any = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
 
@@ -145,7 +140,7 @@ export default function UserDetailsPage() {
                     }
                 });
             } catch (error) {
-                console.error("Failed to fetch real intelligence data:", error);
+                console.error("Failed to fetch real-time intelligence data:", error);
             }
         };
         fetchIPData();
@@ -177,9 +172,6 @@ export default function UserDetailsPage() {
             if (snap.exists()) {
                 setUser({ id: snap.id, ...snap.data() });
             }
-            setLoading(false);
-        }, (err) => {
-            console.error("User Detail Listener Error:", err);
             setLoading(false);
         });
 
@@ -245,22 +237,60 @@ export default function UserDetailsPage() {
                         </div>
                     </div>
                 </div>
-                
                 <div className="flex items-center gap-4">
-                    <div className="flex flex-col text-right mr-4">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">System Load</span>
-                        <span className="text-xs font-black text-green-600 uppercase tracking-tighter">Normal (0.04ms)</span>
-                    </div>
-                    <Button variant="outline" className="rounded-xl border-slate-200 font-bold text-xs uppercase h-11 px-6">
-                        Export Logs
-                    </Button>
+                    <Button variant="outline" className="rounded-xl border-slate-200 font-bold text-xs uppercase h-11 px-6">Export Logs</Button>
                     <Button variant="ghost" size="icon" className="rounded-xl bg-slate-50 h-11 w-11"><MoreVertical className="h-5 w-5 text-slate-400" /></Button>
                 </div>
             </header>
 
             <main className="flex-1 p-8 space-y-6 max-w-[1600px] mx-auto w-full">
                 
-                {/* TOP ROW: WALLET MANAGEMENT & USER SUMMARY */}
+                {/* WALLET MANAGEMENT (ALWAYS AT TOP) */}
+                <Card className="border-none shadow-sm rounded-[32px] bg-slate-900 text-white overflow-hidden relative mb-6">
+                    <div className="absolute top-0 right-0 p-6 opacity-5"><Wallet className="h-40 w-40" /></div>
+                    <CardContent className="p-0 grid grid-cols-12 divide-x divide-white/5">
+                        <div className="col-span-8 p-10 flex flex-col justify-center">
+                            <div className="grid grid-cols-3 gap-12">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Available Assets</p>
+                                    <p className="text-4xl font-black text-primary tabular-nums tracking-tighter">₹{user.balance?.toFixed(2)}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Hold / Rotation</p>
+                                    <p className="text-4xl font-black text-amber-500 tabular-nums tracking-tighter">₹{user.holdBalance?.toFixed(2)}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Valuation</p>
+                                    <p className="text-4xl font-black text-white tabular-nums tracking-tighter">₹{(user.balance + user.holdBalance)?.toFixed(2)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-span-4 p-10 space-y-4 bg-white/5">
+                            <div className="flex gap-4">
+                                <div className="relative flex-1">
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-black">₹</div>
+                                    <Input 
+                                        type="number" 
+                                        placeholder="Enter adjustment..." 
+                                        value={amount} 
+                                        onChange={e => setAmount(e.target.value)}
+                                        className="h-16 pl-10 bg-black/40 border-slate-700 text-white placeholder:text-slate-600 rounded-2xl focus:border-primary transition-all text-xl font-black"
+                                    />
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    <Button className="h-16 w-16 bg-green-600 hover:bg-green-700 border-none rounded-2xl p-0" onClick={() => handleUpdateBalance('add')} disabled={isUpdating}>
+                                        {isUpdating ? <Loader size="xs" /> : <ArrowUpRight className="h-8 w-8" />}
+                                    </Button>
+                                    <Button className="h-16 w-16 bg-red-600 hover:bg-red-700 border-none rounded-2xl p-0" onClick={() => handleUpdateBalance('deduct')} disabled={isUpdating}>
+                                        {isUpdating ? <Loader size="xs" /> : <ArrowDownLeft className="h-8 w-8" />}
+                                    </Button>
+                                </div>
+                            </div>
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-center">Liquidity Adjustment Core Active</p>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <div className="grid grid-cols-12 gap-6">
                     {/* PROFILE SUMMARY */}
                     <Card className="col-span-4 border-none shadow-sm rounded-[32px] overflow-hidden bg-white">
@@ -289,53 +319,7 @@ export default function UserDetailsPage() {
                         </CardContent>
                     </Card>
 
-                    {/* WALLET MANAGEMENT (ALWAYS AT TOP) */}
-                    <Card className="col-span-8 border-none shadow-sm rounded-[32px] bg-slate-900 text-white overflow-hidden relative">
-                        <div className="absolute top-0 right-0 p-6 opacity-5"><Wallet className="h-32 w-32" /></div>
-                        <CardContent className="p-0 grid grid-cols-2 divide-x divide-white/5 h-full">
-                            <div className="p-8 flex flex-col justify-center">
-                                <div className="grid grid-cols-2 gap-8">
-                                    <div className="space-y-1">
-                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Available Assets</p>
-                                        <p className="text-3xl font-black text-primary tabular-nums tracking-tighter">₹{user.balance?.toFixed(2)}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Hold / Rotation</p>
-                                        <p className="text-3xl font-black text-amber-500 tabular-nums tracking-tighter">₹{user.holdBalance?.toFixed(2)}</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="p-8 space-y-4">
-                                <div className="flex gap-4">
-                                    <div className="relative flex-1">
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-black">₹</div>
-                                        <Input 
-                                            type="number" 
-                                            placeholder="Adjustment Amount..." 
-                                            value={amount} 
-                                            onChange={e => setAmount(e.target.value)}
-                                            className="h-14 pl-10 bg-white/5 border-slate-800 text-white placeholder:text-slate-600 rounded-2xl focus:border-primary transition-all text-lg font-black"
-                                        />
-                                    </div>
-                                    <div className="flex gap-2 shrink-0">
-                                        <Button className="h-14 w-14 bg-green-600 hover:bg-green-700 border-none rounded-2xl p-0" onClick={() => handleUpdateBalance('add')} disabled={isUpdating}>
-                                            {isUpdating ? <Loader size="xs" /> : <ArrowUpRight className="h-6 w-6" />}
-                                        </Button>
-                                        <Button className="h-14 w-14 bg-red-600 hover:bg-red-700 border-none rounded-2xl p-0" onClick={() => handleUpdateBalance('deduct')} disabled={isUpdating}>
-                                            {isUpdating ? <Loader size="xs" /> : <ArrowDownLeft className="h-6 w-6" />}
-                                        </Button>
-                                    </div>
-                                </div>
-                                <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] text-center">Security Hash: {Math.random().toString(36).substring(7).toUpperCase()}</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* MIDDLE ROW: DEEP ANALYTICS & SECURITY INTELLIGENCE */}
-                <div className="grid grid-cols-12 gap-6">
-                    
-                    {/* LEFT PANEL: IDENTITY & CREDENTIALS */}
+                    {/* IDENTITY & CREDENTIALS PANEL */}
                     <Card className="col-span-4 border-none shadow-sm rounded-[32px] bg-white">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -348,129 +332,116 @@ export default function UserDetailsPage() {
                                 <DataRow icon={Globe} label="Email Context" value={user.email} isCopyable colorClass="text-indigo-500" />
                                 <DataRow icon={Zap} label="Affiliate ID" value={user.numericId} isCopyable colorClass="text-amber-500" />
                                 <DataRow icon={Clock} label="System Entry" value={user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleString() : 'N/A'} colorClass="text-slate-500" />
-                                <DataRow icon={Activity} label="Last Active Session" value={realAnalytics?.lastActive || "Just Now"} colorClass="text-teal-500" />
-                                <DataRow icon={Monitor} label="Authorized Hardware" value="1 Registered Devices" colorClass="text-purple-500" />
-                            </div>
-                            <div className="mt-8 grid grid-cols-2 gap-4">
-                                <Button className="h-12 bg-red-50 text-red-600 hover:bg-red-100 border-none rounded-2xl font-black text-[11px] uppercase tracking-wider">
-                                    <Ban className="mr-2 h-4 w-4" /> Terminate Account
-                                </Button>
-                                <Button variant="outline" className="h-12 border-slate-100 text-slate-600 rounded-2xl font-black text-[11px] uppercase tracking-wider">
-                                    <Power className="mr-2 h-4 w-4" /> Flush Sessions
-                                </Button>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* CENTER PANEL: NETWORK INTELLIGENCE (REAL DATA) */}
-                    <Card className="col-span-8 border-none shadow-sm rounded-[32px] bg-white">
-                        <CardHeader className="pb-2">
+                    {/* ACTION CENTER */}
+                    <Card className="col-span-4 border-none shadow-sm rounded-[32px] bg-white">
+                         <CardHeader className="pb-2">
                             <CardTitle className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                <Activity className="h-3 w-3" /> Global Network Intelligence
+                                <Lock className="h-3 w-3" /> Action Controls
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="p-8 space-y-8">
-                            <div className="grid grid-cols-2 gap-12">
-                                <div className="space-y-6">
-                                    {/* REAL IP BADGE */}
-                                    <div className="p-6 bg-green-50 rounded-[24px] border border-green-100 flex items-center justify-between shadow-inner">
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-sm">
-                                                <Globe className="h-7 w-7 text-green-600" />
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-green-700 uppercase tracking-widest">Public Data Endpoint</p>
-                                                <p className="text-2xl font-black text-green-900 tabular-nums leading-none mt-1">{realAnalytics?.publicIp || "Fetching..."}</p>
-                                            </div>
-                                        </div>
-                                        <Button size="icon" variant="ghost" className="h-10 w-10 text-green-400" onClick={() => { if(realAnalytics?.publicIp) navigator.clipboard.writeText(realAnalytics.publicIp); toast({ title: "IP Copied" }); }}>
-                                            <Copy className="h-5 w-5" />
-                                        </Button>
-                                    </div>
-
-                                    {/* RISK FLAGS */}
-                                    <div className="grid grid-cols-4 gap-3">
-                                        <SecurityFlag label="VPN" status={realAnalytics?.risk.vpn || 'safe'} />
-                                        <SecurityFlag label="Proxy" status={realAnalytics?.risk.proxy || 'safe'} />
-                                        <SecurityFlag label="Hosting" status={realAnalytics?.risk.hosting || 'safe'} />
-                                        <SecurityFlag label="Tor" status={realAnalytics?.risk.tor || 'safe'} />
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <DataRow icon={Wifi} label="ISP (Real)" value={realAnalytics?.isp} colorClass="text-blue-500" />
-                                        <DataRow icon={Activity} label="ASN Logic" value={realAnalytics?.asn} colorClass="text-slate-500" />
-                                        <DataRow icon={Zap} label="Protocol Type" value={realAnalytics?.network} colorClass="text-amber-500" />
-                                        <DataRow icon={MapPin} label="Approx Geo" value={realAnalytics ? `${realAnalytics.city}, ${realAnalytics.country}` : '...'} colorClass="text-red-500" />
-                                        <DataRow icon={Clock} label="System TZ" value={realAnalytics?.timezone} colorClass="text-slate-500" />
-                                    </div>
-                                </div>
-
-                                <div className="space-y-6">
-                                    {/* MAP PREVIEW */}
-                                    <div className="rounded-[32px] overflow-hidden border border-slate-100 h-48 relative shadow-inner">
-                                        <img src={`https://picsum.photos/seed/${userId}/800/400`} alt="Geo Preview" className="w-full h-full object-cover grayscale opacity-80" />
-                                        <div className="absolute inset-0 bg-blue-900/10 flex flex-col items-center justify-center p-4">
-                                            <div className="bg-white/95 backdrop-blur-md p-4 rounded-3xl shadow-2xl flex flex-col items-center gap-2 border border-white">
-                                                <MapPin className="h-6 w-6 text-red-500 animate-bounce" />
-                                                <div className="text-center">
-                                                    <p className="text-[10px] font-black uppercase tracking-tighter text-slate-800">Approximate Location</p>
-                                                    <p className="text-[9px] font-mono font-bold text-slate-500 mt-0.5">{realAnalytics?.lat}, {realAnalytics?.lon}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* DEVICE FINGERPRINT */}
-                                    <div className="p-6 bg-slate-50 rounded-[32px] space-y-4">
-                                        <div className="flex justify-between items-center border-b border-white pb-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-2 rounded-xl bg-white shadow-sm text-slate-400">
-                                                    <Cpu className="h-4 w-4" />
-                                                </div>
-                                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Hardware Intelligence</span>
-                                            </div>
-                                            <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase tracking-tighter">Valid Handshake</span>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-1">
-                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Screen Logic</p>
-                                                <p className="text-xs font-black text-slate-800 tabular-nums">{realAnalytics?.resolution}</p>
-                                            </div>
-                                            <div className="space-y-1 text-right">
-                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Battery Status</p>
-                                                <div className="flex items-center justify-end gap-1.5">
-                                                    <BatteryMedium className="h-3 w-3 text-green-500" />
-                                                    <p className="text-xs font-black text-slate-800 tabular-nums">{realAnalytics?.battery}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="space-y-2 pt-2">
-                                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">User Agent Intelligence</p>
-                                             <div className="p-3 bg-white rounded-xl border border-slate-200/50">
-                                                 <p className="text-[10px] font-mono leading-relaxed break-all opacity-60 line-clamp-2">{realAnalytics?.ua}</p>
-                                             </div>
-                                        </div>
-                                    </div>
-                                </div>
+                        <CardContent className="p-6">
+                             <div className="grid grid-cols-1 gap-3">
+                                <Button className="h-14 bg-red-50 text-red-600 hover:bg-red-100 border-none rounded-2xl font-black text-xs uppercase tracking-wider">
+                                    <Ban className="mr-2 h-5 w-5" /> Terminate Account
+                                </Button>
+                                <Button variant="outline" className="h-14 border-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-wider">
+                                    <Power className="mr-2 h-5 w-5" /> Flush Sessions
+                                </Button>
                             </div>
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* NETWORK INTELLIGENCE SECTION */}
+                <Card className="border-none shadow-sm rounded-[40px] bg-white mt-6">
+                    <CardHeader className="p-10 pb-0">
+                        <CardTitle className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <Activity className="h-4 w-4" /> Real-Time Network & Security Intelligence
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-10 space-y-10">
+                        <div className="grid grid-cols-2 gap-16">
+                            <div className="space-y-8">
+                                {/* REAL IP BADGE */}
+                                <div className="p-8 bg-green-50 rounded-[32px] border border-green-100 flex items-center justify-between shadow-inner">
+                                    <div className="flex items-center gap-6">
+                                        <div className="h-16 w-16 rounded-2xl bg-white flex items-center justify-center shadow-sm">
+                                            <Globe className="h-8 w-8 text-green-600" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] font-black text-green-700 uppercase tracking-widest">Public Access Endpoint</p>
+                                            <p className="text-3xl font-black text-green-900 tabular-nums leading-none mt-1">{realAnalytics?.publicIp || "FETCHING..."}</p>
+                                        </div>
+                                    </div>
+                                    <Button size="icon" variant="ghost" className="h-12 w-12 text-green-400 hover:bg-green-100" onClick={() => { if(realAnalytics?.publicIp) { navigator.clipboard.writeText(realAnalytics.publicIp); toast({ title: "IP Copied" }); } }}>
+                                        <Copy className="h-6 w-6" />
+                                    </Button>
+                                </div>
+
+                                <div className="grid grid-cols-4 gap-4">
+                                    <SecurityFlag label="VPN" status={realAnalytics?.risk.vpn || 'safe'} />
+                                    <SecurityFlag label="Proxy" status={realAnalytics?.risk.proxy || 'safe'} />
+                                    <SecurityFlag label="Hosting" status={realAnalytics?.risk.hosting || 'safe'} />
+                                    <SecurityFlag label="Tor" status={realAnalytics?.risk.tor || 'safe'} />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <DataRow icon={Wifi} label="ISP (Network)" value={realAnalytics?.isp} colorClass="text-blue-500" />
+                                    <DataRow icon={Activity} label="ASN Authority" value={realAnalytics?.asn} colorClass="text-slate-500" />
+                                    <DataRow icon={MapPin} label="Geo Coordinates" value={realAnalytics ? `${realAnalytics.lat}, ${realAnalytics.lon}` : '...'} colorClass="text-red-500" />
+                                    <DataRow icon={Clock} label="System TZ" value={realAnalytics?.timezone} colorClass="text-slate-500" />
+                                </div>
+                            </div>
+
+                            <div className="space-y-8">
+                                {/* DEVICE FINGERPRINT CARD */}
+                                <div className="p-8 bg-slate-50 rounded-[32px] space-y-6">
+                                    <div className="flex justify-between items-center border-b border-white pb-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-3 rounded-2xl bg-white shadow-sm text-slate-400">
+                                                <Cpu className="h-5 w-5" />
+                                            </div>
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Hardware Intelligence</span>
+                                        </div>
+                                        <span className="text-[11px] font-mono font-bold text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full uppercase tracking-tighter">Verified Handshake</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-10">
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Display Resolution</p>
+                                            <p className="text-sm font-black text-slate-800 tabular-nums">{realAnalytics?.resolution}</p>
+                                        </div>
+                                        <div className="space-y-1 text-right">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Battery Energy</p>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <BatteryMedium className="h-4 w-4 text-green-500" />
+                                                <p className="text-sm font-black text-slate-800 tabular-nums">{realAnalytics?.battery}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-3 pt-2">
+                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">User Agent Context</p>
+                                         <div className="p-4 bg-white rounded-2xl border border-slate-200/50">
+                                             <p className="text-[11px] font-mono leading-relaxed break-all opacity-60 line-clamp-2">{realAnalytics?.ua}</p>
+                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
             </main>
 
-            {/* FOOTER ACTIONS */}
-            <footer className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t flex justify-center gap-4 z-50 shadow-[0_-8px_32px_rgba(0,0,0,0.04)]">
-                <div className="max-w-[1600px] w-full flex gap-4">
-                    <Button asChild variant="outline" className="flex-1 h-14 rounded-2xl border-slate-200 font-black text-xs uppercase tracking-widest hover:bg-slate-50">
-                        <Link href={`/admin/history/${user.id}`}>Trade Audit History</Link>
-                    </Button>
-                    <Button asChild className="flex-1 h-14 btn-gradient rounded-2xl font-black text-xs uppercase tracking-widest shadow-blue-500/20">
-                        <Link href={`/admin/invites/${user.id}`}>Network Team Graph</Link>
-                    </Button>
-                    <Button asChild variant="secondary" className="flex-1 h-14 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-none font-black text-xs uppercase tracking-widest">
-                        <Link href={`/admin/chat/new`}>Initialize Secure Chat</Link>
-                    </Button>
-                </div>
+            <footer className="p-8 bg-white border-t flex justify-center gap-6">
+                <Button asChild variant="outline" className="h-16 px-12 rounded-[24px] border-slate-200 font-black text-sm uppercase tracking-widest hover:bg-slate-50">
+                    <Link href={`/admin/history/${user.id}`}>Trade Audit Logs</Link>
+                </Button>
+                <Button asChild className="h-16 px-12 btn-gradient rounded-[24px] font-black text-sm uppercase tracking-widest shadow-blue-500/20">
+                    <Link href={`/admin/invites/${user.id}`}>Network Team Map</Link>
+                </Button>
             </footer>
         </div>
     );
