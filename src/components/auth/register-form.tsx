@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,8 +10,8 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
+  FormLabel,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -110,7 +111,7 @@ export function RegisterForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onRegisterSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onRegisterSubmit)} className="space-y-3">
         {/* Mobile Number */}
         <FormField
           control={form.control}
@@ -118,7 +119,7 @@ export function RegisterForm() {
           render={({ field }) => (
             <FormItem className="space-y-1">
               <div className="relative flex items-center group">
-                <div className="absolute left-3 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-slate-400 group-focus-within:text-primary transition-colors pr-2 border-r border-slate-200">
+                <div className="absolute left-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-slate-400 group-focus-within:text-primary transition-colors pr-2.5 border-r">
                   <Smartphone className="h-3.5 w-3.5" />
                   <span className="font-bold">+91</span>
                 </div>
@@ -126,13 +127,13 @@ export function RegisterForm() {
                   <Input 
                     type="tel" 
                     placeholder="Phone Number" 
-                    className="pl-20 h-12 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/50 rounded-2xl text-sm" 
+                    className="pl-20 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     maxLength={10} 
                     {...field} 
                   />
                 </FormControl>
               </div>
-              <FormMessage className="text-[10px]" />
+              <FormMessage className="text-[10px] pl-2" />
             </FormItem>
           )}
         />
@@ -144,22 +145,22 @@ export function RegisterForm() {
           render={({ field }) => (
             <FormItem className="space-y-1">
               <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
                   <LockKeyhole className="h-4 w-4" />
                 </div>
                 <FormControl>
                   <Input 
                     type={showPassword ? "text" : "password"} 
                     placeholder="Create Password" 
-                    className="pl-10 h-12 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/50 rounded-2xl text-sm" 
+                    className="pl-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     {...field} 
                   />
                 </FormControl>
-                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" onClick={() => setShowPassword(!showPassword)}>
+                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <FormMessage className="text-[10px]" />
+              <FormMessage className="text-[10px] pl-2" />
             </FormItem>
           )}
         />
@@ -171,19 +172,19 @@ export function RegisterForm() {
           render={({ field }) => (
             <FormItem className="space-y-1">
               <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
                   <KeyRound className="h-4 w-4" />
                 </div>
                 <FormControl>
                   <Input 
                     type={showPassword ? "text" : "password"} 
                     placeholder="Confirm Password" 
-                    className="pl-10 h-12 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/50 rounded-2xl text-sm" 
+                    className="pl-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     {...field} 
                   />
                 </FormControl>
               </div>
-              <FormMessage className="text-[10px]" />
+              <FormMessage className="text-[10px] pl-2" />
             </FormItem>
           )}
         />
@@ -195,18 +196,18 @@ export function RegisterForm() {
           render={({ field }) => (
             <FormItem className="space-y-1">
                 <div className="relative group">
-                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
                       <UserPlus className="h-4 w-4" />
                     </div>
                     <FormControl>
                       <Input 
                         placeholder="Invitation Code (Optional)" 
-                        className="pl-10 h-12 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/50 rounded-2xl text-sm" 
+                        className="pl-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                         {...field} 
                       />
                     </FormControl>
                 </div>
-                <FormMessage className="text-[10px]" />
+                <FormMessage className="text-[10px] pl-2" />
             </FormItem>
           )}
         />
@@ -216,7 +217,7 @@ export function RegisterForm() {
           control={form.control}
           name="agreement"
           render={({ field }) => (
-            <FormItem className="flex items-start space-x-2 pt-1">
+            <FormItem className="flex items-start space-x-2 pt-0.5">
               <FormControl>
                 <Checkbox 
                   checked={field.value} 
@@ -235,7 +236,7 @@ export function RegisterForm() {
         />
 
         {/* Submit Button */}
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-sm font-black mt-2 shadow-teal-500/20" disabled={isLoading}>
+        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading}>
             {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
             {isLoading ? "Creating Account..." : "Create Account"}
         </Button>

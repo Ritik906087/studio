@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,20 +11,20 @@
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 174 100% 33%;
+    --primary: 210 100% 45%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222 47% 11.2%;
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 45 90% 60%;
+    --accent: 199 89% 48%;
     --accent-foreground: 222 47% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 174 100% 33%;
-    --radius: 1.25rem;
+    --ring: 210 100% 45%;
+    --radius: 1.5rem;
   }
 }
 
@@ -38,7 +39,6 @@
     overscroll-behavior-y: contain;
   }
   
-  /* Compact mobile buttons */
   .btn-gradient {
     @apply bg-gradient-to-r from-teal-500 via-cyan-500 to-emerald-500 text-white shadow-lg shadow-teal-500/10 hover:opacity-95 transition-all active:scale-95 font-bold;
   }
@@ -47,14 +47,22 @@
     background: linear-gradient(135deg, #0d9488 0%, #0891b2 50%, #059669 100%);
   }
 
-  /* Custom scrollbar for mobile */
+  .auth-layout {
+    background: radial-gradient(circle at top right, #e0f2fe, transparent),
+                radial-gradient(circle at bottom left, #f0fdf4, transparent);
+  }
+
   ::-webkit-scrollbar {
     width: 0px;
     height: 0px;
   }
 
-  .auth-layout {
-    background: radial-gradient(circle at top right, #e0f2fe, transparent),
-                radial-gradient(circle at bottom left, #f0fdf4, transparent);
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }

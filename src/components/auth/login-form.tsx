@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,7 +10,6 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -64,28 +64,28 @@ export function LoginForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
         <FormField
           control={form.control}
           name="phone"
           render={({ field }) => (
-            <FormItem className="space-y-1.5">
+            <FormItem className="space-y-1">
               <div className="relative group">
-                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400 group-focus-within:text-primary transition-colors">
+                 <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400 group-focus-within:text-primary transition-colors border-r pr-2.5">
                   <Smartphone className="h-4 w-4" />
-                  <span className="font-bold text-sm">+91</span>
+                  <span className="font-bold text-xs">+91</span>
                 </div>
                 <FormControl>
                   <Input 
                     type="tel" 
-                    placeholder={translations.enterPhoneNumber} 
-                    className="pl-[68px] h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary rounded-xl text-sm" 
+                    placeholder={translations.phoneNumber} 
+                    className="pl-[74px] h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     maxLength={10} 
                     {...field} 
                   />
                 </FormControl>
               </div>
-              <FormMessage className="text-[10px]" />
+              <FormMessage className="text-[10px] pl-2" />
             </FormItem>
           )}
         />
@@ -93,34 +93,34 @@ export function LoginForm() {
           control={form.control}
           name="password"
           render={({ field }) => (
-            <FormItem className="space-y-1.5">
+            <FormItem className="space-y-1">
               <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
                   <LockKeyhole className="h-4 w-4" />
                 </div>
                 <FormControl>
                   <Input 
                     type={showPassword ? "text" : "password"} 
-                    placeholder={translations.enterPassword} 
-                    className="px-10 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary rounded-xl text-sm" 
+                    placeholder={translations.password} 
+                    className="px-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     {...field} 
                   />
                 </FormControl>
-                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" onClick={() => setShowPassword(!showPassword)}>
+                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 active:text-primary" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <div className="flex justify-end">
-                <Link href="/forgot-password" weights="bold" className="text-[10px] font-black text-teal-600 uppercase tracking-wider">
+              <div className="flex justify-end pt-0.5">
+                <Link href="/forgot-password" weights="bold" className="text-[10px] font-black text-teal-600 uppercase tracking-wider hover:opacity-70">
                   {translations.forgotPassword}
                 </Link>
               </div>
-              <FormMessage className="text-[10px]" />
+              <FormMessage className="text-[10px] pl-2" />
             </FormItem>
           )}
         />
         
-        <Button type="submit" className="w-full btn-gradient rounded-xl h-12 text-sm mt-2" disabled={isLoading}>
+        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading}>
           {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : translations.login}
         </Button>
       </form>
