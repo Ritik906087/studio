@@ -125,7 +125,7 @@ export function RegisterForm() {
                 <FormControl>
                   <Input 
                     type="tel" 
-                    placeholder="Phone Number" 
+                    placeholder="Mobile Number" 
                     className="pl-20 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     maxLength={10} 
                     {...field} 
@@ -222,7 +222,7 @@ export function RegisterForm() {
               </FormControl>
               <div className="text-[10px] leading-tight text-slate-500">
                 <FormLabel className="font-medium">
-                  I agree to the <Link href="/terms" className="text-primary font-bold hover:underline">User Agreement</Link>
+                  I agree to the <Link href="/terms" className="text-blue-600 font-bold hover:underline">User Agreement</Link>
                 </FormLabel>
                 <FormMessage className="text-[10px]" />
               </div>
@@ -230,9 +230,9 @@ export function RegisterForm() {
           )}
         />
 
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading}>
+        <Button type="submit" className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1" disabled={isLoading}>
             {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
-            {isLoading ? "Creating Account..." : "Create Account"}
+            {isLoading ? "CREATING..." : "REGISTER"}
         </Button>
       </form>
     </Form>

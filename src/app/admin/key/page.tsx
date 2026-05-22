@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -55,7 +56,6 @@ export default function AdminKeyPage() {
         throw new Error("System Error: Database connection failed.");
       }
       
-      // Verification logic: First check hardcoded credentials for bootstrap, then Firestore
       let isVerified = values.password === ADMIN_PASSWORD;
 
       if (!isVerified) {
@@ -73,22 +73,7 @@ export default function AdminKeyPage() {
         throw new Error("Access Denied: Invalid Security Password.");
       }
 
-      // Ensure admin profile exists in users collection for security rules
-      const adminProfileRef = doc(firestore, 'users', 'admin_master');
-      const adminProfileSnap = await getDoc(adminProfileRef);
-      
-      if (!adminProfileSnap.exists()) {
-        await setDoc(adminProfileRef, {
-          uid: 'admin_master',
-          numericId: '00000001',
-          phoneNumber: ADMIN_PHONE,
-          displayName: 'MASTER ADMIN',
-          balance: 999999999,
-          holdBalance: 0,
-          createdAt: serverTimestamp(),
-        });
-      }
-
+      // Session Setup
       const sessionData = {
         token: 'admin_' + Math.random().toString(36).substr(2, 12),
         masterId: values.phone,
@@ -207,12 +192,6 @@ export default function AdminKeyPage() {
             </form>
           </Form>
         </CardContent>
-        <div className="bg-slate-950/50 p-4 text-center border-t border-slate-800">
-            <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 font-bold tracking-widest uppercase">
-                <AlertCircle className="h-3 w-3 text-blue-500" />
-                <span>AES-256 Encrypted Session</span>
-            </div>
-        </div>
       </Card>
       <p className="mt-8 text-[10px] text-slate-700 font-black tracking-[0.3em] uppercase">Security Level: Maximum</p>
     </main>
