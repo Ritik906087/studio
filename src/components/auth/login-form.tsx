@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,7 +22,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
-const ADMIN_PHONE = '9955557336';
+const ADMIN_PHONES = ['9955557336', '9060873927'];
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +43,7 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (values.phone === ADMIN_PHONE) {
+    if (ADMIN_PHONES.includes(values.phone)) {
       toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
       return;
     }

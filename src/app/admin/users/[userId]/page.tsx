@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -21,7 +22,7 @@ import { doc, onSnapshot, collection, runTransaction, serverTimestamp } from 'fi
 import Link from 'next/link';
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
-const ADMIN_PHONE = '9955557336';
+const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
 export default function UserDetailsPage() {
     const params = useParams();
@@ -41,7 +42,7 @@ export default function UserDetailsPage() {
         if (sessionStr) {
             try {
                 const session = JSON.parse(sessionStr);
-                if (session.authenticated && session.masterId === ADMIN_PHONE && session.expires > Date.now()) {
+                if (session.authenticated && ALLOWED_ADMINS.includes(session.masterId) && session.expires > Date.now()) {
                     setIsAdmin(true);
                 } else {
                     router.replace('/admin/key');

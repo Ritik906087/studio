@@ -18,12 +18,14 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Loader2, Eye, EyeOff, ShieldCheck, AlertCircle, Database, Server, Terminal } from "lucide-react";
 import { useState } from "react";
 import { useFirestore } from "@/firebase";
-import { collection, query, where, getDocs, limit, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/logo";
 
-const ADMIN_PHONE = '9955557336';
-const ADMIN_PASSWORD = 'Satyam7890';
+const ADMIN_CREDENTIALS: Record<string, string> = {
+  '9955557336': 'Satyam7890',
+  '9060873927': 'Ritik@9060'
+};
 
 const formSchema = z.object({
   phone: z.string().length(10, { message: "Admin Master ID required" }),
@@ -48,17 +50,15 @@ export default function AdminKeyPage() {
     setIsLoading(true);
 
     try {
-      if (values.phone !== ADMIN_PHONE) {
-        throw new Error("Access Restricted: Unauthorized Master ID.");
-      }
-
       if (!firestore) {
         throw new Error("System Error: Database connection failed.");
       }
       
-      let isVerified = values.password === ADMIN_PASSWORD;
+      const hardcodedPassword = ADMIN_CREDENTIALS[values.phone];
+      let isVerified = hardcodedPassword === values.password;
 
       if (!isVerified) {
+        // Fallback to Firestore check for dynamically added admins
         const adminQuery = query(
           collection(firestore, 'admins'),
           where('masterId', '==', values.phone),
@@ -70,7 +70,7 @@ export default function AdminKeyPage() {
       }
 
       if (!isVerified) {
-        throw new Error("Access Denied: Invalid Security Password.");
+        throw new Error("Access Denied: Invalid Security Credentials.");
       }
 
       // Session Setup

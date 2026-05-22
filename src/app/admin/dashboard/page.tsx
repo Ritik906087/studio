@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -30,7 +31,7 @@ type UserProfile = {
     inviterUid?: string;
 };
 
-const ADMIN_PHONE = '9955557336';
+const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
 function AdminDashboard() {
     const router = useRouter();
@@ -46,7 +47,7 @@ function AdminDashboard() {
         if (sessionStr) {
             try {
                 const session = JSON.parse(sessionStr);
-                if (session.authenticated && session.masterId === ADMIN_PHONE && session.expires > Date.now()) {
+                if (session.authenticated && ALLOWED_ADMINS.includes(session.masterId) && session.expires > Date.now()) {
                     setIsMasterAdmin(true);
                 } else {
                     localStorage.removeItem('flex_admin_session');
@@ -101,7 +102,7 @@ function AdminDashboard() {
             <header className="sticky top-0 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 z-10 justify-between">
                 <Logo className="text-2xl" />
                 <div className="flex items-center gap-4">
-                    <span className="hidden md:inline text-sm font-medium text-muted-foreground">Admin: Master</span>
+                    <span className="hidden md:inline text-sm font-medium text-muted-foreground">Admin Portal</span>
                     <Button onClick={handleLogout} variant="outline" size="sm">
                         <LogOut className="mr-2 h-4 w-4" />
                         Logout
