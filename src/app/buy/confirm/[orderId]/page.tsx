@@ -79,7 +79,6 @@ function PaymentDetailsContent() {
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
                 
-                // If it's a P2P match, we need to release seller liquidity
                 if (order.matchedSellOrderId && order.sellerId !== 'ADMIN') {
                     const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId);
@@ -111,11 +110,10 @@ function PaymentDetailsContent() {
                 });
             });
 
-            toast({ title: 'Order Cancelled', description: 'Liquidity has been released.' });
+            toast({ title: 'Order Cancelled' });
             router.push('/home');
         } catch (e: any) {
             console.error("Cancellation Error:", e);
-            toast({ variant: 'destructive', title: 'Error', description: e.message });
         } finally {
             setIsCancelling(false);
         }
@@ -137,7 +135,7 @@ function PaymentDetailsContent() {
             if (secondsLeft <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                handleCancelOrder("Order timed out (10 mins)");
+                handleCancelOrder("Order timed out");
             } else {
                 setTimeLeft(secondsLeft);
             }
@@ -152,7 +150,7 @@ function PaymentDetailsContent() {
             return;
         }
         if (!screenshotFile) {
-            toast({ variant: 'destructive', title: 'Proof Required', description: 'Please upload a payment screenshot.' });
+            toast({ variant: 'destructive', title: 'Proof Required', description: 'Please upload a screenshot.' });
             return;
         }
         if (!user || !firestore || !storage || !order) return;
@@ -189,7 +187,7 @@ function PaymentDetailsContent() {
                 });
             });
 
-            toast({ title: 'Payment Submitted', description: 'Waiting for verification.' });
+            toast({ title: 'Payment Submitted' });
             router.push(`/order/${orderId}`);
         } catch (e: any) {
             console.error("Submission Error:", e);
@@ -218,7 +216,7 @@ function PaymentDetailsContent() {
                 </Button>
                 <h1 className="text-xl font-bold">Confirm Payment</h1>
                 <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-destructive uppercase tracking-tighter">Expires in</span>
+                    <span className="text-[10px] font-bold text-destructive uppercase">Expires</span>
                     <span className="font-mono font-black text-destructive text-lg">{formatTime(timeLeft)}</span>
                 </div>
             </header>
@@ -226,11 +224,11 @@ function PaymentDetailsContent() {
             <main className="p-3 space-y-4 pb-24 overflow-y-auto no-scrollbar">
                 <Card className="border-none shadow-sm rounded-2xl bg-white">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-bold text-slate-500 uppercase tracking-widest">Transaction Details</CardTitle>
+                        <CardTitle className="text-sm font-bold text-slate-500 uppercase tracking-widest">Details</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <span className="text-slate-400 font-medium">Payable Amount</span>
+                            <span className="text-slate-400 font-medium">Payable</span>
                             <span className="text-2xl font-black text-primary">₹{order.baseAmount?.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
@@ -245,7 +243,7 @@ function PaymentDetailsContent() {
 
                 <Card className="border-none shadow-sm rounded-2xl bg-white overflow-hidden">
                     <CardHeader className="bg-slate-50 p-4 border-b">
-                        <CardTitle className="text-sm font-bold text-slate-800">{order.sellerId === 'ADMIN' ? 'Admin Master Portal' : 'Seller Collection Details'}</CardTitle>
+                        <CardTitle className="text-sm font-bold text-slate-800">{order.sellerId === 'ADMIN' ? 'Admin Master Portal' : 'P2P Collection Details'}</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 space-y-4">
                         <div className="flex flex-col items-center py-4 space-y-3">
@@ -262,12 +260,12 @@ function PaymentDetailsContent() {
                                     <Loader2 className="animate-spin text-slate-300" />
                                 </div>
                              )}
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scan to Pay via UPI</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scan via UPI</p>
                         </div>
                         <div className="space-y-3 border-t border-dashed pt-4">
                             <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-400 font-medium">Recipient Name</span>
-                                <span className="font-bold text-slate-800">{details?.accountHolderName || details?.name || 'P2P Seller'}</span>
+                                <span className="text-slate-400 font-medium">Name</span>
+                                <span className="font-bold text-slate-800">{details?.accountHolderName || details?.name || 'P2P Partner'}</span>
                             </div>
                             <div className="flex justify-between items-center text-xs">
                                 <span className="text-slate-400 font-medium">UPI ID</span>
@@ -283,9 +281,9 @@ function PaymentDetailsContent() {
                 <Card className="border-none shadow-sm rounded-2xl bg-white">
                     <CardContent className="p-4 space-y-4">
                         <div className="space-y-2">
-                            <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Submit Payment Proof</Label>
+                            <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">UTR Number</Label>
                             <Input 
-                                placeholder="Enter 12-digit UTR Number" 
+                                placeholder="12-digit UTR" 
                                 value={utr} 
                                 onChange={e => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
                                 className="h-12 rounded-xl bg-slate-50 border-none font-mono text-lg font-black"
@@ -307,7 +305,7 @@ function PaymentDetailsContent() {
                                 ) : (
                                     <div className="flex items-center gap-2">
                                         <Upload className="h-4 w-4" />
-                                        Upload Screenshot
+                                        Upload Proof
                                     </div>
                                 )}
                             </Button>
@@ -324,11 +322,11 @@ function PaymentDetailsContent() {
                     <AlertDialogContent className="rounded-[24px]">
                         <AlertDialogHeader>
                             <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
-                            <AlertDialogDescription>Abusing the cancel button will lock your account. Only cancel if you haven't paid.</AlertDialogDescription>
+                            <AlertDialogDescription>Abuse of cancel button may lock your account. Only cancel if you haven't paid.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel className="rounded-xl">Go Back</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleCancelOrder("User Manual Cancel")} className="bg-destructive hover:bg-destructive/90 rounded-xl">Confirm Cancel</AlertDialogAction>
+                            <AlertDialogAction onClick={() => handleCancelOrder("User Manual Cancel")} className="bg-destructive hover:bg-destructive/90 rounded-xl">Confirm</AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                  </AlertDialog>

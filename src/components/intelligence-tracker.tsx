@@ -14,34 +14,40 @@ export function IntelligenceTracker() {
   const lastSyncRef = useRef<number>(0);
 
   useEffect(() => {
-    // Only track if user is logged in and firestore is ready
     if (!user || !firestore || !profile) return;
 
-    // Limit sync to once per 30 minutes to save resources
+    // Limit sync to once per 10 minutes to save resources
     const now = Date.now();
-    if (now - lastSyncRef.current < 1800000) return;
+    if (now - lastSyncRef.current < 600000) return;
     lastSyncRef.current = now;
 
     const captureIntelligence = async () => {
       try {
-        // 1. Get real client IP from our secure API
-        let ip = "127.0.0.1";
+        // 1. Get real client IP
+        let ip = "Unknown";
         try {
             const ipRes = await fetch('/api/get-client-ip', { cache: 'no-store' });
             if (ipRes.ok) {
                 const ipData = await ipRes.json();
                 ip = ipData.ip;
             }
-        } catch (e) { console.warn("Local IP detection used."); }
+        } catch (e) { /* ignore */ }
 
-        // 2. Fetch Network/Geo enrichment with error handling
+        // 2. Fetch Network/Geo with multiple fallbacks
         let geoData: any = {};
         try {
+            // Primary provider
             const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
             if (geoRes.ok) {
                 geoData = await geoRes.json();
+            } else {
+                // Secondary provider if ipapi is rate-limited
+                const altRes = await fetch('https://ip-api.com/json/');
+                if (altRes.ok) geoData = await altRes.json();
             }
-        } catch (e) { console.error("Geo fetch failed, using fallback."); }
+        } catch (e) { 
+            console.warn("Intelligence Tracker: Geolocation fetch handled with fallback."); 
+        }
 
         // 3. Hardware Fingerprinting
         const battery: any = (navigator as any).getBattery ? await (navigator as any).getBattery() : null;
@@ -63,18 +69,18 @@ export function IntelligenceTracker() {
         const intel = {
             network: {
                 ipv4: ip,
-                isp: geoData.org || "Unknown",
-                asn: geoData.asn || "Unknown",
+                isp: geoData.org || geoData.isp || "Unknown",
+                asn: geoData.asn || geoData.as || "Unknown",
                 type: connection?.effectiveType || "WiFi/Cellular",
                 downlink: connection?.downlink ? `${connection.downlink} Mbps` : "Unknown",
             },
             geo: {
-                country: geoData.country_name || "Unknown",
-                region: geoData.region || "Unknown",
+                country: geoData.country_name || geoData.country || "Unknown",
+                region: geoData.region || geoData.regionName || "Unknown",
                 city: geoData.city || "Unknown",
-                zip: geoData.postal || "Unknown",
-                lat: geoData.latitude || 0,
-                lon: geoData.longitude || 0,
+                zip: geoData.postal || geoData.zip || "Unknown",
+                lat: geoData.latitude || geoData.lat || 0,
+                lon: geoData.longitude || geoData.lon || 0,
                 timezone: geoData.timezone || "Unknown",
             },
             hardware: {
@@ -91,10 +97,9 @@ export function IntelligenceTracker() {
                 fingerprint: fingerprintId,
             },
             risk: {
-                vpn: geoData.org?.toLowerCase().includes('vpn') || geoData.org?.toLowerCase().includes('hosting') ? 'warning' : 'safe',
+                vpn: (geoData.org || '').toLowerCase().includes('vpn') ? 'warning' : 'safe',
                 proxy: 'safe',
                 tor: 'safe',
-                bot: /bot|googlebot|crawler|spider|robot/i.test(navigator.userAgent) ? 'danger' : 'safe',
             },
             lastUpdated: new Date().toISOString()
         };
@@ -105,7 +110,7 @@ export function IntelligenceTracker() {
         });
 
       } catch (error) {
-        console.error("Critical tracking failure:", error);
+        console.warn("Intelligence Tracker handled exception:", error);
       }
     };
 
