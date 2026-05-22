@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { ChevronLeft, Copy, Upload, Loader2, CheckCircle2, AlertTriangle, Clock, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import {
@@ -20,6 +20,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc, useStorage } from '@/firebase';
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
@@ -47,6 +56,14 @@ const formatTime = (seconds: number) => {
     return `${mins}:${secs}`;
 };
 
+const CANCELLATION_REASONS = [
+    "I don't want to buy anymore",
+    "Payment method is not working",
+    "Information provided is incorrect",
+    "Accidentally created the order",
+    "Other reasons"
+];
+
 function PaymentDetailsContent() {
     const router = useRouter();
     const params = useParams();
@@ -62,6 +79,8 @@ function PaymentDetailsContent() {
     const [isCancelling, setIsCancelling] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number>(600);
     const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+    const [selectedReason, setSelectedReason] = useState(CANCELLATION_REASONS[0]);
+    
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const orderRef = useMemo(() => {
@@ -71,7 +90,7 @@ function PaymentDetailsContent() {
 
     const { data: order, loading } = useDoc<Order>(orderRef);
 
-    const handleCancelOrder = useCallback(async (reason = "User cancelled") => {
+    const handleCancelOrder = useCallback(async (reason: string) => {
         if (!order || !user || !firestore || isCancelling) return;
         
         setIsCancelling(true);
@@ -79,26 +98,36 @@ function PaymentDetailsContent() {
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
                 
-                if (order.matchedSellOrderId && order.sellerId !== 'ADMIN') {
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
                     const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId);
+                    const sellerUserOrderRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
 
                     const sellerSnap = await transaction.get(sellerOrderRef);
                     if (sellerSnap.exists()) {
                         const sellerData = sellerSnap.data();
-                        const newRemaining = (sellerData.remainingAmount || 0) + order.baseAmount;
-                        const newStatus = sellerData.status === 'processing' ? 'partially_filled' : sellerData.status;
+                        const newRemaining = (sellerData.remainingAmount || 0) + (order.baseAmount || 0);
+                        
+                        // If it was processing (fully matched), it goes back to partially_filled or pending
+                        let newStatus = sellerData.status;
+                        if (sellerData.status === 'processing' || sellerData.status === 'completed') {
+                            newStatus = 'partially_filled';
+                        }
+                        if (newRemaining >= sellerData.amount) {
+                            newStatus = 'pending';
+                        }
+
+                        const updatedMatches = (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId);
 
                         transaction.update(sellerOrderRef, {
                             remainingAmount: newRemaining,
                             status: newStatus,
-                            matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
+                            matchedBuyOrders: updatedMatches
                         });
 
                         transaction.update(sellerUserOrderRef, {
                             remainingAmount: newRemaining,
                             status: newStatus,
-                            matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
+                            matchedBuyOrders: updatedMatches
                         });
                     }
                 }
@@ -110,17 +139,23 @@ function PaymentDetailsContent() {
                 });
             });
 
-            toast({ title: 'Order Cancelled' });
-            router.push('/home');
+            toast({ title: 'Order Cancelled', description: 'Liquidity has been returned to the pool.' });
+            router.replace('/home');
         } catch (e: any) {
             console.error("Cancellation Error:", e);
+            toast({ variant: 'destructive', title: 'Cancellation Failed', description: e.message });
         } finally {
             setIsCancelling(false);
+            setIsCancelDialogOpen(false);
         }
     }, [order, user, firestore, router, toast, isCancelling, orderId]);
 
     useEffect(() => {
         if (!order) return;
+        if (order.status === 'cancelled' || order.status === 'failed') {
+            router.replace('/home');
+            return;
+        }
         if (order.status !== 'pending_payment') {
             router.push(`/order/${orderId}`);
             return;
@@ -136,7 +171,7 @@ function PaymentDetailsContent() {
             if (secondsLeft <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                handleCancelOrder("Order timed out");
+                handleCancelOrder("System Timeout");
             } else {
                 setTimeLeft(secondsLeft);
             }
@@ -165,9 +200,9 @@ function PaymentDetailsContent() {
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
                 
-                if (order.matchedSellOrderId && order.sellerId !== 'ADMIN') {
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
                     const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    const sellerUserOrderRef = doc(firestore, 'users', order.sellerId!, 'sellOrders', order.matchedSellOrderId);
+                    const sellerUserOrderRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
 
                     const sellerSnap = await transaction.get(sellerOrderRef);
                     if (sellerSnap.exists()) {
@@ -188,7 +223,7 @@ function PaymentDetailsContent() {
                 });
             });
 
-            toast({ title: 'Payment Submitted' });
+            toast({ title: 'Payment Submitted', description: 'Verification in progress.' });
             router.push(`/order/${orderId}`);
         } catch (e: any) {
             console.error("Submission Error:", e);
@@ -201,7 +236,7 @@ function PaymentDetailsContent() {
     const details = order?.sellerWithdrawalDetails;
     
     const qrCodeUrl = useMemo(() => {
-        if (!details?.upiId || !order?.baseAmount) return null;
+        if (!details?.upiId || !order?.baseAmount) return "";
         const upiUrl = `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order.baseAmount}&tn=${order.orderId}`;
         return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=250x250&qzone=2`;
     }, [details, order]);
@@ -289,13 +324,13 @@ function PaymentDetailsContent() {
                             <Input 
                                 placeholder="Enter 12-digit UTR" 
                                 value={utr} 
-                                onChange={e => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                                onChange={(e) => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
                                 className="h-12 rounded-xl bg-slate-50 border-none font-mono text-lg font-black"
                                 type="tel"
                             />
                         </div>
                         <div className="space-y-2">
-                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={e => setScreenshotFile(e.target.files?.[0] || null)} />
+                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
                             <Button 
                                 variant="outline" 
                                 onClick={() => fileInputRef.current?.click()}
@@ -319,21 +354,14 @@ function PaymentDetailsContent() {
             </main>
 
             <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-md border-t grid grid-cols-2 gap-3 z-50">
-                 <AlertDialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="outline" className="h-12 rounded-xl text-slate-500 font-black" disabled={isConfirming || isCancelling}>CANCEL</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent className="rounded-[24px]">
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Abort Transaction?</AlertDialogTitle>
-                            <AlertDialogDescription>If you have already paid, do NOT cancel. Cancellations are monitored for abuse.</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel className="rounded-xl">Go Back</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleCancelOrder("User Manual Cancel")} className="bg-destructive hover:bg-destructive/90 rounded-xl">Confirm</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                 </AlertDialog>
+                <Button 
+                    variant="outline" 
+                    className="h-12 rounded-xl text-slate-500 font-black" 
+                    disabled={isConfirming || isCancelling}
+                    onClick={() => setIsCancelDialogOpen(true)}
+                >
+                    CANCEL
+                </Button>
 
                 <Button 
                     onClick={handleConfirm} 
@@ -343,6 +371,42 @@ function PaymentDetailsContent() {
                     {isConfirming ? <Loader size="xs" /> : "PAYMENT DONE"}
                 </Button>
             </footer>
+
+            {/* Cancellation Reason Modal */}
+            <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+                <DialogContent className="rounded-[32px] max-w-[90%] sm:max-w-md border-none p-0 overflow-hidden shadow-2xl">
+                    <div className="bg-red-50 p-8 text-center flex flex-col items-center">
+                        <div className="h-16 w-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
+                            <XCircle className="h-8 w-8 text-red-500" />
+                        </div>
+                        <DialogTitle className="text-xl font-black text-slate-800">Cancel Recharge?</DialogTitle>
+                        <DialogDescription className="text-xs font-bold text-red-400 uppercase mt-1">This action will release the P2P match</DialogDescription>
+                    </div>
+                    <div className="p-6 space-y-6">
+                        <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Reason for Cancellation</Label>
+                            <RadioGroup value={selectedReason} onValueChange={setSelectedReason} className="space-y-2">
+                                {CANCELLATION_REASONS.map((reason) => (
+                                    <div key={reason} className="flex items-center space-x-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100 active:scale-[0.98] transition-all">
+                                        <RadioGroupItem value={reason} id={reason} />
+                                        <Label htmlFor={reason} className="flex-1 font-bold text-slate-600 text-sm">{reason}</Label>
+                                    </div>
+                                ))}
+                            </RadioGroup>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                            <Button variant="outline" className="h-12 rounded-xl font-black text-slate-400" onClick={() => setIsCancelDialogOpen(false)}>GO BACK</Button>
+                            <Button 
+                                onClick={() => handleCancelOrder(selectedReason)} 
+                                className="h-12 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black shadow-red-200 shadow-lg"
+                                disabled={isCancelling}
+                            >
+                                {isCancelling ? <Loader size="xs" /> : "CONFIRM"}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

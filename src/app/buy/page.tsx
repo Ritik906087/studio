@@ -29,7 +29,11 @@ export default function BuyPage() {
       limit(1)
     );
     getDocs(q).then(snap => { 
-        if (!snap.empty) setInProgressOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); 
+        if (!snap.empty) {
+            setInProgressOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); 
+        } else {
+            setInProgressOrder(null);
+        }
     });
   }, [user, firestore]);
 
@@ -48,7 +52,11 @@ export default function BuyPage() {
 
     if (inProgressOrder) { 
         toast({ title: "Pending Order", description: "Please complete or cancel your existing order first.", variant: "destructive" }); 
-        router.push(`/buy/confirm/${inProgressOrder.id}`);
+        if (inProgressOrder.status === 'pending_payment') {
+            router.push(`/buy/confirm/${inProgressOrder.id}`);
+        } else {
+            router.push(`/order/${inProgressOrder.id}`);
+        }
         return; 
     }
 
@@ -72,7 +80,6 @@ export default function BuyPage() {
 
         if (!sellerDoc) {
             // 2. FALLBACK: NO PEER SELLER FOUND -> USE ADMIN PAYMENT SERVER
-            console.log("No seller found. Routing to Admin Master Portal.");
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
             
@@ -120,18 +127,20 @@ export default function BuyPage() {
             const newRemaining = freshSellerData.remainingAmount - amount;
             const newStatus = newRemaining <= 0 ? 'processing' : 'partially_filled';
 
+            const matchEntry = {
+                buyOrderId: buyOrderRef.id,
+                buyerId: user.uid,
+                amount: amount,
+                status: 'pending_payment',
+                created_at: new Date().toISOString()
+            };
+
             transaction.update(sellerDoc.ref, {
                 remainingAmount: newRemaining,
                 status: newStatus,
                 matchedBuyOrders: [
                     ...(freshSellerData.matchedBuyOrders || []),
-                    {
-                        buyOrderId: buyOrderRef.id,
-                        buyerId: user.uid,
-                        amount: amount,
-                        status: 'pending_payment',
-                        created_at: new Date().toISOString()
-                    }
+                    matchEntry
                 ]
             });
 
@@ -141,13 +150,7 @@ export default function BuyPage() {
                 status: newStatus,
                 matchedBuyOrders: [
                     ...(freshSellerData.matchedBuyOrders || []),
-                    {
-                        buyOrderId: buyOrderRef.id,
-                        buyerId: user.uid,
-                        amount: amount,
-                        status: 'pending_payment',
-                        created_at: new Date().toISOString()
-                    }
+                    matchEntry
                 ]
             });
 
