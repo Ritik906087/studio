@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -22,7 +21,7 @@ import { doc, onSnapshot, collection, runTransaction, serverTimestamp } from 'fi
 import Link from 'next/link';
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
-const ADMIN_PHONE = '9060873927';
+const ADMIN_PHONE = '9955557336';
 
 export default function UserDetailsPage() {
     const params = useParams();

@@ -21,7 +21,8 @@ import { collection, query, where, getDocs, limit, doc, getDoc, setDoc, serverTi
 import { useToast } from "@/hooks/use-toast";
 import { Logo } from "@/components/logo";
 
-const ADMIN_PHONE = '9060873927';
+const ADMIN_PHONE = '9955557336';
+const ADMIN_PASSWORD = 'Satyam7890';
 
 const formSchema = z.object({
   phone: z.string().length(10, { message: "Admin Master ID required" }),
@@ -54,16 +55,21 @@ export default function AdminKeyPage() {
         throw new Error("System Error: Database connection failed.");
       }
       
-      const adminQuery = query(
-        collection(firestore, 'admins'),
-        where('masterId', '==', values.phone),
-        where('password', '==', values.password),
-        limit(1)
-      );
-      
-      const adminSnap = await getDocs(adminQuery);
+      // Verification logic: First check hardcoded credentials for bootstrap, then Firestore
+      let isVerified = values.password === ADMIN_PASSWORD;
 
-      if (adminSnap.empty) {
+      if (!isVerified) {
+        const adminQuery = query(
+          collection(firestore, 'admins'),
+          where('masterId', '==', values.phone),
+          where('password', '==', values.password),
+          limit(1)
+        );
+        const adminSnap = await getDocs(adminQuery);
+        isVerified = !adminSnap.empty;
+      }
+
+      if (!isVerified) {
         throw new Error("Access Denied: Invalid Security Password.");
       }
 

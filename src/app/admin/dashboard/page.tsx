@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -31,7 +30,7 @@ type UserProfile = {
     inviterUid?: string;
 };
 
-const ADMIN_PHONE = '9060873927';
+const ADMIN_PHONE = '9955557336';
 
 function AdminDashboard() {
     const router = useRouter();

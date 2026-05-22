@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,7 +21,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
-const ADMIN_PHONE = '9060873927';
+const ADMIN_PHONE = '9955557336';
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
