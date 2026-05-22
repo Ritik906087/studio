@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -41,7 +40,8 @@ import {
   Eye,
   Terminal,
   Server,
-  Bot
+  Bot,
+  User
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from "@/components/ui/input";
@@ -56,7 +56,7 @@ import { Badge } from '@/components/ui/badge';
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
-const DataRow = ({ icon: Icon, label, value, colorClass = "text-slate-400", isCopyable = false, isMono = false }: any) => {
+const DataRow = ({ icon: Icon, label, value, colorClass = "text-slate-400", isCopyable = false, isMono = false, sub }: any) => {
     const { toast } = useToast();
     const handleCopy = () => {
         if (!isCopyable) return;
@@ -70,7 +70,10 @@ const DataRow = ({ icon: Icon, label, value, colorClass = "text-slate-400", isCo
                 <div className={cn("p-1.5 rounded-lg bg-slate-50", colorClass)}>
                     <Icon className="h-3.5 w-3.5" />
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{label}</span>
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{label}</span>
+                    {sub && <span className="text-[8px] text-slate-400 font-medium leading-none">{sub}</span>}
+                </div>
             </div>
             <div className="flex items-center gap-2 max-w-[60%]">
                 <span className={cn(
@@ -124,7 +127,7 @@ export default function UserDetailsPage() {
     useEffect(() => {
         const captureIntelligence = async () => {
             try {
-                // 1. IP & Geo Intelligence
+                // 1. IP & Geo Intelligence (Multi-Provider Check)
                 const ipRes = await fetch('https://ipapi.co/json/');
                 const ipData = await ipRes.json();
                 
@@ -146,15 +149,15 @@ export default function UserDetailsPage() {
                     }
                 } catch (e) {}
 
-                // 4. Fingerprint Hash (Simple)
-                const fingerprintRaw = `${navigator.userAgent}|${window.screen.width}x${window.screen.height}|${new Date().getTimezoneOffset()}`;
+                // 4. Fingerprint Hash (Simple Hardware Entropy)
+                const fingerprintRaw = `${navigator.userAgent}|${window.screen.width}x${window.screen.height}|${new Date().getTimezoneOffset()}|${navigator.language}`;
                 const fingerprintId = btoa(fingerprintRaw).slice(0, 16).toUpperCase();
 
                 setIntelligence({
                     network: {
                         ipv4: ipData.ip || "N/A",
                         ipv6: ipv6Data.ip || "N/A",
-                        localIp: "192.168.1.1 (Masked)", // Simulation of WebRTC
+                        localIp: "192.168.1.1 (Masked)", // Simulated for UI
                         isp: ipData.org || "N/A",
                         asn: ipData.asn || "N/A",
                         type: connection?.effectiveType || "WiFi/4G",
@@ -265,7 +268,7 @@ export default function UserDetailsPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" className="hidden sm:inline-flex rounded-xl border-slate-200 font-bold text-xs h-10 px-4">Export</Button>
+                    <Button variant="outline" className="hidden sm:inline-flex rounded-xl border-slate-200 font-bold text-xs h-10 px-4">Export Logs</Button>
                     <Button variant="ghost" size="icon" className="rounded-xl bg-slate-50 h-10 w-10"><MoreVertical className="h-5 w-5 text-slate-400" /></Button>
                 </div>
             </header>
@@ -279,15 +282,15 @@ export default function UserDetailsPage() {
                         <div className="lg:col-span-7 p-6 md:p-10 flex flex-col justify-center">
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
                                 <div className="space-y-1">
-                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Available</p>
+                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Available Assets</p>
                                     <p className="text-2xl md:text-4xl font-black text-primary tabular-nums tracking-tighter">₹{user.balance?.toFixed(2)}</p>
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Hold</p>
+                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Escrow Hold</p>
                                     <p className="text-2xl md:text-4xl font-black text-amber-500 tabular-nums tracking-tighter">₹{user.holdBalance?.toFixed(2)}</p>
                                 </div>
                                 <div className="space-y-1 col-span-2 sm:col-span-1">
-                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Total Assets</p>
+                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Total Liquidity</p>
                                     <p className="text-2xl md:text-4xl font-black text-white tabular-nums tracking-tighter">₹{(user.balance + user.holdBalance)?.toFixed(2)}</p>
                                 </div>
                             </div>
