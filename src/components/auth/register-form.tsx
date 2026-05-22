@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole, UserPlus, KeyRound } from "lucide-react";
+import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole, UserPlus, KeyRound, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -110,88 +111,126 @@ export function RegisterForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onRegisterSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onRegisterSubmit)} className="space-y-3">
         <FormField
           control={form.control}
           name="phone"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-slate-600 font-bold text-xs uppercase tracking-wider">{translations.phoneNumber}</FormLabel>
+            <FormItem className="space-y-1">
               <div className="relative flex items-center group">
-                <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-2 text-sm text-slate-400 group-focus-within:text-primary transition-colors border-r pr-2">
-                  <Smartphone className="h-4 w-4" />
+                <div className="absolute left-3.5 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-slate-400 group-focus-within:text-primary transition-colors pr-2 border-r border-slate-200">
+                  <Smartphone className="h-3.5 w-3.5" />
                   <span className="font-bold">+91</span>
                 </div>
-                <FormControl><Input type="tel" placeholder={translations.enterPhoneNumber} className="pl-[84px] h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary rounded-xl" maxLength={10} {...field} /></FormControl>
+                <FormControl>
+                  <Input 
+                    type="tel" 
+                    placeholder="Phone Number" 
+                    className="pl-[78px] h-11 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/50 rounded-xl text-xs" 
+                    maxLength={10} 
+                    {...field} 
+                  />
+                </FormControl>
               </div>
-              <FormMessage className="text-[10px]" />
+              <FormMessage className="text-[9px]" />
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-slate-600 font-bold text-xs uppercase tracking-wider">{translations.password}</FormLabel>
-              <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                  <LockKeyhole className="h-4 w-4" />
-                </div>
-                <FormControl><Input type={showPassword ? "text" : "password"} placeholder={translations.enterPassword} className="pl-10 h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary rounded-xl" {...field} /></FormControl>
-                <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 text-slate-400 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-              <FormMessage className="text-[10px]" />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-slate-600 font-bold text-xs uppercase tracking-wider">{translations.confirmPassword}</FormLabel>
-              <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                  <KeyRound className="h-4 w-4" />
-                </div>
-                <FormControl><Input type={showPassword ? "text" : "password"} placeholder={translations.enterConfirmPassword} className="pl-10 h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary rounded-xl" {...field} /></FormControl>
-              </div>
-              <FormMessage className="text-[10px]" />
-            </FormItem>
-          )}
-        />
+        
+        <div className="grid grid-cols-2 gap-2">
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative group">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <LockKeyhole className="h-3.5 w-3.5" />
+                    </div>
+                    <FormControl>
+                      <Input 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder="Password" 
+                        className="pl-8 h-11 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/50 rounded-xl text-xs" 
+                        {...field} 
+                      />
+                    </FormControl>
+                  </div>
+                  <FormMessage className="text-[9px]" />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative group">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <KeyRound className="h-3.5 w-3.5" />
+                    </div>
+                    <FormControl>
+                      <Input 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder="Confirm" 
+                        className="pl-8 h-11 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/50 rounded-xl text-xs" 
+                        {...field} 
+                      />
+                    </FormControl>
+                  </div>
+                  <FormMessage className="text-[9px]" />
+                </FormItem>
+              )}
+            />
+        </div>
+
         <FormField
           control={form.control}
           name="invitationCode"
           render={({ field }) => (
-            <FormItem>
-                <FormLabel className="text-slate-600 font-bold text-xs uppercase tracking-wider">{translations.invitationCode} (Optional)</FormLabel>
+            <FormItem className="space-y-1">
                 <div className="relative group">
                     <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                      <UserPlus className="h-4 w-4" />
+                      <UserPlus className="h-3.5 w-3.5" />
                     </div>
-                    <FormControl><Input placeholder={translations.enterInvitationCode} className="pl-10 h-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-primary rounded-xl" {...field} /></FormControl>
+                    <FormControl>
+                      <Input 
+                        placeholder="Invitation Code (Optional)" 
+                        className="pl-10 h-11 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/50 rounded-xl text-xs" 
+                        {...field} 
+                      />
+                    </FormControl>
                 </div>
-                <FormMessage className="text-[10px]" />
+                <FormMessage className="text-[9px]" />
             </FormItem>
           )}
         />
+
         <FormField
           control={form.control}
           name="agreement"
           render={({ field }) => (
-            <FormItem className="flex items-start space-x-3 pt-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} className="mt-0.5" /></FormControl>
-              <div className="text-[11px] leading-snug"><FormLabel className="font-semibold text-slate-600">{translations.iAgreeTo} <Link href="/terms" className="text-primary font-black hover:underline transition-all">User Agreement</Link></FormLabel><FormMessage className="text-[10px]" /></div>
+            <FormItem className="flex items-start space-x-2 pt-1">
+              <FormControl>
+                <Checkbox 
+                  checked={field.value} 
+                  onCheckedChange={field.onChange} 
+                  className="mt-0.5 border-slate-300"
+                />
+              </FormControl>
+              <div className="text-[10px] leading-tight text-slate-500">
+                <FormLabel className="font-medium">
+                  I agree to the <Link href="/terms" className="text-primary font-bold hover:underline">User Agreement</Link>
+                </FormLabel>
+                <FormMessage className="text-[9px]" />
+              </div>
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full btn-gradient rounded-xl h-14 text-base font-black mt-4 shadow-xl shadow-primary/20" disabled={isLoading}>
-            {isLoading ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : null}
-            {isLoading ? translations.registering : translations.register}
+
+        <Button type="submit" className="w-full btn-gradient rounded-xl h-11 text-xs font-black mt-2" disabled={isLoading}>
+            {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
+            {isLoading ? "Creating Account..." : "Create Account"}
         </Button>
       </form>
     </Form>
