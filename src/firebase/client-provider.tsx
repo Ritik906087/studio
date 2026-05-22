@@ -3,7 +3,7 @@
 import React, { ReactNode, useMemo } from 'react';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { firebaseConfig } from './config';
 import { FirebaseProvider } from './provider';
@@ -15,7 +15,13 @@ export const FirebaseClientProvider = ({ children }: { children: ReactNode }) =>
     try {
       const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
       const auth = getAuth(app);
-      const firestore = getFirestore(app);
+      
+      // Use initializeFirestore to enable long polling for stable connectivity in workstation environments
+      const firestore = initializeFirestore(app, {
+        experimentalForceLongPolling: true,
+        ignoreUndefinedProperties: true,
+      });
+      
       const storage = getStorage(app);
 
       return { app, auth, firestore, storage };

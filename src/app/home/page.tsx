@@ -1,10 +1,9 @@
-
 'use client';
 
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
-import { History, Zap, ArrowUpRight, ArrowDownLeft, BadgeCheck, Bell, ShieldCheck } from 'lucide-react';
+import { History, Zap, ArrowUpRight, ArrowDownLeft, BadgeCheck, ShieldCheck } from 'lucide-react';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
 import Link from 'next/link';
