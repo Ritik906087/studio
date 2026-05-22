@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -5,44 +6,13 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronLeft, Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, CheckCircle2, Shield } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, runTransaction, serverTimestamp, limit, orderBy } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
-
-const paymentMethodDetails: { [key: string]: { logo: string; bgColor: string } } = {
-  PhonePe: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f", bgColor: "bg-violet-600" },
-  Paytm: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8", bgColor: "bg-sky-500" },
-  MobiKwik: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7", bgColor: "bg-blue-600" },
-  Freecharge: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4", bgColor: "bg-orange-500" },
-};
-
-const PurchaseGrid = ({ onBuyClick, options, bonusPercentage, isCreatingOrder }: any) => (
-    <div className="grid grid-cols-1 gap-3 mt-4">
-      {options.map((option: any) => {
-          const totalFLEX = option.amount + (option.amount * (bonusPercentage / 100));
-          return (
-            <Card key={option.id} className="p-3 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 flex items-center justify-center bg-primary/10 rounded-lg text-primary font-black italic">FP</div>
-                    <div>
-                        <p className="font-bold text-lg">₹ {option.amount.toLocaleString()}</p>
-                        <p className="text-xs text-green-600 font-semibold">Get: {totalFLEX.toFixed(0)} FP</p>
-                    </div>
-                </div>
-                <Button onClick={() => onBuyClick(option)} className="h-10 px-6 btn-gradient font-bold" disabled={isCreatingOrder}>
-                    {isCreatingOrder ? <Loader2 className="animate-spin" /> : 'Buy'}
-                </Button>
-            </Card>
-          );
-      })}
-    </div>
-);
 
 export default function BuyPage() {
   const router = useRouter();
@@ -50,90 +20,168 @@ export default function BuyPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'upi' | 'bank' | 'usdt'>('upi');
+  const [activeTab, setActiveTab] = useState<'p2p' | 'usdt'>('p2p');
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+  const [isMatching, setIsMatching] = useState(false);
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
 
   useEffect(() => {
     if (!user || !firestore) return;
     const q = query(collection(firestore, 'users', user.uid, 'orders'), where('status', 'in', ['pending_payment', 'pending_confirmation']), limit(1));
-    getDocs(q).then(snap => { if (!snap.empty) setInProgressOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); });
+    getDocs(q).then(snap => { 
+        if (!snap.empty) setInProgressOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); 
+    });
   }, [user, firestore]);
 
-  const purchaseOptions = useMemo(() => [100, 500, 1000, 2000, 5000].map((a, i) => ({ id: i, amount: a })), []);
+  const purchaseOptions = [100, 500, 1000, 2000, 5000, 10000];
 
-  const handleBuyClick = (option: any) => {
-    if (inProgressOrder) { toast({ title: "Order already in progress", variant: "destructive" }); return; }
-    setSelectedAmount(option.amount);
-    if (activeTab === 'upi') setIsDialogOpen(true);
-    else createOrder('Direct', option.amount);
-  };
-
-  const createOrder = async (provider: string, amount: number) => {
+  const handleP2PMatch = async (amount: number) => {
     if (!user || !firestore) return;
-    setIsCreatingOrder(true);
+    if (inProgressOrder) { 
+        toast({ title: "Order already in progress", description: "Please complete or cancel your pending order.", variant: "destructive" }); 
+        router.push(`/buy/confirm/${inProgressOrder.id}?type=${inProgressOrder.paymentType}`);
+        return; 
+    }
+
+    setIsMatching(true);
     try {
-        const bonus = activeTab === 'bank' ? 5 : 6;
-        const total = amount + (amount * bonus / 100);
-        const orderId = `FLEX${Date.now()}`;
-        const ref = await addDoc(collection(firestore, 'users', user.uid, 'orders'), {
-            userId: user.uid,
-            orderId,
-            amount: total,
-            baseAmount: amount,
-            bonusPercentage: bonus,
-            paymentType: activeTab,
-            paymentProvider: provider,
-            status: 'pending_payment',
-            createdAt: serverTimestamp(),
+        // AUTOMATED P2P MATCHING LOGIC
+        // 1. Find a sell order that matches the requested amount
+        const sellOrdersQuery = query(
+            collection(firestore, 'sellOrders'), // Note: this assumes global sellOrders collection for matching
+            where('status', 'in', ['pending', 'partially_filled']),
+            where('remainingAmount', '>=', amount),
+            orderBy('remainingAmount', 'asc'),
+            limit(1)
+        );
+
+        const sellSnap = await getDocs(sellOrdersQuery);
+        
+        if (sellSnap.empty) {
+            throw new Error("No matching sellers available right now. Please try a different amount or try later.");
+        }
+
+        const sellerDoc = sellSnap.docs[0];
+        const sellerData = sellerDoc.data();
+        const sellerOrderId = sellerDoc.id;
+
+        // 2. Perform Atomic Transaction to Match
+        const orderId = `LGPAYB${Date.now()}`;
+        const bonus = 6; // 6% bonus for P2P
+        const totalAmount = amount + (amount * bonus / 100);
+
+        const buyOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
+
+        await runTransaction(firestore, async (transaction) => {
+            const freshSellerSnap = await transaction.get(sellerDoc.ref);
+            const freshSellerData = freshSellerSnap.data();
+
+            if (!freshSellerData || freshSellerData.remainingAmount < amount || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
+                throw new Error("Seller just went offline. Retrying match...");
+            }
+
+            const newRemaining = freshSellerData.remainingAmount - amount;
+            const newStatus = newRemaining === 0 ? 'processing' : 'partially_filled';
+
+            // Update Seller
+            transaction.update(sellerDoc.ref, {
+                remainingAmount: newRemaining,
+                status: newStatus,
+                matchedBuyOrders: [
+                    ...(freshSellerData.matchedBuyOrders || []),
+                    {
+                        buyOrderId: buyOrderRef.id,
+                        buyerId: user.uid,
+                        amount: amount,
+                        status: 'pending_payment',
+                        created_at: new Date().toISOString()
+                    }
+                ]
+            });
+
+            // Create Buyer Order
+            transaction.set(buyOrderRef, {
+                userId: user.uid,
+                orderId,
+                amount: totalAmount,
+                baseAmount: amount,
+                bonusPercentage: bonus,
+                paymentType: 'p2p_upi',
+                paymentProvider: 'Auto-Matched',
+                status: 'pending_payment',
+                sellerId: freshSellerData.userId,
+                sellerWithdrawalDetails: freshSellerData.withdrawalMethod,
+                matchedSellOrderId: sellerOrderId,
+                createdAt: serverTimestamp(),
+            });
         });
-        router.push(`/buy/confirm/${ref.id}?type=${activeTab}&provider=${provider}`);
+
+        toast({ title: "Seller Matched!", description: "Liquidity secured. Complete your payment." });
+        router.push(`/buy/confirm/${buyOrderRef.id}?type=p2p_upi`);
+
     } catch (e: any) {
-        toast({ title: "Error", description: e.message, variant: "destructive" });
-    } finally { setIsCreatingOrder(false); }
+        toast({ title: "Matching Failed", description: e.message, variant: "destructive" });
+    } finally {
+        setIsMatching(false);
+    }
   };
 
   return (
-    <div className="p-4 space-y-4 pb-24">
-      <header className="flex items-center gap-4">
-        <Button asChild variant="ghost" size="icon">
-          <Link href="/home">
-            <ChevronLeft />
-          </Link>
+    <div className="flex flex-col min-h-full bg-[#F5F7FB]">
+      <header className="flex items-center gap-3 p-4 bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b">
+        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+          <Link href="/home"><ChevronLeft className="h-5 w-5" /></Link>
         </Button>
-        <h1 className="text-xl font-bold">Buy FLEX</h1>
+        <h1 className="text-lg font-black text-slate-800">Buy Assets</h1>
       </header>
-      <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
-        <TabsList className="grid grid-cols-3">
-          <TabsTrigger value="upi">UPI</TabsTrigger>
-          <TabsTrigger value="bank">Bank</TabsTrigger>
-          <TabsTrigger value="usdt">USDT</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <PurchaseGrid 
-        options={purchaseOptions} 
-        bonusPercentage={activeTab === 'bank' ? 5 : 6} 
-        onBuyClick={handleBuyClick} 
-        isCreatingOrder={isCreatingOrder} 
-      />
-      
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Select App</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-4">
-                {Object.entries(paymentMethodDetails).map(([name, details]) => (
-                    <Button key={name} onClick={() => createOrder(name, selectedAmount!)} className={cn("h-20 flex flex-col gap-2", details.bgColor)}>
-                        <Image src={details.logo} width={30} height={30} alt={name} />
-                        <span>{name}</span>
-                    </Button>
-                ))}
+
+      <main className="p-4 space-y-4">
+        <Card className="border-none bg-blue-600 text-white overflow-hidden rounded-2xl relative shadow-lg shadow-blue-500/20">
+             <div className="absolute top-0 right-0 p-4 opacity-10"><Shield className="h-20 w-20" /></div>
+             <CardContent className="p-5">
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Instant Liquidity</p>
+                <h3 className="text-xl font-black mt-1">P2P Auto-Rotation</h3>
+                <p className="text-[10px] mt-2 font-medium bg-white/20 inline-block px-2 py-0.5 rounded-full border border-white/10">100% Secure & Automated</p>
+             </CardContent>
+        </Card>
+
+        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
+          <TabsList className="grid grid-cols-2 bg-slate-100 rounded-xl p-1 h-11">
+            <TabsTrigger value="p2p" className="rounded-lg font-bold text-xs uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">P2P Match</TabsTrigger>
+            <TabsTrigger value="usdt" className="rounded-lg font-bold text-xs uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">USDT Direct</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="grid grid-cols-2 gap-3">
+            {purchaseOptions.map((amt) => (
+                <Card key={amt} className="p-4 border-none shadow-sm rounded-2xl active:bg-blue-50 transition-all group overflow-hidden relative" onClick={() => !isMatching && handleP2PMatch(amt)}>
+                    <div className="relative z-10">
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Amount</p>
+                        <p className="text-lg font-black text-slate-800">₹{amt.toLocaleString()}</p>
+                        <p className="text-[9px] font-bold text-teal-600 mt-1">+6% Bonus FP</p>
+                    </div>
+                    <div className="absolute bottom-0 right-0 p-2 opacity-0 group-active:opacity-100 transition-opacity">
+                         <CheckCircle2 className="h-5 w-5 text-primary" />
+                    </div>
+                </Card>
+            ))}
+        </div>
+
+        {isMatching && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 text-center">
+                 <Card className="w-full max-w-xs animate-in zoom-in-95 duration-200 p-8 rounded-3xl">
+                     <div className="relative w-16 h-16 mx-auto mb-4">
+                        <Loader2 className="w-16 h-16 text-primary animate-spin" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <Search className="h-6 w-6 text-primary animate-pulse" />
+                        </div>
+                     </div>
+                     <h3 className="font-black text-lg text-slate-800">Matching Engine</h3>
+                     <p className="text-xs text-slate-400 mt-2">Rotating liquidity to find your secure P2P partner...</p>
+                 </Card>
             </div>
-        </DialogContent>
-      </Dialog>
+        )}
+      </main>
     </div>
   );
 }

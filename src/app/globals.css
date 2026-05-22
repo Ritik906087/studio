@@ -5,7 +5,7 @@
 
 @layer base {
   :root {
-    --background: 220 33% 98%;
+    --background: 210 40% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -24,7 +24,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 210 100% 45%;
-    --radius: 1.5rem;
+    --radius: 1rem;
   }
 }
 
@@ -32,24 +32,26 @@
   * {
     @apply border-border outline-none;
     -webkit-tap-highlight-color: transparent;
-    user-select: none;
   }
   body {
     @apply bg-[#F5F7FB] text-[#111827] font-body antialiased overflow-x-hidden;
     overscroll-behavior-y: contain;
+    user-select: none;
   }
   
   .btn-gradient {
-    @apply bg-gradient-to-r from-teal-500 via-cyan-500 to-emerald-500 text-white shadow-lg shadow-teal-500/10 hover:opacity-95 transition-all active:scale-95 font-bold;
+    @apply bg-gradient-to-r from-teal-500 via-cyan-500 to-emerald-500 text-white shadow-md shadow-teal-500/10 hover:opacity-95 transition-all active:scale-95 font-bold;
   }
 
   .balance-gradient {
     background: linear-gradient(135deg, #0d9488 0%, #0891b2 50%, #059669 100%);
   }
 
-  .auth-layout {
-    background: radial-gradient(circle at top right, #e0f2fe, transparent),
-                radial-gradient(circle at bottom left, #f0fdf4, transparent);
+  .auth-mesh {
+    background-color: #ffffff;
+    background-image: radial-gradient(at 0% 0%, hsla(210,100%,95%,1) 0, transparent 50%), 
+                      radial-gradient(at 50% 0%, hsla(199,89%,92%,1) 0, transparent 50%), 
+                      radial-gradient(at 100% 0%, hsla(180,100%,95%,1) 0, transparent 50%);
   }
 
   ::-webkit-scrollbar {

@@ -71,7 +71,7 @@ export default function MyPage() {
   };
 
   return (
-    <div className="min-h-full bg-[#F5F7FB] pb-24">
+    <div className="min-h-full bg-[#F5F7FB] pb-24 no-scrollbar">
       <main className="px-3 pt-4 space-y-3.5">
         {/* PROFILE STRIP */}
         <div className="flex items-center justify-between bg-white p-3.5 rounded-[24px] border border-slate-100 shadow-sm">
@@ -102,7 +102,7 @@ export default function MyPage() {
         </div>
 
         {/* BALANCE CARD */}
-        <Card className="border-none balance-gradient text-white rounded-[24px] shadow-xl shadow-teal-500/10 overflow-hidden">
+        <Card className="border-none balance-gradient text-white rounded-[24px] shadow-lg shadow-teal-500/10 overflow-hidden">
           <CardContent className="p-5">
             <div className="flex justify-between items-start">
               <div>

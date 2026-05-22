@@ -1,12 +1,13 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, Suspense, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useDoc, useUser, useFirestore } from '@/firebase';
-import { doc, getDoc, updateDoc, runTransaction, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, CheckCircle, FileClock, XCircle, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, CheckCircle, FileClock, XCircle, AlertTriangle, User, Copy, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -32,7 +33,8 @@ type Order = {
     cancellationReason?: string;
     rejectionReason?: string;
     paymentType?: 'bank' | 'upi' | 'usdt' | 'p2p_upi';
-    matchedSellOrderPath?: string;
+    sellerId?: string;
+    sellerWithdrawalDetails?: any;
 };
 
 const formatTime = (seconds: number) => {
@@ -71,17 +73,10 @@ function OrderStatusContent() {
 
         setIsUpdatingStatus(true);
         try {
-             await updateDoc(orderRef, {
-                status: 'in_applied',
-            });
-            toast({
-                title: 'Order Under Review',
-                description: 'System is busy. Please wait for admin review.',
-            });
-    
+             await updateDoc(orderRef, { status: 'in_applied' });
+             toast({ title: 'Under Review', description: 'System busy. Admin review initiated.' });
         } catch (error) {
             console.error("Order expiry error:", error);
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to update the order status.' });
         } finally {
             setIsUpdatingStatus(false);
         }
@@ -89,190 +84,140 @@ function OrderStatusContent() {
     
     useEffect(() => {
         if (!order || order.status !== 'pending_confirmation' || !order.submittedAt) {
-            if (order && !['pending_confirmation', 'in_applied'].includes(order.status)) {
-                setTimeLeft(0);
-            }
+            if (order && !['pending_confirmation', 'in_applied'].includes(order.status)) setTimeLeft(0);
             return;
         }
-
         const submittedTime = order.submittedAt.toDate();
-        const expiryTime = new Date(submittedTime.getTime() + 30 * 60 * 1000); // 30 minutes from submission
-
+        const expiryTime = new Date(submittedTime.getTime() + 30 * 60 * 1000);
         const interval = setInterval(() => {
             const now = new Date();
             const secondsLeft = Math.floor((expiryTime.getTime() - now.getTime()) / 1000);
-            
             if (secondsLeft <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                if (order.status === 'pending_confirmation') {
-                    handleOrderExpiry();
-                }
-            } else {
-                setTimeLeft(secondsLeft);
-            }
+                handleOrderExpiry();
+            } else setTimeLeft(secondsLeft);
         }, 1000);
-
         return () => clearInterval(interval);
     }, [order, handleOrderExpiry]);
-    
 
-    if (orderLoading) {
-        return (
-            <div className="p-4 space-y-4">
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-48 w-full" />
-                <Skeleton className="h-32 w-full" />
-            </div>
-        )
-    }
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => toast({ title: 'Copied!' }));
+    };
 
-    if (!order) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen text-center p-4">
-                <h1 className="text-xl font-bold">Order not found.</h1>
-                <Button asChild className="mt-4">
-                    <Link href="/home">Go Home</Link>
-                </Button>
-            </div>
-        )
-    }
+    if (orderLoading) return <div className="p-4 space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-32 w-full" /></div>;
+    if (!order) return <div className="p-4 text-center">Order not found.</div>;
     
     const isTimeout = (order.status === 'failed' || order.status === 'cancelled') && (order.cancellationReason?.includes('timed out'));
 
     return (
-        <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
             <header className="flex items-center p-4 bg-white sticky top-0 z-10 border-b">
-                <Button asChild onClick={() => router.push('/home')} variant="ghost" size="icon" className="h-8 w-8">
+                <Button onClick={() => router.push('/home')} variant="ghost" size="icon" className="h-8 w-8">
                      <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
-                <h1 className="text-xl font-bold mx-auto pr-8">Order Status</h1>
+                <h1 className="text-lg font-black mx-auto pr-8">Order Tracking</h1>
             </header>
 
-            <main className="flex-grow p-4 space-y-6">
-                <Card className="text-center overflow-hidden">
-                    <CardContent className="p-6 space-y-3 flex flex-col items-center">
+            <main className="flex-grow p-3 space-y-4 no-scrollbar">
+                <Card className="text-center overflow-hidden border-none shadow-sm rounded-2xl">
+                    <CardContent className="p-6 space-y-2 flex flex-col items-center">
                         {order.status === 'completed' ? (
                             <>
-                                <CheckCircle className="h-16 w-16 text-green-500" />
-                                <h2 className="text-2xl font-bold text-green-600">Order Completed</h2>
-                                <p className="text-muted-foreground">₹{order.amount.toFixed(2)} has been added to your balance.</p>
-                            </>
-                        ) : order.status === 'pending_confirmation' ? (
-                            <>
-                                <FileClock className="h-16 w-16 text-green-600" />
-                                <h2 className="text-2xl font-bold text-green-600">Confirmation</h2>
-                                <p className="text-muted-foreground">Your payment is under review.</p>
-                            </>
-                        ) : order.status === 'in_applied' ? (
-                             <>
-                                <AlertTriangle className="h-16 w-16 text-orange-500" />
-                                <h2 className="text-2xl font-bold text-orange-600">In Applied</h2>
-                                <p className="text-muted-foreground">System busy. Please wait for admin review.</p>
+                                <CheckCircle className="h-14 w-14 text-teal-500" />
+                                <h2 className="text-xl font-black text-slate-800">Payment Successful</h2>
+                                <p className="text-[11px] text-slate-400 font-medium">Assets credited to your wallet.</p>
                             </>
                         ) : (
                             <>
-                                {isTimeout ? (
-                                    <AlertTriangle className="h-16 w-16 text-orange-500" />
-                                ) : (
-                                    <XCircle className="h-16 w-16 text-destructive" />
-                                )}
-                                <h2 className={cn("text-2xl font-bold capitalize", isTimeout ? "text-orange-600" : "text-destructive")}>
-                                    {isTimeout ? 'Timeout' : order.status.replace('_', ' ')}
+                                <FileClock className={cn("h-14 w-14", order.status === 'pending_confirmation' ? "text-primary" : "text-orange-500")} />
+                                <h2 className="text-xl font-black text-slate-800">
+                                    {order.status === 'pending_confirmation' ? 'Confirming...' : 'Under Review'}
                                 </h2>
-                                <p className="text-muted-foreground">
-                                    {isTimeout ? "This order has timed out." : (order.rejectionReason || order.cancellationReason || "This order could not be completed.")}
-                                </p>
+                                <p className="text-[11px] text-slate-400 font-medium">Rotation engine is verifying transaction.</p>
                             </>
                         )}
-                        
                     </CardContent>
-                    <CardFooter className={cn("p-4", 
-                        order.status === 'pending_confirmation' ? 'bg-green-100' 
-                        : order.status === 'in_applied' ? 'bg-orange-100'
-                        : 'bg-primary/10'
-                    )}>
+                    <CardFooter className={cn("p-4", order.status === 'completed' ? 'bg-teal-50' : 'bg-blue-50')}>
                          <div className="w-full text-center">
                             {order.status === 'pending_confirmation' ? (
-                                <>
-                                    <p className="text-sm text-green-800 font-semibold">Estimated time remaining</p>
-                                    <div className="text-3xl font-mono font-bold text-green-600">
-                                        {timeLeft !== null && timeLeft > 0 ? formatTime(timeLeft) : <Loader size="sm" className="inline-block"/>}
-                                    </div>
-                                </>
-                            ) : order.status === 'in_applied' ? (
-                                <p className="w-full text-center text-sm text-orange-600 font-semibold">In applied System busy</p>
-                            ) : order.status === 'completed' ? (
-                                 <p className="w-full text-center text-sm text-green-600 font-semibold">Processed successfully!</p>
+                                <div className="text-2xl font-mono font-black text-primary">
+                                    {timeLeft !== null && timeLeft > 0 ? formatTime(timeLeft) : <Loader2 size="sm" className="inline-block animate-spin"/>}
+                                </div>
                             ) : (
-                                <p className={cn("w-full text-center text-sm font-semibold", isTimeout ? "text-orange-600" : "text-destructive")}>
-                                    {isTimeout ? 'This order has timed out.' : 'This order is no longer active.'}
+                                <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                                    {order.status === 'completed' ? 'Transaction Complete' : 'System Processing...'}
                                 </p>
                             )}
                          </div>
                     </CardFooter>
                 </Card>
 
-                 <Card>
-                    <CardHeader>
-                        <CardTitle>Order Details</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
+                {order.paymentType === 'p2p_upi' && (
+                    <Card className="border-none shadow-sm rounded-2xl overflow-hidden">
+                        <CardHeader className="bg-slate-50/50 p-4 border-b">
+                            <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-primary" />
+                                <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-500">Matched Seller Details</CardTitle>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-3">
+                             <div className="flex justify-between items-center text-[11px]">
+                                <span className="text-slate-400 font-bold uppercase">Seller UID</span>
+                                <span className="font-mono text-slate-800">{order.sellerId?.slice(-8).toUpperCase() || 'P2P_USER'}</span>
+                            </div>
+                             <div className="flex justify-between items-center text-[11px]">
+                                <span className="text-slate-400 font-bold uppercase">Recipient</span>
+                                <span className="text-slate-800 font-bold">{order.sellerWithdrawalDetails?.upiHolderName || order.sellerWithdrawalDetails?.name || 'Seller'}</span>
+                            </div>
+                             <div className="flex justify-between items-center text-[11px]">
+                                <span className="text-slate-400 font-bold uppercase">UPI ID</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-mono text-primary font-black">{order.sellerWithdrawalDetails?.upiId}</span>
+                                    <Copy className="h-3 w-3 text-slate-300 cursor-pointer" onClick={() => copyToClipboard(order.sellerWithdrawalDetails?.upiId)} />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                 <Card className="border-none shadow-sm rounded-2xl">
+                    <CardContent className="p-4 space-y-3">
                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Amount</span>
-                            <span className="font-semibold">₹{((order.baseAmount ?? order.amount) || 0).toFixed(2)}</span>
+                            <span className="text-[11px] font-black uppercase text-slate-400">Total Amount</span>
+                            <span className="font-black text-lg text-slate-800">₹{(order.baseAmount || order.amount).toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Order ID</span>
-                            <span className="font-mono text-xs break-all">{order.orderId}</span>
+                            <span className="text-[11px] font-black uppercase text-slate-400">Reference ID</span>
+                            <span className="font-mono text-[10px] text-slate-500">{order.orderId}</span>
                         </div>
                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">{order.paymentType === 'usdt' ? 'TxHash' : 'UTR'}</span>
-                            <span className="font-mono break-all">{order.utr}</span>
-                        </div>
-                         <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Status</span>
-                            <span className={cn("font-semibold capitalize", isTimeout ? "text-orange-600" : "")}>
-                                {isUpdatingStatus ? 'Updating...' : (isTimeout ? 'Timeout' : order.status.replace('_', ' '))}
-                            </span>
-                        </div>
-                         <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Screenshot</span>
-                            <Dialog>
-                                <DialogTrigger asChild>
-                                    <Button variant="link" className="p-0 h-auto text-primary" disabled={!order.screenshotURL}>View</Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>Payment Proof</DialogTitle>
-                                    </DialogHeader>
-                                    <div className="flex justify-center py-4">
-                                        <img
-                                            src={order.screenshotURL}
-                                            alt="Payment proof"
-                                            className="max-h-[70vh] w-auto object-contain rounded-md"
-                                        />
-                                    </div>
-                                </DialogContent>
-                            </Dialog>
+                            <span className="text-[11px] font-black uppercase text-slate-400">Status</span>
+                            <div className={cn("px-2 py-0.5 rounded-full text-[9px] font-black uppercase", order.status === 'completed' ? "bg-teal-100 text-teal-700" : "bg-blue-100 text-blue-700")}>
+                                {order.status.replace('_', ' ')}
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
-                 <Button onClick={() => router.push('/home')} className="w-full h-12 btn-gradient font-bold">
-                    Back to Home
-                </Button>
+
+                <div className="bg-white/50 border border-slate-100 rounded-xl p-3 flex gap-3">
+                    <Info className="h-4 w-4 text-slate-300 shrink-0 mt-0.5" />
+                    <p className="text-[9px] font-medium text-slate-400 leading-relaxed">Payments are secured via escrow. Once matched seller confirms the receipt, your assets are released immediately. Contact support if not credited within 30 mins.</p>
+                </div>
             </main>
+            
+            <div className="p-4 bg-white border-t sticky bottom-0">
+                <Button onClick={() => router.push('/home')} className="w-full h-12 btn-gradient rounded-2xl font-black">
+                    Back to Dashboard
+                </Button>
+            </div>
         </div>
     );
 }
 
 export default function OrderStatusPage() {
     return (
-        <Suspense fallback={
-            <div className="flex items-center justify-center min-h-screen">
-                <Loader size="md"/>
-            </div>
-        }>
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><Loader size="md"/></div>}>
             <OrderStatusContent />
         </Suspense>
     );

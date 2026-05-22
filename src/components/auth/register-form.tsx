@@ -112,7 +112,6 @@ export function RegisterForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onRegisterSubmit)} className="space-y-3">
-        {/* Mobile Number */}
         <FormField
           control={form.control}
           name="phone"
@@ -127,7 +126,7 @@ export function RegisterForm() {
                   <Input 
                     type="tel" 
                     placeholder="Phone Number" 
-                    className="pl-20 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
+                    className="pl-20 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     maxLength={10} 
                     {...field} 
                   />
@@ -138,7 +137,6 @@ export function RegisterForm() {
           )}
         />
         
-        {/* Password */}
         <FormField
           control={form.control}
           name="password"
@@ -152,7 +150,7 @@ export function RegisterForm() {
                   <Input 
                     type={showPassword ? "text" : "password"} 
                     placeholder="Create Password" 
-                    className="pl-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
+                    className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     {...field} 
                   />
                 </FormControl>
@@ -165,7 +163,6 @@ export function RegisterForm() {
           )}
         />
 
-        {/* Confirm Password */}
         <FormField
           control={form.control}
           name="confirmPassword"
@@ -179,7 +176,7 @@ export function RegisterForm() {
                   <Input 
                     type={showPassword ? "text" : "password"} 
                     placeholder="Confirm Password" 
-                    className="pl-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
+                    className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                     {...field} 
                   />
                 </FormControl>
@@ -189,7 +186,6 @@ export function RegisterForm() {
           )}
         />
 
-        {/* Invitation Code */}
         <FormField
           control={form.control}
           name="invitationCode"
@@ -202,7 +198,7 @@ export function RegisterForm() {
                     <FormControl>
                       <Input 
                         placeholder="Invitation Code (Optional)" 
-                        className="pl-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
+                        className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
                         {...field} 
                       />
                     </FormControl>
@@ -212,7 +208,6 @@ export function RegisterForm() {
           )}
         />
 
-        {/* Agreement */}
         <FormField
           control={form.control}
           name="agreement"
@@ -235,7 +230,6 @@ export function RegisterForm() {
           )}
         />
 
-        {/* Submit Button */}
         <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading}>
             {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
             {isLoading ? "Creating Account..." : "Create Account"}
