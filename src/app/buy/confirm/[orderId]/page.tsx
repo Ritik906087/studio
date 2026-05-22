@@ -86,24 +86,20 @@ function PaymentDetailsContent() {
 
                 const sellerData = sellerSnap.data();
                 const newRemaining = sellerData.remainingAmount + order.baseAmount;
-                // If it was 'processing' (meaning fully matched but now some released), set back to partially_filled
                 const newStatus = sellerData.status === 'processing' ? 'partially_filled' : sellerData.status;
 
-                // 1. Update Seller root record
                 transaction.update(sellerOrderRef, {
                     remainingAmount: newRemaining,
                     status: newStatus,
                     matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
                 });
 
-                // 2. Update Seller user record
                 transaction.update(sellerUserOrderRef, {
                     remainingAmount: newRemaining,
                     status: newStatus,
                     matchedBuyOrders: (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId)
                 });
 
-                // 3. Update Buyer order
                 transaction.update(buyerOrderRef, {
                     status: 'cancelled',
                     cancellationReason: reason,
@@ -159,12 +155,10 @@ function PaymentDetailsContent() {
 
         setIsConfirming(true);
         try {
-            // 1. Upload Screenshot
             const screenshotRef = ref(storage, `orders/${user.uid}/${orderId}/${Date.now()}.png`);
             await uploadBytes(screenshotRef, screenshotFile);
             const downloadUrl = await getDownloadURL(screenshotRef);
 
-            // 2. Update Order Status
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
                 const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId!);
@@ -198,10 +192,16 @@ function PaymentDetailsContent() {
         }
     };
 
+    const details = order?.sellerWithdrawalDetails;
+    const upiUrl = details?.upiId 
+        ? `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order?.baseAmount}&tn=${order?.orderId}`
+        : '';
+    const qrCodeUrl = upiUrl 
+        ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=200x200&qzone=2`
+        : '';
+
     if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
     if (!order) return <div className="p-8 text-center font-bold">Order not found.</div>;
-
-    const details = order.sellerWithdrawalDetails;
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
@@ -242,13 +242,19 @@ function PaymentDetailsContent() {
                     </CardHeader>
                     <CardContent className="p-4 space-y-4">
                         <div className="flex flex-col items-center py-4 space-y-3">
-                             <Image
-                                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(`upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order.baseAmount}&tn=${order.orderId}`)}&size=200x200&qzone=2`}
-                                width={180}
-                                height={200}
-                                alt="Payment QR Code"
-                                className="rounded-xl border-4 border-white shadow-md"
-                            />
+                             {qrCodeUrl ? (
+                                <Image
+                                    src={qrCodeUrl}
+                                    width={180}
+                                    height={200}
+                                    alt="Payment QR Code"
+                                    className="rounded-xl border-4 border-white shadow-md"
+                                />
+                             ) : (
+                                <div className="h-[180px] w-[180px] bg-slate-100 rounded-xl flex items-center justify-center">
+                                    <Loader2 className="animate-spin text-slate-300" />
+                                </div>
+                             )}
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scan to Pay via UPI</p>
                         </div>
                         <div className="space-y-3 border-t border-dashed pt-4">
