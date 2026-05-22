@@ -26,6 +26,11 @@ export default function SellPage() {
   const [selectedMethod, setSelectedMethod] = useState<any>(null);
   const [isSelling, setIsSelling] = useState(false);
 
+  const generateOrderId = () => {
+    const num = Math.floor(1000000000 + Math.random() * 9000000000);
+    return `#${num}`;
+  };
+
   const handleSell = async () => {
     const val = parseInt(amount);
     if (!val || val < 100 || val % 100 !== 0) { 
@@ -58,7 +63,7 @@ export default function SellPage() {
                 holdBalance: currentHold + val 
             });
 
-            const sellOrderId = `LGPAYS${Date.now()}`;
+            const sellOrderId = generateOrderId();
             const sellRef = doc(collection(firestore, 'sellOrders')); // Global collection for matching
             const userSellRef = doc(firestore, 'users', user.uid, 'sellOrders', sellRef.id);
 

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChevronLeft, Loader2, Search, CheckCircle2, Shield, Info, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, CheckCircle2, Shield, Info, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
@@ -38,6 +38,11 @@ export default function BuyPage() {
 
   const purchaseOptions = [100, 500, 1000, 2000, 5000, 10000];
 
+  const generateOrderId = () => {
+    const num = Math.floor(1000000000 + Math.random() * 9000000000);
+    return `#${num}`;
+  };
+
   const handleP2PMatch = async (amount: number) => {
     if (!user || !firestore) {
         toast({ title: "Session Expired", description: "Please login again.", variant: "destructive" });
@@ -67,8 +72,8 @@ export default function BuyPage() {
 
         if (!sellerDoc) {
             toast({ 
-              title: "No Available Match", 
-              description: "The engine is currently rotating liquidity. Please try a different amount or wait a few moments.", 
+              title: "Rotation in Progress", 
+              description: "The engine is currently rotating liquidity. Please try a different amount or wait.", 
               variant: "destructive" 
             });
             setIsMatching(false);
@@ -76,7 +81,7 @@ export default function BuyPage() {
         }
 
         const sellerOrderId = sellerDoc.id;
-        const displayOrderId = `LGPAYB${Date.now()}`;
+        const displayOrderId = generateOrderId();
         const bonus = 6;
         const totalAmount = amount + (amount * bonus / 100);
 
@@ -166,7 +171,7 @@ export default function BuyPage() {
              <CardContent className="p-5">
                 <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Instant Liquidity</p>
                 <h3 className="text-xl font-black mt-1">P2P Auto-Rotation</h3>
-                <p className="text-[10px] mt-2 font-medium bg-white/20 inline-block px-2 py-0.5 rounded-full border border-white/10">Secure Liquidity Pool Active</p>
+                <p className="text-[10px] mt-2 font-medium bg-white/20 inline-block px-2 py-0.5 rounded-full border border-white/10">Secure Pool Active</p>
              </CardContent>
         </Card>
 
@@ -177,20 +182,28 @@ export default function BuyPage() {
           </TabsList>
         </Tabs>
 
-        <div className="grid grid-cols-2 gap-3 pb-20">
+        {/* LINE BY LINE ORDER LIST */}
+        <div className="flex flex-col gap-2.5 pb-20">
             {purchaseOptions.map((amt) => (
                 <Card 
                     key={amt} 
-                    className="p-4 border-none shadow-sm rounded-2xl active:bg-blue-50 transition-all group overflow-hidden relative cursor-pointer" 
+                    className="p-4 border-none shadow-sm rounded-2xl active:bg-blue-50 transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white" 
                     onClick={() => !isMatching && handleP2PMatch(amt)}
                 >
-                    <div className="relative z-10">
-                        <p className="text-[9px] font-black text-slate-400 uppercase">Amount</p>
-                        <p className="text-lg font-black text-slate-800">₹{amt.toLocaleString()}</p>
-                        <p className="text-[9px] font-bold text-teal-600 mt-1">+6% Bonus FP</p>
+                    <div className="flex items-center gap-4 relative z-10">
+                        <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                            <Shield className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Buy Amount</p>
+                            <p className="text-lg font-black text-slate-800 leading-none">₹{amt.toLocaleString()}</p>
+                            <p className="text-[9px] font-bold text-teal-600 mt-1 uppercase">+6% BONUS FP</p>
+                        </div>
                     </div>
-                    <div className="absolute bottom-0 right-0 p-2 opacity-0 group-hover:opacity-10 transition-opacity">
-                         <Shield className="h-8 w-8 text-primary" />
+                    <div className="flex flex-col items-end gap-1 relative z-10">
+                        <div className="bg-primary text-white p-2 rounded-lg group-active:scale-90 transition-transform shadow-md shadow-primary/20">
+                            <ArrowRight className="h-4 w-4" />
+                        </div>
                     </div>
                 </Card>
             ))}
@@ -200,7 +213,7 @@ export default function BuyPage() {
              <Info className="h-5 w-5 text-primary shrink-0" />
              <div className="space-y-1">
                  <p className="text-[11px] font-bold text-slate-700">How it works:</p>
-                 <p className="text-[10px] text-slate-500 leading-relaxed">Select an amount to trigger the auto-rotation engine. We'll match you with a verified seller instantly. Complete the payment to receive your assets.</p>
+                 <p className="text-[10px] text-slate-500 leading-relaxed">Select an amount to trigger the auto-rotation engine. We'll match you with a verified seller instantly. Orders are secured by escrow.</p>
              </div>
         </div>
 
