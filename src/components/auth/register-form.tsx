@@ -10,12 +10,11 @@ import {
   FormField,
   FormItem,
   FormMessage,
-  FormLabel,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole, UserPlus, KeyRound, User } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, User } from "lucide-react";
+import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/context/language-context";
@@ -56,6 +55,19 @@ export function RegisterForm() {
     defaultValues: { fullName: "", phone: "", password: "", confirmPassword: "", invitationCode: invitationCodeFromUrl, agreement: false },
   });
 
+  // Memoize Turnstile callbacks to prevent widget reset on re-render
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
+
+  const handleTurnstileExpire = useCallback(() => {
+    setTurnstileToken(null);
+  }, []);
+
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileToken(null);
+  }, []);
+
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     if (!turnstileToken) {
       toast({ variant: "destructive", title: "Verification Required", description: "Please complete human verification." });
@@ -67,12 +79,26 @@ export function RegisterForm() {
     }
     setIsLoading(true);
     try {
+        // 1. Verify Turnstile Token with Backend
+        const verifyRes = await fetch('/api/verify-turnstile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: turnstileToken }),
+        });
+
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) {
+          throw new Error("Human verification failed. Please refresh and try again.");
+        }
+
         const email = `91${values.phone}@lgpay.app`;
         
+        // 2. Check if phone already registered
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
         if (!phoneCheckSnap.empty) throw new Error("This phone number is already registered.");
 
+        // 3. Handle invitation code
         let inviterUid = null;
         if (values.invitationCode) {
             const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
@@ -80,9 +106,11 @@ export function RegisterForm() {
             if (!inviterSnap.empty) inviterUid = inviterSnap.docs[0].id;
         }
 
+        // 4. Create Firebase Auth User
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
 
+        // 5. Create Profile
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
         await setDoc(doc(firestore, 'users', user.uid), {
@@ -189,10 +217,17 @@ export function RegisterForm() {
         />
 
         <Turnstile 
-          onVerify={(token) => setTurnstileToken(token)} 
-          onExpire={() => setTurnstileToken(null)}
-          onError={() => setTurnstileToken(null)}
+          onVerify={handleTurnstileVerify} 
+          onExpire={handleTurnstileExpire}
+          onError={handleTurnstileError}
         />
+
+        <div className="flex items-center space-x-2 py-2">
+          <Checkbox id="agreement" onCheckedChange={(checked) => form.setValue("agreement", checked === true)} checked={form.watch("agreement")} />
+          <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium">
+            I agree to the <Link href="/terms" className="text-primary font-bold">Terms & Conditions</Link>
+          </label>
+        </div>
 
         <Button type="submit" className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1" disabled={isLoading || !turnstileToken}>
             {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}

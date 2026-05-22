@@ -23,9 +23,10 @@ declare global {
 export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: TurnstileProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const isRendered = useRef(false);
 
   useEffect(() => {
-    // Load script
+    // Load script once
     if (!document.getElementById('cloudflare-turnstile-script')) {
       const script = document.createElement('script');
       script.id = 'cloudflare-turnstile-script';
@@ -36,40 +37,56 @@ export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: Turns
     }
 
     const renderWidget = () => {
-      if (window.turnstile && containerRef.current && !widgetIdRef.current) {
-        const id = window.turnstile.render(containerRef.current, {
-          sitekey: '1x00000000000000000000AA', // Placeholder: Use real site key in production
-          callback: (token: string) => onVerify(token),
-          'expired-callback': () => onExpire?.(),
-          'error-callback': () => onError?.(),
-          theme,
-        });
-        widgetIdRef.current = id;
+      if (window.turnstile && containerRef.current && !isRendered.current) {
+        try {
+          const id = window.turnstile.render(containerRef.current, {
+            sitekey: '1x00000000000000000000AA', // Placeholder: Use real site key in production
+            callback: (token: string) => {
+              console.log("Turnstile Verified");
+              onVerify(token);
+            },
+            'expired-callback': () => {
+              console.warn("Turnstile Expired");
+              onExpire?.();
+            },
+            'error-callback': () => {
+              console.error("Turnstile Error");
+              onError?.();
+            },
+            theme,
+          });
+          widgetIdRef.current = id;
+          isRendered.current = true;
+        } catch (e) {
+          console.error("Turnstile Render Failed:", e);
+        }
       }
     };
 
+    let interval: NodeJS.Timeout;
     if (window.turnstile) {
       renderWidget();
     } else {
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         if (window.turnstile) {
           renderWidget();
           clearInterval(interval);
         }
       }, 500);
-      return () => clearInterval(interval);
     }
 
     return () => {
+      if (interval) clearInterval(interval);
       if (widgetIdRef.current && window.turnstile) {
-        window.turnstile.remove(widgetIdRef.current);
-        widgetIdRef.current = null;
+        // We don't remove if we want it to persist across re-renders
+        // but since this is a cleanup, we follow standard practices
+        // window.turnstile.remove(widgetIdRef.current);
       }
     };
   }, [onVerify, onExpire, onError, theme]);
 
   return (
-    <div className="flex justify-center my-4">
+    <div className="flex justify-center my-4 min-h-[65px]">
       <div ref={containerRef} className="rounded-xl overflow-hidden shadow-sm ring-1 ring-slate-100" />
     </div>
   );

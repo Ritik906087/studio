@@ -12,8 +12,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Smartphone, LockKeyhole, Eye, EyeOff, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Smartphone, LockKeyhole, Eye, EyeOff } from "lucide-react";
+import { useState, useCallback } from "react";
 import Link from 'next/link';
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
@@ -43,6 +43,19 @@ export function LoginForm() {
     defaultValues: { phone: "", password: "" },
   });
 
+  // Memoize Turnstile callbacks to prevent widget reset on re-render
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token);
+  }, []);
+
+  const handleTurnstileExpire = useCallback(() => {
+    setTurnstileToken(null);
+  }, []);
+
+  const handleTurnstileError = useCallback(() => {
+    setTurnstileToken(null);
+  }, []);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!turnstileToken) {
       toast({ variant: "destructive", title: "Verification Required", description: "Please complete the human verification." });
@@ -55,13 +68,32 @@ export function LoginForm() {
     if (!auth) return;
     setIsLoading(true);
 
-    const email = `91${values.phone}@lgpay.app`;
     try {
+      // 1. Verify Turnstile Token with Backend
+      const verifyRes = await fetch('/api/verify-turnstile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: turnstileToken }),
+      });
+
+      const verifyData = await verifyRes.json();
+      if (!verifyData.success) {
+        throw new Error("Human verification failed. Please try again.");
+      }
+
+      // 2. Proceed with Login
+      const email = `91${values.phone}@lgpay.app`;
       await signInWithEmailAndPassword(auth, email, values.password);
+      
       toast({ title: "Welcome Back!" });
       router.push('/home');
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Login Failed", description: "Wrong credentials." });
+      console.error("Login error:", error);
+      toast({ 
+        variant: "destructive", 
+        title: "Login Failed", 
+        description: error.message || "Invalid credentials or verification error." 
+      });
     } finally {
       setIsLoading(false);
     }
@@ -126,9 +158,9 @@ export function LoginForm() {
         />
 
         <Turnstile 
-          onVerify={(token) => setTurnstileToken(token)} 
-          onExpire={() => setTurnstileToken(null)}
-          onError={() => setTurnstileToken(null)}
+          onVerify={handleTurnstileVerify} 
+          onExpire={handleTurnstileExpire}
+          onError={handleTurnstileError}
         />
         
         <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading || !turnstileToken}>
