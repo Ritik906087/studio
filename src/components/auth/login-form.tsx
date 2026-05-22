@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +12,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Smartphone, LockKeyhole, Eye, EyeOff } from "lucide-react";
+import { Loader2, Smartphone, LockKeyhole, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import Link from 'next/link';
 import { useLanguage } from "@/context/language-context";
@@ -21,12 +20,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { Turnstile } from "./turnstile";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const { translations } = useLanguage();
   const { toast } = useToast();
   const router = useRouter();
@@ -43,6 +44,10 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!turnstileToken) {
+      toast({ variant: "destructive", title: "Verification Required", description: "Please complete the human verification." });
+      return;
+    }
     if (ADMIN_PHONES.includes(values.phone)) {
       toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
       return;
@@ -119,8 +124,14 @@ export function LoginForm() {
             </FormItem>
           )}
         />
+
+        <Turnstile 
+          onVerify={(token) => setTurnstileToken(token)} 
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+        />
         
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading}>
+        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading || !turnstileToken}>
           {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : translations.login}
         </Button>
       </form>

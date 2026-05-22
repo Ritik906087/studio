@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -50,17 +49,14 @@ export default function BuyPage() {
     }
 
     if (inProgressOrder) { 
-        toast({ 
-            title: "Pending Order", 
-            description: "Please complete or cancel your existing order first.",
-            variant: "destructive" 
-        }); 
+        toast({ title: "Pending Order", description: "Please complete or cancel your existing order first.", variant: "destructive" }); 
         router.push(`/buy/confirm/${inProgressOrder.id}`);
         return; 
     }
 
     setIsMatching(true);
     try {
+        // 1. Search for available P2P Seller
         const sellOrdersQuery = query(
             collection(firestore, 'sellOrders'),
             where('status', 'in', ['pending', 'partially_filled']),
@@ -70,23 +66,48 @@ export default function BuyPage() {
         const sellSnap = await getDocs(sellOrdersQuery);
         const sellerDoc = sellSnap.docs.find(d => d.data().remainingAmount >= amount);
 
-        if (!sellerDoc) {
-            toast({ 
-              title: "Rotation in Progress", 
-              description: "The engine is currently rotating liquidity. Please try a different amount or wait.", 
-              variant: "destructive" 
-            });
-            setIsMatching(false);
-            return;
-        }
-
-        const sellerOrderId = sellerDoc.id;
         const displayOrderId = generateOrderId();
         const bonus = 6;
         const totalAmount = amount + (amount * bonus / 100);
-
         const buyOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
 
+        if (!sellerDoc) {
+            // 2. FALLBACK: USE ADMIN PAYMENT SERVER
+            console.log("No seller found. Routing to Admin Payment Server.");
+            const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
+            const adminPMSnap = await getDocs(adminPMQuery);
+            
+            if (adminPMSnap.empty) throw new Error("Liquidity Pool Busy. Try later.");
+
+            const adminMethod = adminPMSnap.docs[0].data();
+
+            await runTransaction(firestore, async (transaction) => {
+                transaction.set(buyOrderRef, {
+                    userId: user.uid,
+                    orderId: displayOrderId,
+                    amount: totalAmount,
+                    baseAmount: amount,
+                    bonusPercentage: bonus,
+                    paymentType: 'bank_transfer',
+                    paymentProvider: 'ADMIN_SERVER',
+                    status: 'pending_payment',
+                    sellerId: 'ADMIN',
+                    sellerWithdrawalDetails: {
+                        type: 'upi',
+                        name: adminMethod.upiHolderName || 'Admin Master',
+                        upiId: adminMethod.upiId
+                    },
+                    createdAt: serverTimestamp(),
+                });
+            });
+
+            toast({ title: "Secure Link Ready", description: "Matched with Admin Liquidity Pool." });
+            router.push(`/buy/confirm/${buyOrderRef.id}`);
+            return;
+        }
+
+        // 3. NORMAL P2P MATCHING
+        const sellerOrderId = sellerDoc.id;
         await runTransaction(firestore, async (transaction) => {
             const freshSellerSnap = await transaction.get(sellerDoc.ref);
             const freshSellerData = freshSellerSnap.data();
@@ -175,14 +196,6 @@ export default function BuyPage() {
              </CardContent>
         </Card>
 
-        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
-          <TabsList className="grid grid-cols-2 bg-slate-100 rounded-xl p-1 h-11">
-            <TabsTrigger value="p2p" className="rounded-lg font-bold text-xs uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">P2P Match</TabsTrigger>
-            <TabsTrigger value="usdt" className="rounded-lg font-bold text-xs uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm" disabled>USDT Direct</TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {/* LINE BY LINE ORDER LIST */}
         <div className="flex flex-col gap-2.5 pb-20">
             {purchaseOptions.map((amt) => (
                 <Card 
@@ -200,21 +213,11 @@ export default function BuyPage() {
                             <p className="text-[9px] font-bold text-teal-600 mt-1 uppercase">+6% BONUS FP</p>
                         </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1 relative z-10">
-                        <div className="bg-primary text-white p-2 rounded-lg group-active:scale-90 transition-transform shadow-md shadow-primary/20">
-                            <ArrowRight className="h-4 w-4" />
-                        </div>
+                    <div className="bg-primary text-white p-2 rounded-lg group-active:scale-90 transition-transform shadow-md shadow-primary/20">
+                        <ArrowRight className="h-4 w-4" />
                     </div>
                 </Card>
             ))}
-        </div>
-
-        <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex gap-3">
-             <Info className="h-5 w-5 text-primary shrink-0" />
-             <div className="space-y-1">
-                 <p className="text-[11px] font-bold text-slate-700">How it works:</p>
-                 <p className="text-[10px] text-slate-500 leading-relaxed">Select an amount to trigger the auto-rotation engine. We'll match you with a verified seller instantly. Orders are secured by escrow.</p>
-             </div>
         </div>
 
         {isMatching && (
@@ -227,7 +230,7 @@ export default function BuyPage() {
                         </div>
                      </div>
                      <h3 className="font-black text-xl text-slate-800">Finding Match</h3>
-                     <p className="text-xs text-slate-400 mt-2 font-medium">Rotating liquidity pool to find your secure P2P partner...</p>
+                     <p className="text-xs text-slate-400 mt-2 font-medium">Rotating liquidity pool... checking P2P and Server availability.</p>
                  </Card>
             </div>
         )}
