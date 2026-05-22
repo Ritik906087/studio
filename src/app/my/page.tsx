@@ -142,7 +142,7 @@ export default function MyPage() {
         <div className="bg-white shadow-sm rounded-[20px] overflow-hidden border border-slate-100 divide-y divide-slate-50">
           <ServiceTile icon={CreditCard} title="Payments" subtitle="UPI & Bank IDs" href="/my/collection" iconColor="bg-teal-50 text-teal-500" />
           <ServiceTile icon={Lock} title="Security" subtitle="Account access" href="/my/change-password" iconColor="bg-blue-50 text-blue-500" />
-          <ServiceTile icon={Trophy} title="Tasks" subtitle="Daily goals" href="/rewards" iconColor="bg-orange-50 text-orange-500" />
+          <ServiceTile icon={Trophy} title="Newbie Rewards" subtitle="Starter bonuses" href="/my/new-user-rewards" iconColor="bg-orange-50 text-orange-500" />
           <ServiceTile icon={Flag} title="Support" subtitle="Report problem" href="/my/report-problem" iconColor="bg-red-50 text-red-500" />
           <ServiceTile icon={Globe} title="History" subtitle="All transactions" href="/my/transactions" iconColor="bg-sky-50 text-sky-500" />
         </div>
