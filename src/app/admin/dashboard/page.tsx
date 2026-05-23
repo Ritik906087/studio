@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -14,7 +13,7 @@ import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp, getDocs } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -67,9 +66,16 @@ export default function AdminDashboardPage() {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
+        // Use a simpler query without createdAt to avoid needing a complex composite index for collectionGroup
         const buyOrdersQuery = query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation'));
         const unsubBuy = onSnapshot(buyOrdersQuery, (snap) => {
-            setPendingBuyOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            // Sort in memory to avoid Firebase Error
+            const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => {
+                const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+                const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+                return timeB - timeA;
+            });
+            setPendingBuyOrders(sorted);
         });
         
         const unsubPM = onSnapshot(collection(firestore, 'paymentMethods'), (snap) => {

@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -78,10 +77,10 @@ export default function HomeLayout({
                         "transition-all duration-300",
                         isActive ? "scale-105" : ""
                     )}>
-                        <item.icon className={cn("h-5 w-5", isActive ? "stroke-[2.5px]" : "stroke-2")} />
+                        <item.icon className={cn("h-4 w-4", isActive ? "stroke-[2.5px]" : "stroke-2")} />
                     </div>
                     <span className={cn(
-                        "text-[9px] font-black tracking-tighter uppercase",
+                        "text-[8px] font-black tracking-tighter uppercase",
                         isActive ? "text-blue-600" : "text-slate-400"
                     )}>
                       {item.label}

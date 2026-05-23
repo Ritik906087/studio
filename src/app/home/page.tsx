@@ -27,24 +27,34 @@ export default function HomePage() {
     async function fetchStats() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const todayTimestamp = Timestamp.fromDate(today);
+        const todayMs = today.getTime();
 
-        // Today Buy
-        const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), where('createdAt', '>=', todayTimestamp), where('status', '==', 'completed'));
-        const buySnap = await getDocs(buyQ);
-        const todayBuy = buySnap.docs.reduce((acc, d) => acc + (d.data().baseAmount || 0), 0);
+        try {
+            // Fetch completed Buy Orders (Optimized to avoid composite index)
+            const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), where('status', '==', 'completed'));
+            const buySnap = await getDocs(buyQ);
+            const todayBuy = buySnap.docs
+                .map(d => d.data())
+                .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs)
+                .reduce((acc, d) => acc + (d.baseAmount || 0), 0);
 
-        // Today Sell
-        const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), where('createdAt', '>=', todayTimestamp), where('status', '==', 'completed'));
-        const sellSnap = await getDocs(sellQ);
-        const todaySell = sellSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
+            // Fetch completed Sell Orders
+            const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), where('status', '==', 'completed'));
+            const sellSnap = await getDocs(sellQ);
+            const todaySell = sellSnap.docs
+                .map(d => d.data())
+                .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs)
+                .reduce((acc, d) => acc + (d.amount || 0), 0);
 
-        // Total Income (Rewards + Bonuses)
-        const incomeQ = query(collection(firestore, 'users', user.uid, 'transactions'), where('type', 'in', ['team_bonus', 'daily_task', 'new_user_reward']));
-        const incomeSnap = await getDocs(incomeQ);
-        const totalIncome = incomeSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
+            // Total Income (Rewards + Bonuses)
+            const incomeQ = query(collection(firestore, 'users', user.uid, 'transactions'), where('type', 'in', ['team_bonus', 'daily_task', 'new_user_reward']));
+            const incomeSnap = await getDocs(incomeQ);
+            const totalIncome = incomeSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
 
-        setStats({ todayBuy, todaySell, totalIncome });
+            setStats({ todayBuy, todaySell, totalIncome });
+        } catch (e) {
+            console.warn("Stats calculation fell back due to index restriction or data mismatch.");
+        }
     }
 
     fetchStats();
@@ -76,27 +86,29 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* PROMO BANNERS CAROUSEL */}
-        <Carousel className="w-full" plugins={[plugin.current]}>
-          <CarouselContent>
-            {banners.map((banner) => (
-              <CarouselItem key={banner.id}>
-                <Card className="overflow-hidden rounded-[20px] border-none shadow-sm relative w-full aspect-[1280/719] bg-white ring-1 ring-slate-100">
-                  {banner.imageUrl && (
-                    <Image 
-                      src={banner.imageUrl} 
-                      alt={banner.description} 
-                      fill
-                      className="object-cover" 
-                      data-ai-hint={banner.imageHint}
-                      priority
-                    />
-                  )}
-                </Card>
-              </CarouselItem>
-            ))}
-          </CarouselContent>
-        </Carousel>
+        {/* PROMO BANNERS CAROUSEL - ASPECT RATIO 1280:719 */}
+        <div className="w-full">
+            <Carousel className="w-full" plugins={[plugin.current]}>
+                <CarouselContent>
+                    {banners.map((banner) => (
+                    <CarouselItem key={banner.id}>
+                        <div className="relative w-full aspect-[1280/719] rounded-[20px] overflow-hidden shadow-sm ring-1 ring-slate-100">
+                        {banner.imageUrl && (
+                            <Image 
+                            src={banner.imageUrl} 
+                            alt={banner.description} 
+                            fill
+                            className="object-cover" 
+                            data-ai-hint={banner.imageHint}
+                            priority
+                            />
+                        )}
+                        </div>
+                    </CarouselItem>
+                    ))}
+                </CarouselContent>
+            </Carousel>
+        </div>
 
         {/* UNIFIED OPERATIONS CENTER (Stats + Actions + Income Detail) */}
         <Card className="border-none bg-white rounded-[28px] shadow-lg shadow-blue-500/5 overflow-hidden ring-1 ring-slate-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
