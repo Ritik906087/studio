@@ -98,60 +98,60 @@ export default function HomePage() {
           </CarouselContent>
         </Carousel>
 
-        {/* PERFORMANCE CONSOLE (Today Stats) */}
-        <div className="bg-white rounded-[24px] p-4 shadow-sm ring-1 ring-slate-100 grid grid-cols-3 gap-3">
-             <div className="space-y-1">
-                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><TrendingUp className="h-2 w-2" /> Today Buy</p>
-                <p className="text-sm font-black text-slate-800 tabular-nums">₹{stats.todayBuy.toLocaleString()}</p>
-             </div>
-             <div className="space-y-1 border-x px-3">
-                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><TrendingUp className="h-2 w-2 rotate-180 text-red-400" /> Today Sell</p>
-                <p className="text-sm font-black text-slate-800 tabular-nums">₹{stats.todaySell.toLocaleString()}</p>
-             </div>
-             <div className="space-y-1 text-right">
-                <p className="text-[8px] font-black text-teal-500 uppercase tracking-widest flex items-center gap-1 justify-end"><Zap className="h-2 w-2 fill-teal-500" /> Income</p>
-                <p className="text-sm font-black text-teal-600 tabular-nums">₹{stats.totalIncome.toLocaleString()}</p>
-             </div>
-        </div>
+        {/* UNIFIED OPERATIONS CENTER (Stats + Actions + Income Detail) */}
+        <Card className="border-none bg-white rounded-[28px] shadow-lg shadow-blue-500/5 overflow-hidden ring-1 ring-slate-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
+            <CardContent className="p-0">
+                {/* 1. Quick Stats Grid */}
+                <div className="grid grid-cols-3 p-4 bg-slate-50/40 border-b border-slate-100">
+                    <div className="text-center space-y-0.5">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Today Buy</p>
+                        <p className="text-sm font-black text-slate-800 tabular-nums">₹{stats.todayBuy.toLocaleString()}</p>
+                    </div>
+                    <div className="text-center space-y-0.5 border-x border-slate-100">
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Today Sell</p>
+                        <p className="text-sm font-black text-slate-800 tabular-nums">₹{stats.todaySell.toLocaleString()}</p>
+                    </div>
+                    <div className="text-center space-y-0.5">
+                        <p className="text-[8px] font-black text-teal-500 uppercase tracking-widest">Net Income</p>
+                        <p className="text-sm font-black text-teal-600 tabular-nums">₹{stats.totalIncome.toLocaleString()}</p>
+                    </div>
+                </div>
 
-        {/* LARGE ACTION BUTTONS */}
-        <div className="grid grid-cols-2 gap-3">
-            <Link href="/buy" className="group">
-                <div className="h-20 rounded-[24px] bg-white border border-blue-100 shadow-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all active:bg-blue-50 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-2 opacity-5"><ArrowUpToLine className="h-10 w-10" /></div>
-                    <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/20">
-                        <ArrowUpToLine className="h-5 w-5" />
-                    </div>
-                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight">Recharge</span>
+                {/* 2. Large Action Buttons */}
+                <div className="p-4 grid grid-cols-2 gap-3">
+                    <Button asChild className="h-20 btn-gradient rounded-[22px] flex flex-col items-center justify-center gap-1.5 shadow-blue-500/30 active:scale-95 transition-all">
+                        <Link href="/buy">
+                            <ArrowUpToLine className="h-6 w-6" />
+                            <span className="text-[12px] font-black uppercase tracking-tight">Recharge</span>
+                        </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 border-2 border-emerald-100 bg-emerald-50/30 text-emerald-600 rounded-[22px] flex flex-col items-center justify-center gap-1.5 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95 transition-all">
+                        <Link href="/sell">
+                            <ArrowDownToLine className="h-6 w-6" />
+                            <span className="text-[12px] font-black uppercase tracking-tight">Withdraw</span>
+                        </Link>
+                    </Button>
                 </div>
-            </Link>
-            <Link href="/sell" className="group">
-                <div className="h-20 rounded-[24px] bg-white border border-emerald-100 shadow-sm flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all active:bg-emerald-50 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-2 opacity-5"><ArrowDownToLine className="h-10 w-10" /></div>
-                    <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20">
-                        <ArrowDownToLine className="h-5 w-5" />
-                    </div>
-                    <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight">Withdraw</span>
-                </div>
-            </Link>
-        </div>
 
-        {/* TOTAL INCOME HIGHLIGHT */}
-        <Card className="border-none bg-slate-900 text-white rounded-[24px] overflow-hidden relative shadow-lg shadow-slate-900/10">
-            <div className="absolute top-0 right-0 p-5 opacity-5"><Target className="h-24 w-24" /></div>
-            <CardContent className="p-5 flex items-center justify-between relative z-10">
-                <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center backdrop-blur-md">
-                        <Wallet className="h-6 w-6 text-teal-400" />
+                {/* 3. Total Income Detail Bar (Vault Summary) */}
+                <Link href="/my/transactions" className="flex items-center justify-between px-5 py-4 bg-slate-900 text-white active:bg-slate-950 transition-colors">
+                    <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-md">
+                            <Zap className="h-4 w-4 text-teal-400 fill-teal-400" />
+                        </div>
+                        <div>
+                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none">Profits Vault</p>
+                            <div className="flex items-baseline gap-1 mt-1">
+                                <p className="text-base font-black text-white tabular-nums">₹{stats.totalIncome.toFixed(2)}</p>
+                                <span className="text-[7px] font-bold text-teal-500 uppercase">Available</span>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Commission Vault</p>
-                        <p className="text-xl font-black text-white tabular-nums mt-0.5">₹{stats.totalIncome.toFixed(2)}</p>
+                    <div className="flex items-center gap-1.5 text-slate-500">
+                        <span className="text-[8px] font-black uppercase tracking-widest">History</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
                     </div>
-                </div>
-                <Button asChild size="icon" variant="ghost" className="h-10 w-10 rounded-xl bg-white/5 hover:bg-white/10 text-white">
-                    <Link href="/my/transactions"><ArrowRight className="h-5 w-5" /></Link>
-                </Button>
+                </Link>
             </CardContent>
         </Card>
       </main>
