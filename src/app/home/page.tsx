@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -136,7 +135,7 @@ export default function HomePage() {
         <Card className="border-none bg-white rounded-[28px] shadow-lg shadow-blue-500/5 overflow-hidden ring-1 ring-slate-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
             <CardContent className="p-0">
                 {/* 1. Dashboard Grid (2x2 Stats) */}
-                <div className="p-6 space-y-6">
+                <div className="p-6 pb-4">
                     <div className="grid grid-cols-2 gap-y-6">
                         {/* Buy Quantity */}
                         <div className="space-y-1">
@@ -171,25 +170,20 @@ export default function HomePage() {
                             <p className="text-2xl font-black text-green-600 tabular-nums">{formatValue(stats.totalIncome)}</p>
                         </div>
                     </div>
-
-                    {/* More Link */}
-                    <Link href="/order" className="flex items-center justify-center gap-1 text-slate-400 font-medium text-sm pt-2 hover:text-primary transition-colors">
-                        More <ChevronRight className="h-4 w-4" />
-                    </Link>
                 </div>
 
-                {/* 2. Large Action Buttons */}
+                {/* 2. Action Buttons - Smaller for mobile friendly layout */}
                 <div className="p-4 pt-0 grid grid-cols-2 gap-3 pb-6">
-                    <Button asChild className="h-20 btn-gradient rounded-[22px] flex flex-col items-center justify-center gap-1.5 shadow-blue-500/30 active:scale-95 transition-all">
+                    <Button asChild className="h-14 btn-gradient rounded-[18px] flex flex-col items-center justify-center gap-1 shadow-blue-500/20 active:scale-95 transition-all">
                         <Link href="/buy">
-                            <ArrowUpToLine className="h-6 w-6" />
-                            <span className="text-[12px] font-black uppercase tracking-tight">Buy</span>
+                            <ArrowUpToLine className="h-5 w-5" />
+                            <span className="text-[11px] font-black uppercase tracking-tight">Buy</span>
                         </Link>
                     </Button>
-                    <Button asChild variant="outline" className="h-20 border-2 border-emerald-100 bg-emerald-50/30 text-emerald-600 rounded-[22px] flex flex-col items-center justify-center gap-1.5 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95 transition-all">
+                    <Button asChild variant="outline" className="h-14 border-2 border-emerald-100 bg-emerald-50/30 text-emerald-600 rounded-[18px] flex flex-col items-center justify-center gap-1 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95 transition-all">
                         <Link href="/sell">
-                            <ArrowDownToLine className="h-6 w-6" />
-                            <span className="text-[12px] font-black uppercase tracking-tight">Sell</span>
+                            <ArrowDownToLine className="h-5 w-5" />
+                            <span className="text-[11px] font-black uppercase tracking-tight">Sell</span>
                         </Link>
                     </Button>
                 </div>
