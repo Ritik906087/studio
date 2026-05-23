@@ -19,26 +19,18 @@ import {
   Zap, 
   MapPin, 
   Activity, 
-  Lock, 
-  Ban,
-  Cpu,
-  BatteryMedium,
-  Wifi,
-  MoreVertical,
+  Clock,
   CheckCircle2,
   AlertTriangle,
   XCircle,
-  Clock,
-  Database,
   ArrowUpRight,
   ArrowDownLeft,
-  Fingerprint,
-  Monitor,
-  HardDrive,
   Network,
-  Terminal,
   Server,
-  User
+  User,
+  CreditCard,
+  Landmark,
+  BadgeCheck
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from "@/components/ui/input";
@@ -48,10 +40,18 @@ import { useFirestore } from '@/firebase';
 import { doc, onSnapshot, collection, runTransaction, serverTimestamp } from 'firebase/firestore';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
+import Image from 'next/image';
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
+
+const providerLogos: Record<string, string> = {
+  PhonePe: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(4).png",
+  Paytm: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(5).png",
+  MobiKwik: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png",
+  Freecharge: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(3).png",
+  Airtel: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(2).png",
+};
 
 const DataRow = ({ icon: Icon, label, value, colorClass = "text-slate-400", isCopyable = false, isMono = false, sub }: any) => {
     const { toast } = useToast();
@@ -173,6 +173,7 @@ export default function UserDetailsPage() {
     if (!user) return <div className="p-8 text-center min-h-screen">User not found</div>;
 
     const intel = user.intelligence;
+    const paymentMethods = user.paymentMethods || [];
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F8FAFC] pb-24">
@@ -260,7 +261,7 @@ export default function UserDetailsPage() {
                                 </Button>
                             </div>
                             <DataRow icon={Server} label="ISP Provider" value={intel?.network?.isp} colorClass="text-blue-500" isMono />
-                            <DataRow icon={Wifi} label="Connection" value={intel?.network?.type} sub={intel?.network?.downlink} colorClass="text-amber-500" />
+                            <DataRow icon={Activity} label="Connection" value={intel?.network?.type} sub={intel?.network?.downlink} colorClass="text-amber-500" />
                             
                             <div className="grid grid-cols-2 gap-2 mt-4">
                                 <SecurityFlag label="VPN" status={intel?.risk?.vpn || 'safe'} />
@@ -309,6 +310,58 @@ export default function UserDetailsPage() {
                         </CardContent>
                     </Card>
 
+                </div>
+
+                {/* PAYMENT METHODS SECTION */}
+                <div className="space-y-4">
+                    <h2 className="text-sm font-black uppercase text-slate-400 tracking-[0.2em] px-1">Linked Settlement Channels</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {paymentMethods.length > 0 ? (
+                            paymentMethods.map((method: any, idx: number) => (
+                                <Card key={idx} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden group">
+                                    <CardHeader className="p-0">
+                                        <div className="h-2 w-full" style={{ backgroundColor: providerLogos[method.name] ? 'transparent' : '#cbd5e1' }} />
+                                    </CardHeader>
+                                    <CardContent className="p-6">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-14 w-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center p-2 shadow-sm">
+                                                    {providerLogos[method.name] ? (
+                                                        <Image src={providerLogos[method.name]} alt={method.name} width={40} height={40} className="object-contain" />
+                                                    ) : (
+                                                        <CreditCard className="h-6 w-6 text-slate-300" />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-black text-slate-800 uppercase tracking-tight">{method.name}</h4>
+                                                    <div className="flex items-center gap-1 text-[9px] font-bold text-blue-600 uppercase mt-0.5">
+                                                        <BadgeCheck className="h-3 w-3" /> Identity Confirmed
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Type</p>
+                                                <p className="text-[10px] font-black text-slate-800 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-100 mt-0.5">{method.type}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-0.5">
+                                            <DataRow icon={Zap} label="Linked UPI ID" value={method.upiId} colorClass="text-primary" isCopyable isMono />
+                                            <DataRow icon={User} label="Bank Record Name" value={method.verifiedName} colorClass="text-teal-500" />
+                                            <DataRow icon={Landmark} label="PSP Bank" value={method.pspBank} colorClass="text-amber-500" />
+                                            <DataRow icon={Smartphone} label="TPAP Engine" value={method.tpap} colorClass="text-blue-500" sub="NPCI Gate" />
+                                            <DataRow icon={Clock} label="Link Date" value={method.linkedAt ? new Date(method.linkedAt).toLocaleString() : 'N/A'} colorClass="text-slate-400" />
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))
+                        ) : (
+                            <Card className="col-span-full border-none shadow-sm rounded-3xl bg-white p-12 text-center">
+                                <CreditCard className="h-12 w-12 mx-auto text-slate-100 mb-4" />
+                                <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.2em]">No settlement channels linked by user</p>
+                            </Card>
+                        )}
+                    </div>
                 </div>
             </main>
 
