@@ -1,11 +1,10 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { ChevronLeft, Users as UsersIcon, Wallet, UserPlus } from 'lucide-react';
+import { ChevronLeft, Users as UsersIcon, Wallet, UserPlus, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -35,17 +34,12 @@ const AgentItem = ({ agent }: { agent: UserProfile }) => {
         async function fetchData() {
             setLoading(true);
             try {
-                // Get income from transactions subcollection
-                const txQuery = query(collection(firestore, 'users', agent.id, 'transactions'));
+                const txQuery = query(collection(firestore, 'users', agent.id, 'transactions'), where('type', '==', 'team_bonus'));
                 const txSnap = await getDocs(txQuery);
                 const income = txSnap.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
                 setTotalIncome(income);
 
-                // Get completed orders count
-                const ordersQuery = query(
-                    collection(firestore, 'users', agent.id, 'orders'),
-                    where('status', '==', 'completed')
-                );
+                const ordersQuery = query(collection(firestore, 'users', agent.id, 'orders'), where('status', '==', 'completed'));
                 const ordersSnap = await getDocs(ordersQuery);
                 setTotalOrders(ordersSnap.size);
             } catch (e) {
@@ -58,47 +52,40 @@ const AgentItem = ({ agent }: { agent: UserProfile }) => {
     }, [agent.id, firestore]);
 
     return (
-        <div className="flex items-center gap-4 p-4 border-b last:border-b-0">
-            <Avatar className="h-12 w-12 border-2 border-primary/20">
-                <AvatarImage src={agent.photoURL} alt={`Avatar for UID ${agent.numericId}`} />
-                <AvatarFallback className="bg-primary/10 text-primary">
-                    <UsersIcon className="h-6 w-6" />
+        <div className="flex items-center gap-3 p-3 border-b border-slate-50 last:border-b-0 active:bg-slate-50 transition-colors">
+            <Avatar className="h-10 w-10 border border-slate-100 shadow-sm shrink-0">
+                <AvatarImage src={agent.photoURL} />
+                <AvatarFallback className="bg-slate-50 text-slate-400">
+                    <UsersIcon className="h-4 w-4" />
                 </AvatarFallback>
             </Avatar>
-            <div className="grid grid-cols-2 flex-1 text-sm gap-x-4 gap-y-1">
-                <p className="font-semibold col-span-2">UID: {agent.numericId}</p>
-                {loading ? (
-                    <>
-                        <Skeleton className="h-4 w-20" />
-                        <Skeleton className="h-4 w-16" />
-                    </>
-                ) : (
-                    <>
-                        <p className="text-muted-foreground"><span className="font-medium text-green-600">₹{totalIncome.toFixed(2)}</span> Income</p>
-                        <p className="text-muted-foreground"><span className="font-medium text-primary">{totalOrders}</span> order</p>
-                    </>
-                )}
+            <div className="flex-1 min-w-0">
+                <p className="font-black text-slate-800 text-[12px] truncate">UID: {agent.numericId}</p>
+                <div className="flex items-center gap-3 mt-0.5">
+                    {loading ? (
+                        <Skeleton className="h-3 w-20" />
+                    ) : (
+                        <>
+                            <p className="text-[10px] font-bold text-teal-600">₹{totalIncome.toFixed(1)} <span className="text-slate-400 font-medium ml-0.5">Earnings</span></p>
+                            <p className="text-[10px] font-bold text-blue-600">{totalOrders} <span className="text-slate-400 font-medium ml-0.5">Orders</span></p>
+                        </>
+                    )}
+                </div>
             </div>
-             <div className={cn("text-xs font-semibold px-2 py-1 rounded-full", "bg-gray-100 text-gray-500")}>
-                Offline
+             <div className="flex flex-col items-end gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                <span className="text-[8px] font-black text-slate-300 uppercase">Offline</span>
             </div>
         </div>
     );
 };
 
-
-const StatCard = ({ title, value, icon: Icon, colorClass }: { title: string, value: string | number, icon: React.ElementType, colorClass: string }) => (
-    <div className="flex items-center gap-3">
-        <div className={cn("p-2 rounded-full", colorClass)}>
-            <Icon className="h-5 w-5 text-white" />
-        </div>
-        <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <p className="font-bold text-lg">{value}</p>
-        </div>
+const MiniStat = ({ title, value, color }: any) => (
+    <div className="flex flex-col">
+        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
+        <p className={cn("text-sm font-black mt-0.5", color)}>{value}</p>
     </div>
 );
-
 
 export default function TeamPage() {
     const { user } = useUser();
@@ -112,96 +99,90 @@ export default function TeamPage() {
         if (!user || !firestore) {
             setLoading(false);
             return;
-        };
+        }
 
         setLoading(true);
-
-        // Fetch L1 Agents
         const l1Query = query(collection(firestore, 'users'), where('inviterUid', '==', user.uid));
         const unsubscribeL1 = onSnapshot(l1Query, async (snap) => {
             const agents = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
             setL1Agents(agents);
             
-            // Fetch L2 Agents based on L1 Agent IDs
             if (agents.length > 0) {
                 const l1Ids = agents.map(a => a.id);
-                // Chunk IDs because 'in' query has a limit of 30
                 const l2Query = query(collection(firestore, 'users'), where('inviterUid', 'in', l1Ids.slice(0, 30)));
                 const l2Snap = await getDocs(l2Query);
                 setL2Agents(l2Snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile)));
             }
             setLoading(false);
-        }, (error) => {
-            console.error("L1 Agents Listener Error:", error);
-            setLoading(false);
         });
 
-        // Fetch Total Team Income for the current user
-        const incomeQuery = query(
-            collection(firestore, 'users', user.uid, 'transactions'), 
-            where('type', '==', 'team_bonus')
-        );
+        const incomeQuery = query(collection(firestore, 'users', user.uid, 'transactions'), where('type', '==', 'team_bonus'));
         const unsubscribeIncome = onSnapshot(incomeQuery, (snap) => {
             const income = snap.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
             setSelfIncome(income);
-        }, (error) => {
-            console.error("Team Income Listener Error:", error);
         });
 
-        return () => {
-            unsubscribeL1();
-            unsubscribeIncome();
-        };
+        return () => { unsubscribeL1(); unsubscribeIncome(); };
     }, [user, firestore]);
 
-
   return (
-    <div className="flex min-h-screen flex-col bg-secondary">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-          <Link href="/my">
-            <ChevronLeft className="h-6 w-6 text-muted-foreground" />
-          </Link>
+    <div className="flex min-h-screen flex-col bg-white">
+      <header className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 border-b bg-white">
+        <Button asChild variant="ghost" size="icon" className="h-8 w-8 -ml-2">
+          <Link href="/my"><ChevronLeft className="h-5 w-5" /></Link>
         </Button>
-        <h1 className="text-xl font-bold">Team</h1>
-        <div className="w-8"></div>
+        <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Affiliate Map</h1>
       </header>
 
-      <main className="flex-grow p-4 space-y-4">
-        <Card className="bg-white">
-            <CardContent className="grid grid-cols-2 gap-y-6 p-4">
-                <StatCard title="Income" value={loading ? '...' : `₹${selfIncome.toFixed(2)}`} icon={Wallet} colorClass="bg-primary" />
-                <StatCard title="Today's income" value="₹0" icon={Wallet} colorClass="bg-accent" />
-                <StatCard title="Team size" value={loading ? '...' : (l1Agents.length + l2Agents.length)} icon={UsersIcon} colorClass="bg-green-500" />
-                <StatCard title="New members today" value="0" icon={UserPlus} colorClass="bg-orange-500" />
-            </CardContent>
-        </Card>
+      <main className="flex-grow flex flex-col">
+        <div className="p-4 bg-slate-900 text-white">
+            <div className="grid grid-cols-2 gap-y-4">
+                <MiniStat title="Net Bonus" value={loading ? '...' : `₹${selfIncome.toFixed(2)}`} color="text-teal-400" />
+                <MiniStat title="Daily Intake" value="₹0.00" color="text-white" />
+                <MiniStat title="Registry Size" value={loading ? '...' : (l1Agents.length + l2Agents.length)} color="text-blue-400" />
+                <MiniStat title="New Members" value="0" color="text-white" />
+            </div>
+            <div className="mt-4 pt-4 border-t border-white/5 flex items-center gap-2">
+                <TrendingUp className="h-3 w-3 text-teal-400" />
+                <span className="text-[9px] font-bold text-white/40 uppercase tracking-wider">Rotation volume processing active</span>
+            </div>
+        </div>
 
         <Tabs defaultValue="lv1" className="w-full">
-          <TabsList className="flex w-full bg-white rounded-lg border p-1">
-            <TabsTrigger value="lv1" className="flex-1 text-base data-[state=active]:font-bold data-[state=active]:shadow-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md bg-transparent text-muted-foreground p-2.5">Team L1</TabsTrigger>
-            <TabsTrigger value="lv2" className="flex-1 text-base data-[state=active]:font-bold data-[state=active]:shadow-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-md bg-transparent text-muted-foreground p-2.5">Team L2</TabsTrigger>
-          </TabsList>
-          <TabsContent value="lv1" className="bg-white mt-4 rounded-lg border">
+          <div className="px-4 py-3 bg-slate-50 border-b">
+              <TabsList className="flex w-full bg-slate-200/50 rounded-lg p-1 h-9">
+                <TabsTrigger value="lv1" className="flex-1 text-[10px] font-black uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md">Direct (L1)</TabsTrigger>
+                <TabsTrigger value="lv2" className="flex-1 text-[10px] font-black uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm rounded-md">Indirect (L2)</TabsTrigger>
+              </TabsList>
+          </div>
+          
+          <TabsContent value="lv1" className="bg-white m-0">
             {loading ? (
-                <div className="flex justify-center p-8"><Loader size="sm" /></div>
+                <div className="flex justify-center p-12"><Loader size="sm" /></div>
             ) : l1Agents.length > 0 ? (
-                <div>
+                <div className="divide-y divide-slate-50">
                     {l1Agents.map((agent) => <AgentItem key={agent.id} agent={agent} />)}
                 </div>
             ) : (
-                <p className="text-center text-muted-foreground p-8">No Level 1 members found.</p>
+                <div className="text-center py-20 opacity-20">
+                    <UsersIcon className="h-10 w-10 mx-auto mb-2" />
+                    <p className="text-[10px] font-black uppercase">Level 1 Empty</p>
+                </div>
             )}
           </TabsContent>
-          <TabsContent value="lv2" className="bg-white mt-4 rounded-lg border">
+
+          <TabsContent value="lv2" className="bg-white m-0">
              {loading ? (
-                <div className="flex justify-center p-8"><Loader size="sm" /></div>
-             ) : l2Agents && l2Agents.length > 0 ? (
-                <div>
+                <div className="flex justify-center p-12"><Loader size="sm" /></div>
+             ) : l2Agents.length > 0 ? (
+                <div className="divide-y divide-slate-50">
                     {l2Agents.map((agent) => <AgentItem key={agent.id} agent={agent} />)}
                 </div>
             ) : (
-                <p className="text-center text-muted-foreground p-8">No Level 2 members found.</p>
+                <div className="text-center py-20 opacity-20">
+                    <UsersIcon className="h-10 w-10 mx-auto mb-2" />
+                    <p className="text-[10px] font-black uppercase">Level 2 Empty</p>
+                </div>
             )}
           </TabsContent>
         </Tabs>
