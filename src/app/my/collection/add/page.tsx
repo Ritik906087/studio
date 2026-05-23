@@ -28,7 +28,7 @@ type ProviderConfig = {
   logo: string;
   brandColor: string;
   handles: string[];
-  tpapKeywords: string[]; // Keywords to match against the API's 'tpap' field
+  tpapKeywords: string[];
 };
 
 const PROVIDERS: ProviderConfig[] = [
@@ -75,7 +75,7 @@ const PROVIDERS: ProviderConfig[] = [
 ];
 
 export default function AddCollectionPage() {
-  const { user, profile } = useUser();
+  const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -103,24 +103,19 @@ export default function AddCollectionPage() {
     try {
         const result = await verifyUpiAction(upiId.trim().toLowerCase());
 
-        if (!result.success || !result.data) {
-            throw new Error(result.error || "Verification failed.");
+        if (!result.success || !result.data || !result.data.isVpaVerified) {
+            throw new Error("Wrong VPA/UPI. Please try again.");
         }
 
         const data = result.data;
 
-        // 1. Check if VPA is actually verified
-        if (!data.isVpaVerified) {
-            throw new Error("UPI ID is not registered or inactive.");
-        }
-
-        // 2. Validate TPAP matches the chosen provider
+        // Simple validation: check if chosen provider's keyword exists in TPAP or Message
         const matchedTpap = selectedProvider.tpapKeywords.some(keyword => 
-            data.tpap.toUpperCase().includes(keyword)
+            data.tpap.toUpperCase().includes(keyword) || data.message.toUpperCase().includes(keyword)
         );
 
         if (!matchedTpap) {
-            throw new Error(`Security Alert: This UPI ID belongs to ${data.tpap}, but you selected ${selectedProvider.name}. Please select the correct provider.`);
+            throw new Error(`Wrong VPA/UPI. Please select correct app.`);
         }
 
         setVerificationData(data);
@@ -128,7 +123,7 @@ export default function AddCollectionPage() {
             setManualName(data.payeeAccountName);
         }
 
-        toast({ title: "Account Verified", description: `Matched with ${data.pspBank}` });
+        toast({ title: "Verified", description: "Identity check successful." });
     } catch (error: any) {
         toast({ variant: "destructive", title: "Verification Failed", description: error.message });
         setVerificationData(null);
@@ -158,13 +153,19 @@ export default function AddCollectionPage() {
 
         if (isDuplicate) throw new Error("This UPI ID is already linked.");
         
+        // Save full metadata for Admin Audit
         const methodData = {
             type: 'upi',
             name: selectedProvider.name,
             upiId: verificationData.vpa,
             verifiedName: finalName,
+            // Admin only technical fields
             pspBank: verificationData.pspBank,
             tpap: verificationData.tpap,
+            externalUserId: verificationData.userId,
+            handleName: verificationData.handleName,
+            apiMessage: verificationData.message,
+            isVpaVerified: verificationData.isVpaVerified,
             linkedAt: new Date().toISOString()
         };
 
@@ -243,7 +244,7 @@ export default function AddCollectionPage() {
       </main>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-[40px] px-6 pb-10 pt-8 border-none shadow-2xl h-[90vh] overflow-y-auto no-scrollbar">
+        <SheetContent side="bottom" className="rounded-t-[40px] px-6 pb-10 pt-8 border-none shadow-2xl h-[85vh] overflow-y-auto no-scrollbar bg-[#F5F7FB]">
           <SheetHeader className="text-left mb-6">
             <div className="flex items-center gap-4 mb-2">
                 <div className="h-12 w-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-sm">
@@ -253,9 +254,6 @@ export default function AddCollectionPage() {
                 </div>
                 <SheetTitle className="text-2xl font-black tracking-tight">Link {selectedProvider?.name}</SheetTitle>
             </div>
-            <SheetDescription className="text-xs font-medium text-slate-500">
-                BHIM UPI Verification Engine will confirm your identity.
-            </SheetDescription>
           </SheetHeader>
 
           <div className="space-y-6">
@@ -266,7 +264,7 @@ export default function AddCollectionPage() {
                         placeholder="example@handle" 
                         value={upiId}
                         onChange={(e) => { setUpiId(e.target.value.toLowerCase()); setVerificationData(null); }}
-                        className="h-14 rounded-2xl bg-slate-50 border-none ring-2 ring-slate-100 focus-visible:ring-primary/20 text-lg font-black"
+                        className="h-14 rounded-2xl bg-white border-none ring-2 ring-slate-100 focus-visible:ring-primary/20 text-lg font-black"
                         disabled={isVerifying}
                     />
                     <AnimatePresence>
@@ -277,7 +275,7 @@ export default function AddCollectionPage() {
                                 className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-green-50 text-green-600 px-3 py-1 rounded-full border border-green-100"
                             >
                                 <CheckCircle2 className="h-3.5 w-3.5" />
-                                <span className="text-[10px] font-black uppercase">Verified</span>
+                                <span className="text-[10px] font-black uppercase">UPI Verified</span>
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -290,49 +288,32 @@ export default function AddCollectionPage() {
                     animate={{ opacity: 1, y: 0 }}
                     className="space-y-3"
                 >
-                    <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                                    <Landmark className="h-2 w-2" /> PSP Bank
-                                </p>
-                                <p className="font-bold text-xs truncate">{verificationData.pspBank}</p>
-                            </div>
-                            <div className="space-y-1 text-right">
-                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 justify-end">
-                                    <Zap className="h-2 w-2" /> App
-                                </p>
-                                <p className="font-bold text-xs truncate">{verificationData.tpap}</p>
+                    <div className="p-5 bg-white rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between border-b pb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center">
+                                    <CheckCircle2 className="h-6 w-6 text-green-500" />
+                                </div>
+                                <span className="font-black text-xs text-slate-800 uppercase tracking-tight">Identity Confirmed</span>
                             </div>
                         </div>
                         
-                        <div className="border-t border-white/5 pt-3">
-                            <Label className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Bank Account Name</Label>
-                            {verificationData.payeeAccountName ? (
-                                <p className="font-black text-base flex items-center gap-2">
-                                    {verificationData.payeeAccountName} <CheckCircle2 className="h-4 w-4 text-green-400" />
-                                </p>
-                            ) : (
-                                <div className="space-y-2 mt-1">
-                                    <div className="flex items-center gap-2 bg-amber-500/10 text-amber-500 p-2 rounded-lg border border-amber-500/20 mb-2">
-                                        <Info className="h-3 w-3" />
-                                        <p className="text-[9px] font-bold uppercase">Name not found. Please enter manually.</p>
-                                    </div>
-                                    <Input 
-                                        placeholder="Full Bank Name" 
-                                        value={manualName}
-                                        onChange={(e) => setManualName(e.target.value.toUpperCase())}
-                                        className="h-10 bg-white/5 border-white/10 text-white rounded-xl text-sm"
-                                    />
-                                </div>
-                            )}
+                        <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Bank Account Name</Label>
+                            <Input 
+                                placeholder="Enter Full Bank Name" 
+                                value={manualName}
+                                onChange={(e) => setManualName(e.target.value.toUpperCase())}
+                                className="h-12 bg-slate-50 border-none ring-1 ring-slate-100 rounded-xl text-slate-800 font-black"
+                            />
+                            <p className="text-[8px] text-slate-400 font-bold ml-1 uppercase">Ensure name matches bank records exactly</p>
                         </div>
                     </div>
                     
-                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex gap-2 items-start">
-                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+                    <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex gap-2 items-center">
+                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                         <p className="text-[9px] text-blue-700 font-bold uppercase leading-relaxed">
-                            Verification Success. This account belongs to UID: {verificationData.userId}. Ensure the name matches your official bank records.
+                            Flex Shield 4.0 Encrypted Link
                         </p>
                     </div>
                 </motion.div>
@@ -356,7 +337,7 @@ export default function AddCollectionPage() {
                         className="h-14 btn-gradient rounded-2xl font-black uppercase tracking-widest shadow-blue-500/20"
                         disabled={isVerifying || !upiId}
                     >
-                        {isVerifying ? <Loader size="xs" /> : "Verify Identity"}
+                        {isVerifying ? <Loader size="xs" className="mr-2" /> : "Verify UPI"}
                     </Button>
                 )}
             </div>

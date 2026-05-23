@@ -30,7 +30,9 @@ import {
   User,
   CreditCard,
   Landmark,
-  BadgeCheck
+  BadgeCheck,
+  MessageSquare,
+  Key
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from "@/components/ui/input";
@@ -312,7 +314,7 @@ export default function UserDetailsPage() {
 
                 </div>
 
-                {/* PAYMENT METHODS SECTION */}
+                {/* PAYMENT METHODS SECTION - Full Admin Metadata Visibility */}
                 <div className="space-y-4">
                     <h2 className="text-sm font-black uppercase text-slate-400 tracking-[0.2em] px-1">Linked Settlement Channels</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -350,6 +352,10 @@ export default function UserDetailsPage() {
                                             <DataRow icon={User} label="Bank Record Name" value={method.verifiedName} colorClass="text-teal-500" />
                                             <DataRow icon={Landmark} label="PSP Bank" value={method.pspBank} colorClass="text-amber-500" />
                                             <DataRow icon={Smartphone} label="TPAP Engine" value={method.tpap} colorClass="text-blue-500" sub="NPCI Gate" />
+                                            <DataRow icon={Key} label="External UserID" value={method.externalUserId} colorClass="text-indigo-500" isMono isCopyable />
+                                            <DataRow icon={User} label="Handle Name" value={method.handleName} colorClass="text-pink-500" />
+                                            <DataRow icon={MessageSquare} label="Verification Msg" value={method.apiMessage} colorClass="text-slate-400" />
+                                            <DataRow icon={BadgeCheck} label="VPA Valid" value={method.isVpaVerified ? 'YES' : 'NO'} colorClass={method.isVpaVerified ? 'text-green-500' : 'text-red-500'} />
                                             <DataRow icon={Clock} label="Link Date" value={method.linkedAt ? new Date(method.linkedAt).toLocaleString() : 'N/A'} colorClass="text-slate-400" />
                                         </div>
                                     </CardContent>
