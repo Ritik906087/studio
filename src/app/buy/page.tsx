@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Loader2, Search, ArrowRight, Wallet, BadgePercent, Coins, AlertCircle, TrendingUp } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, ArrowRight, Wallet, BadgePercent, Coins, AlertCircle, TrendingUp, Hash } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
@@ -16,14 +16,14 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
-// Updated: IDs are now unique 10-digit strings
+// Updated: Plan IDs are now 12-digit numeric strings
 const purchaseOptions = [
-  { id: '5192830410', amount: 100 },
-  { id: '9283746102', amount: 500 },
-  { id: '1092837465', amount: 1000 },
-  { id: '4758693021', amount: 2000 },
-  { id: '6655443322', amount: 5000 },
-  { id: '9988776655', amount: 10000 },
+  { id: '100029384756', amount: 100 },
+  { id: '200058372910', amount: 500 },
+  { id: '300094857261', amount: 1000 },
+  { id: '400037281940', amount: 2000 },
+  { id: '500019283746', amount: 5000 },
+  { id: '600057283910', amount: 10000 },
 ];
 
 const USDT_RATE = 108; 
@@ -63,8 +63,9 @@ export default function BuyPage() {
     });
   }, [user, firestore]);
 
+  // Updated: Raw Order ID is now 12 digits
   const generateRawOrderId = () => {
-    return Math.floor(1000000000 + Math.random() * 9000000000).toString();
+    return Math.floor(100000000000 + Math.random() * 900000000000).toString();
   };
 
   const handleP2PMatch = async (amountInInr: number, type: 'upi' | 'usdt' = 'upi', usdtValue?: number) => {
@@ -255,6 +256,7 @@ export default function BuyPage() {
                                     <Wallet className="h-6 w-6 text-primary" />
                                 </div>
                                 <div>
+                                    <p className="text-[9px] font-black text-slate-400 font-mono tracking-tighter mb-1.5">#{opt.id}</p>
                                     <p className="text-2xl font-black text-slate-800 leading-none">₹{opt.amount.toLocaleString()}</p>
                                     <div className="flex items-center gap-1.5 mt-2">
                                         <BadgePercent className="h-3 w-3 text-teal-600" />

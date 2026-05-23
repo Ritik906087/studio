@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, Suspense } from 'react';
@@ -94,7 +93,8 @@ function OrderStatusContent() {
                         <h2 className="text-2xl font-black text-slate-800 mt-4">
                             {isCompleted ? 'Order Completed' : isFailed ? 'Order Cancelled' : 'Payment Verifying'}
                         </h2>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{order.orderId}</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">
                             {isCompleted ? 'Assets credited to your wallet' : isFailed ? 'Liquidity has been returned' : 'Rotating to matched seller verification'}
                         </p>
                     </CardContent>

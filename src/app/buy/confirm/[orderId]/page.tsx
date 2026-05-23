@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
@@ -277,7 +276,7 @@ function PaymentDetailsContent() {
                         <div className="flex justify-between items-center text-xs">
                             <span className="text-slate-400 font-medium">Order ID</span>
                             <div className="flex items-center gap-1">
-                                <span className="font-mono text-slate-800">{order.orderId}</span>
+                                <span className="font-mono font-black text-slate-800">{order.orderId}</span>
                                 <Copy className="h-3 w-3 text-slate-300 cursor-pointer" onClick={() => { navigator.clipboard.writeText(order.orderId); toast({ title: 'Copied!' }); }} />
                             </div>
                         </div>
