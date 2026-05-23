@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -27,7 +26,7 @@ const purchaseOptions = [
   { id: '9988776655', amount: 10000 },
 ];
 
-const USDT_RATE = 108; // Updated rate as per request
+const USDT_RATE = 108; 
 const MIN_USDT = 5;
 
 export default function BuyPage() {
@@ -248,26 +247,23 @@ export default function BuyPage() {
                     {purchaseOptions.map((opt) => (
                         <Card 
                             key={opt.id} 
-                            className="p-3 border-none shadow-sm rounded-[24px] active:scale-[0.98] transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
+                            className="p-4 border-none shadow-sm rounded-[24px] active:scale-[0.98] transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
                             onClick={() => !isMatching && handleP2PMatch(opt.amount, 'upi')}
                         >
                             <div className="flex items-center gap-4 relative z-10">
-                                <div className="h-10 w-10 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
-                                    <Wallet className="h-5 w-5 text-primary" />
+                                <div className="h-12 w-12 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
+                                    <Wallet className="h-6 w-6 text-primary" />
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-2">
-                                         <span className="text-[9px] font-black bg-slate-900 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-sm border border-white/10">Plan: #{opt.id}</span>
-                                    </div>
-                                    <p className="text-xl font-black text-slate-800 leading-none mt-1.5">₹{opt.amount.toLocaleString()}</p>
-                                    <div className="flex items-center gap-1.5 mt-1.5">
-                                        <BadgePercent className="h-2.5 w-2.5 text-teal-600" />
-                                        <p className="text-[9px] font-black text-teal-600 uppercase tracking-tighter">Get ₹{opt.amount.toLocaleString()} + 6% + ₹5</p>
+                                    <p className="text-2xl font-black text-slate-800 leading-none">₹{opt.amount.toLocaleString()}</p>
+                                    <div className="flex items-center gap-1.5 mt-2">
+                                        <BadgePercent className="h-3 w-3 text-teal-600" />
+                                        <p className="text-[10px] font-black text-teal-600 uppercase tracking-tighter">Get ₹{opt.amount.toLocaleString()} + 6% + ₹5</p>
                                     </div>
                                 </div>
                             </div>
                             <div className="bg-primary text-white p-2 rounded-xl shadow-lg shadow-blue-500/10 group-active:translate-x-1 transition-transform">
-                                <ArrowRight className="h-3.5 w-3.5" />
+                                <ArrowRight className="h-4 w-4" />
                             </div>
                         </Card>
                     ))}
@@ -350,4 +346,3 @@ export default function BuyPage() {
     </div>
   );
 }
-
