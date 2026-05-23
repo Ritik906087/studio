@@ -24,33 +24,32 @@ type LinkedPaymentMethod = {
   verifiedName?: string;
 };
 
-const providerConfig: Record<string, { logo: string; gradient: string }> = {
+const providerConfig: Record<string, { logo: string; brandColor: string }> = {
   PhonePe: { 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(4).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDQpLnBuZyIsImlhdCI6MTc3NTE0ODYyMSwiZXhwIjoxODA2Njg0NjIxfQ.b_cMHhiCw52krGt2edtt1k5C1Keo8uGJwYIWpe6vZVo", 
-    gradient: "from-[#6739B7] to-[#512DA8]" 
+    brandColor: "#6739B7" 
   },
   Paytm: { 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(5).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDUpLnBuZyIsImlhdCI6MTc3NTE0ODYzMiwiZXhwIjoxODA2Njg0NjMyfQ.QXSbgSLV3ULTcV3ss9Co9ZMe1oj3tb9bR_OP8xY-Nds", 
-    gradient: "from-[#00BAF2] to-[#002E6E]" 
+    brandColor: "#00BAF2" 
   },
   MobiKwik: { 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(1).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDEpLnBuZyIsImlhdCI6MTc3NTE0ODU3MywiZXhwIjoxODA2Njg0NTczfQ.m8Z7gn5FV-0ss58kTEUZ833u8Wv_bFun3YZeZtyIa9s", 
-    gradient: "from-[#0057E0] to-[#002B70]" 
+    brandColor: "#0057E0" 
   },
   Freecharge: { 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(3).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDMpLnBuZyIsImlhdCI6MTc3NTE0ODYwOSwiZXhwIjoxODA2Njg0NjA5fQ.pus8pOlgEXCFb2pjIzNsVtU9DxnIxEeaVaeR3TuIQPc", 
-    gradient: "from-[#FF5E00] to-[#E64A19]" 
+    brandColor: "#FF5E00" 
   },
   Airtel: { 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(2).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDIpLnBuZyIsImlhdCI6MTc3NTE0ODU5OSwiZXhwIjoxODA2Njg0NTk5fQ.yDb5CBUsF_MCejlDIzrQVjg6IMylJbAzEmHFaozfNjE", 
-    gradient: "from-[#E11900] to-[#B71C1C]" 
+    brandColor: "#E11900" 
   },
 };
 
 export default function CollectionPage() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const { translations } = useLanguage();
   const { toast } = useToast();
   
   const [paymentMethods, setPaymentMethods] = useState<LinkedPaymentMethod[]>([]);
@@ -115,56 +114,53 @@ export default function CollectionPage() {
             <div className="space-y-4">
               <AnimatePresence>
                 {paymentMethods.map((method, idx) => {
-                    const config = providerConfig[method.name] || { logo: "", gradient: "from-slate-700 to-slate-900" };
+                    const config = providerConfig[method.name] || { logo: "", brandColor: "#1e293b" };
                     return (
                         <motion.div
                             key={idx}
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
-                            className={cn(
-                                "relative overflow-hidden rounded-[32px] p-6 text-white shadow-xl shadow-blue-500/5 group",
-                                "bg-gradient-to-br",
-                                config.gradient
-                            )}
+                            className="relative overflow-hidden rounded-[32px] p-6 bg-white border border-slate-100 shadow-xl shadow-blue-500/5 group"
+                            style={{ borderLeft: `8px solid ${config.brandColor}` }}
                         >
-                            <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-500">
+                            <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none group-hover:scale-110 transition-transform duration-500">
                                 <ShieldCheck className="h-32 w-32" />
                             </div>
                             
-                            <div className="relative z-10 flex flex-col h-full justify-between gap-8">
+                            <div className="relative z-10 flex flex-col h-full justify-between gap-6">
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center p-2.5 border border-white/20 shadow-inner">
+                                        <div className="h-12 w-12 rounded-2xl bg-white border border-slate-50 flex items-center justify-center p-2 shadow-sm">
                                             {config.logo ? (
-                                              <Image src={config.logo} alt={method.name} width={32} height={32} className="object-contain brightness-0 invert" />
+                                              <Image src={config.logo} alt={method.name} width={36} height={32} className="object-contain" />
                                             ) : (
-                                              <Wallet className="h-6 w-6" />
+                                              <Wallet className="h-6 w-6 text-slate-400" />
                                             )}
                                         </div>
                                         <div>
-                                            <h3 className="font-black text-lg tracking-tight leading-none">{method.name}</h3>
-                                            <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest mt-1">Verified Gateway</p>
+                                            <h3 className="font-black text-lg tracking-tight leading-none text-slate-800">{method.name}</h3>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Primary Settlement</p>
                                         </div>
                                     </div>
-                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(idx)} className="h-9 w-9 rounded-xl bg-white/10 hover:bg-red-500 hover:text-white transition-all text-white/70">
+                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(idx)} className="h-9 w-9 rounded-xl bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all">
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>
 
                                 <div className="space-y-1">
-                                    <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">UPI Identifier</p>
-                                    <p className="text-xl font-mono font-black tracking-tighter truncate">
+                                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">UPI Identifier</p>
+                                    <p className="text-xl font-mono font-black tracking-tighter truncate text-slate-800">
                                         {method.upiId}
                                     </p>
                                 </div>
 
-                                <div className="flex items-center justify-between border-t border-white/10 pt-4 mt-2">
+                                <div className="flex items-center justify-between border-t border-slate-50 pt-4">
                                     <div className="flex items-center gap-2">
-                                        <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/80">{method.verifiedName || 'Active Link'}</span>
+                                        <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{method.verifiedName || 'Active'}</span>
                                     </div>
-                                    <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border border-white/10">
+                                    <div className="flex items-center gap-1 bg-green-50 text-green-600 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border border-green-100">
                                         <BadgeCheck className="h-2.5 w-2.5" />
                                         Linked
                                     </div>
@@ -177,12 +173,12 @@ export default function CollectionPage() {
             </div>
         ) : (
              <div className="flex flex-col items-center justify-center pt-20 text-center px-10">
-                <div className="h-24 w-24 rounded-[32px] bg-slate-100 flex items-center justify-center mb-6">
-                    <Wallet className="h-10 w-10 text-slate-300" />
+                <div className="h-24 w-24 rounded-[32px] bg-white border border-slate-100 shadow-sm flex items-center justify-center mb-6">
+                    <Wallet className="h-10 w-10 text-slate-200" />
                 </div>
                 <h3 className="text-xl font-black text-slate-800 tracking-tight">No Accounts Found</h3>
-                <p className="text-sm text-slate-400 mt-2 font-medium">Link your UPI identifier to start receiving P2P settlements directly to your bank.</p>
-                <Button asChild className="mt-8 px-10 rounded-2xl btn-gradient h-12">
+                <p className="text-sm text-slate-400 mt-2 font-medium">Link your primary UPI to start receiving settlements directly to your bank.</p>
+                <Button asChild className="mt-8 px-10 rounded-2xl btn-gradient h-12 shadow-blue-500/20">
                     <Link href="/my/collection/add">Add First Account</Link>
                 </Button>
             </div>

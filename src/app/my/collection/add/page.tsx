@@ -26,7 +26,7 @@ type PaymentMethod = {
   id: string;
   name: string;
   logo: string;
-  gradient: string;
+  brandColor: string;
   handles: string[];
   description: string;
 };
@@ -36,7 +36,7 @@ const PROVIDERS: PaymentMethod[] = [
     id: "phonepe",
     name: "PhonePe", 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(4).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDQpLnBuZyIsImlhdCI6MTc3NTE0ODYyMSwiZXhwIjoxODA2Njg0NjIxfQ.b_cMHhiCw52krGt2edtt1k5C1Keo8uGJwYIWpe6vZVo", 
-    gradient: "from-[#6739B7] to-[#512DA8]",
+    brandColor: "#6739B7",
     handles: ["@ybl", "@ibl", "@axl"],
     description: "Link your primary PhonePe UPI"
   },
@@ -44,7 +44,7 @@ const PROVIDERS: PaymentMethod[] = [
     id: "paytm",
     name: "Paytm", 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(5).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDUpLnBuZyIsImlhdCI6MTc3NTE0ODYzMiwiZXhwIjoxODA2Njg0NjMyfQ.QXSbgSLV3ULTcV3ss9Co9ZMe1oj3tb9bR_OP8xY-Nds", 
-    gradient: "from-[#00BAF2] to-[#002E6E]",
+    brandColor: "#00BAF2",
     handles: ["@paytm", "@ptyes"],
     description: "Instant settlement via Paytm Wallet"
   },
@@ -52,7 +52,7 @@ const PROVIDERS: PaymentMethod[] = [
     id: "mobikwik",
     name: "MobiKwik", 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(1).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDEpLnBuZyIsImlhdCI6MTc3NTE0ODU3MywiZXhwIjoxODA2Njg0NTczfQ.m8Z7gn5FV-0ss58kTEUZ833u8Wv_bFun3YZeZtyIa9s", 
-    gradient: "from-[#0057E0] to-[#002B70]",
+    brandColor: "#0057E0",
     handles: ["@ikwik", "@mbkns"],
     description: "Secure payments with MobiKwik"
   },
@@ -60,7 +60,7 @@ const PROVIDERS: PaymentMethod[] = [
     id: "freecharge",
     name: "Freecharge", 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(3).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDMpLnBuZyIsImlhdCI6MTc3NTE0ODYwOSwiZXhwIjoxODA2Njg0NjA5fQ.pus8pOlgEXCFb2pjIzNsVtU9DxnIxEeaVaeR3TuIQPc", 
-    gradient: "from-[#FF5E00] to-[#E64A19]",
+    brandColor: "#FF5E00",
     handles: ["@freecharge"],
     description: "Fast UPI link for Freecharge users"
   },
@@ -68,7 +68,7 @@ const PROVIDERS: PaymentMethod[] = [
     id: "airtel",
     name: "Airtel", 
     logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(2).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDIpLnBuZyIsImlhdCI6MTc3NTE0ODU5OSwiZXhwIjoxODA2Njg0NTk5fQ.yDb5CBUsF_MCejlDIzrQVjg6IMylJbAzEmHFaozfNjE", 
-    gradient: "from-[#E11900] to-[#B71C1C]",
+    brandColor: "#E11900",
     handles: ["@airtel"],
     description: "Link Airtel Payments Bank UPI"
   },
@@ -117,12 +117,11 @@ export default function AddCollectionPage() {
     }
 
     setIsVerifying(true);
-    // Simulate real bank verification delay
     setTimeout(() => {
         setVerifiedName(profile?.displayName || "Verified Account User");
         setIsVerifying(false);
         toast({ title: "UPI Verified", description: "Bank account details fetched successfully." });
-    }, 2000);
+    }, 1800);
   };
 
   const handleSave = async () => {
@@ -161,55 +160,45 @@ export default function AddCollectionPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F5F7FB]">
-      {/* HEADER */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b px-4 py-6">
         <div className="flex items-center gap-4">
             <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-slate-100">
                 <Link href="/my/collection"><ChevronLeft className="h-6 w-6 text-slate-800" /></Link>
             </Button>
             <div className="flex flex-col">
-                <h1 className="text-xl font-black text-slate-900 tracking-tight">Add Payment Method</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Link your receiving UPI securely</p>
+                <h1 className="text-xl font-black text-slate-900 tracking-tight">Link Payment</h1>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select your UPI provider</p>
             </div>
         </div>
       </header>
 
       <main className="p-4 space-y-4 pb-32">
-        <div className="bg-blue-600 rounded-3xl p-5 text-white shadow-xl shadow-blue-500/20 relative overflow-hidden mb-6">
-            <div className="absolute top-0 right-0 p-4 opacity-10"><ShieldCheck className="h-24 w-24" /></div>
-            <div className="relative z-10">
-                <h2 className="text-lg font-black">Secure Link</h2>
-                <p className="text-xs opacity-80 mt-1 max-w-[200px]">Link your UPI once to receive instant P2P settlements directly into your bank.</p>
-            </div>
-        </div>
-
         <div className="space-y-4">
             {PROVIDERS.map((provider, index) => (
                 <motion.div
                     key={provider.id}
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
+                    transition={{ delay: index * 0.05 }}
                 >
                     <div 
                         className={cn(
-                            "relative overflow-hidden rounded-[28px] border-none shadow-sm cursor-pointer active:scale-[0.98] transition-all",
-                            "bg-white hover:shadow-md"
+                            "relative overflow-hidden rounded-[28px] border bg-white shadow-sm cursor-pointer active:scale-[0.98] transition-all",
+                            "hover:shadow-md hover:border-slate-200"
                         )}
                         onClick={() => handleProviderClick(provider)}
                     >
-                        <div className={cn("absolute inset-y-0 left-0 w-2 bg-gradient-to-b", provider.gradient)} />
-                        <div className="p-5 flex items-center justify-between">
+                        <div className="p-4 flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                                <div className={cn("h-14 w-14 rounded-2xl bg-gradient-to-br flex items-center justify-center p-2 shadow-inner", provider.gradient)}>
+                                <div className="h-14 w-14 rounded-2xl bg-white border border-slate-50 flex items-center justify-center p-2 shadow-sm">
                                     {provider.logo && (
-                                      <Image src={provider.logo} alt={provider.name} width={40} height={40} className="object-contain brightness-0 invert" />
+                                      <Image src={provider.logo} alt={provider.name} width={42} height={42} className="object-contain" />
                                     )}
                                 </div>
                                 <div>
                                     <h3 className="font-black text-slate-800">{provider.name}</h3>
-                                    <div className="flex gap-1.5 mt-1.5">
-                                        {provider.handles.map(h => (
+                                    <div className="flex gap-1 mt-1">
+                                        {provider.handles.slice(0, 2).map(h => (
                                             <span key={h} className="text-[8px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full border uppercase">{h}</span>
                                         ))}
                                     </div>
@@ -226,8 +215,9 @@ export default function AddCollectionPage() {
             ))}
         </div>
 
-        <div className="p-6 text-center">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Verified by Flex Shield 4.0</p>
+        <div className="p-10 text-center opacity-40 grayscale pointer-events-none">
+            <ShieldCheck className="h-10 w-10 mx-auto mb-2" />
+            <p className="text-[9px] font-bold uppercase tracking-[0.3em]">Flex Shield 4.0 Encrypted</p>
         </div>
       </main>
 
@@ -235,31 +225,24 @@ export default function AddCollectionPage() {
         <SheetContent side="bottom" className="rounded-t-[40px] px-6 pb-10 pt-8 border-none shadow-2xl">
           <SheetHeader className="text-left mb-6">
             <div className="flex items-center gap-4 mb-2">
-                <div className={cn("h-12 w-12 rounded-2xl bg-gradient-to-br flex items-center justify-center p-2.5", selectedProvider?.gradient)}>
+                <div className="h-12 w-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-sm">
                     {selectedProvider?.logo && (
-                      <Image src={selectedProvider.logo} alt="logo" width={32} height={32} className="object-contain brightness-0 invert" />
+                      <Image src={selectedProvider.logo} alt="logo" width={32} height={32} className="object-contain" />
                     )}
                 </div>
                 <SheetTitle className="text-2xl font-black tracking-tight">Link {selectedProvider?.name}</SheetTitle>
             </div>
             <SheetDescription className="text-xs font-medium text-slate-500">
-                Link your {selectedProvider?.name} UPI to receive payments instantly.
+                Link your verified UPI ID for instant P2P withdrawals.
             </SheetDescription>
           </SheetHeader>
 
           <div className="space-y-6">
             <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Registered Mobile</Label>
-                <div className="h-14 w-full bg-slate-50 rounded-2xl border-none ring-1 ring-slate-100 flex items-center px-4 font-black text-slate-800 tabular-nums">
-                    +91 {profile?.phoneNumber || "XXXXXXXXXX"}
-                </div>
-            </div>
-
-            <div className="space-y-2">
                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Enter UPI ID</Label>
                 <div className="relative">
                     <Input 
-                        placeholder="yourname@handle" 
+                        placeholder="example@handle" 
                         value={upiId}
                         onChange={(e) => { setUpiId(e.target.value.toLowerCase()); setVerifiedName(null); }}
                         className="h-14 rounded-2xl bg-white border-none ring-2 ring-slate-100 focus-visible:ring-primary/20 text-lg font-black"
@@ -279,7 +262,7 @@ export default function AddCollectionPage() {
                 </div>
                 {!verifiedName && upiId && (
                     <p className="text-[10px] font-bold text-slate-400 mt-1 ml-1 uppercase">
-                        Supported handles: {selectedProvider?.handles.join(", ")}
+                        Supported: {selectedProvider?.handles.join(", ")}
                     </p>
                 )}
             </div>
@@ -291,7 +274,7 @@ export default function AddCollectionPage() {
                     className="p-4 bg-slate-900 rounded-2xl text-white flex items-center justify-between"
                 >
                     <div className="space-y-0.5">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Receiver Name</p>
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Full Name</p>
                         <p className="font-black text-base">{verifiedName} ✓</p>
                     </div>
                     <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
@@ -310,7 +293,7 @@ export default function AddCollectionPage() {
                         className="h-14 btn-gradient rounded-2xl font-black uppercase tracking-widest shadow-blue-500/20"
                         disabled={isSaving}
                     >
-                        {isSaving ? <Loader size="xs" /> : "Save Account"}
+                        {isSaving ? <Loader size="xs" /> : "Link Now"}
                     </Button>
                 ) : (
                     <Button 
@@ -318,7 +301,7 @@ export default function AddCollectionPage() {
                         className="h-14 btn-gradient rounded-2xl font-black uppercase tracking-widest shadow-blue-500/20"
                         disabled={isVerifying || !upiId}
                     >
-                        {isVerifying ? <Loader size="xs" /> : "Verify UPI"}
+                        {isVerifying ? <Loader size="xs" /> : "Verify Identity"}
                     </Button>
                 )}
             </div>
