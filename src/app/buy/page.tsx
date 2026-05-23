@@ -5,7 +5,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Loader2, Search, Shield, ArrowRight, Wallet, BadgePercent, Coins, AlertCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ChevronLeft, Loader2, Search, ArrowRight, Wallet, BadgePercent, Coins, AlertCircle, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
@@ -15,35 +17,31 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
+// Updated: IDs are now unique 10-digit strings
 const purchaseOptions = [
-  { id: '101', amount: 100 },
-  { id: '102', amount: 500 },
-  { id: '103', amount: 1000 },
-  { id: '104', amount: 2000 },
-  { id: '105', amount: 5000 },
-  { id: '106', amount: 10000 },
+  { id: '5192830410', amount: 100 },
+  { id: '9283746102', amount: 500 },
+  { id: '1092837465', amount: 1000 },
+  { id: '4758693021', amount: 2000 },
+  { id: '6655443322', amount: 5000 },
+  { id: '9988776655', amount: 10000 },
 ];
 
-const usdtOptions = [
-  { id: 'U5', usdt: 5 },
-  { id: 'U10', usdt: 10 },
-  { id: 'U20', usdt: 20 },
-  { id: 'U50', usdt: 50 },
-  { id: 'U100', usdt: 100 },
-  { id: 'U200', usdt: 200 },
-];
-
-const USDT_RATE = 110;
+const USDT_RATE = 108; // Updated rate as per request
+const MIN_USDT = 5;
 
 export default function BuyPage() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, profile } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
 
   const [isMatching, setIsMatching] = useState(false);
   const [inProgressOrder, setInProgressOrder] = useState<any>(null);
   const [usdtAddress, setUsdtAddress] = useState<string | null>(null);
+  
+  // USDT Calculator State
+  const [usdtInput, setUsdtInput] = useState<string>('5');
 
   useEffect(() => {
     if (!user || !firestore) return;
@@ -98,6 +96,7 @@ export default function BuyPage() {
 
         if (type === 'usdt') {
             if (!usdtAddress) throw new Error("USDT Payment Server is offline.");
+            if (!usdtValue || usdtValue < MIN_USDT) throw new Error(`Minimum deposit is ${MIN_USDT} USDT`);
             
             await runTransaction(firestore, async (transaction) => {
                 transaction.set(buyOrderRef, {
@@ -125,6 +124,7 @@ export default function BuyPage() {
             return;
         }
 
+        // --- UPI Matching Logic ---
         const sellOrdersQuery = query(
             collection(firestore, 'sellOrders'),
             where('status', 'in', ['pending', 'partially_filled']),
@@ -227,60 +227,16 @@ export default function BuyPage() {
     }
   };
 
-  const RenderOptionList = ({ type }: { type: 'upi' | 'usdt' }) => (
-    <div className="flex flex-col gap-3 pb-24">
-        {(type === 'upi' ? purchaseOptions : usdtOptions).map((opt: any) => {
-            const displayAmt = type === 'upi' ? opt.amount : opt.usdt;
-            const inrEq = type === 'usdt' ? opt.usdt * USDT_RATE : opt.amount;
-            return (
-                <Card 
-                    key={opt.id} 
-                    className="p-3 border-none shadow-sm rounded-[24px] active:scale-[0.98] transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
-                    onClick={() => !isMatching && handleP2PMatch(inrEq, type, opt.usdt)}
-                >
-                    <div className="flex items-center gap-4 relative z-10">
-                        <div className="h-10 w-10 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
-                            {type === 'upi' ? <Wallet className="h-5 w-5 text-primary" /> : <Coins className="h-5 w-5 text-amber-500" />}
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                 <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">Plan: {opt.id}</span>
-                                 {type === 'usdt' && <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest">Rate: ₹{USDT_RATE}/$</p>}
-                            </div>
-                            <p className="text-lg font-black text-slate-800 leading-none mt-1">{type === 'upi' ? '₹' : '$'}{displayAmt.toLocaleString()}</p>
-                            <div className="flex items-center gap-1.5 mt-1">
-                                <BadgePercent className="h-2.5 w-2.5 text-teal-600" />
-                                <p className="text-[9px] font-black text-teal-600 uppercase tracking-tighter">Get ₹{inrEq.toLocaleString()} + Bonus</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-primary text-white p-2 rounded-xl shadow-lg shadow-blue-500/10">
-                        <ArrowRight className="h-3.5 w-3.5" />
-                    </div>
-                </Card>
-            );
-        })}
-    </div>
-  );
-
   return (
     <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
       <header className="flex items-center gap-3 p-4 bg-white sticky top-0 z-[60] border-b shadow-sm">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
           <Link href="/home"><ChevronLeft className="h-5 w-5" /></Link>
         </Button>
-        <h1 className="text-lg font-black text-slate-800">Buy Center</h1>
+        <h1 className="text-lg font-black text-slate-800 uppercase tracking-tight">Buy Center</h1>
       </header>
 
       <main className="p-3 space-y-4">
-        <div className="bg-red-50 border border-red-100 p-3 rounded-2xl flex gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
-            <div className="space-y-1">
-                <p className="text-[10px] text-red-800 font-black leading-tight uppercase tracking-tight">CRITICAL: USE TRC20 NETWORK ONLY FOR USDT.</p>
-                <p className="text-[9px] text-red-600 font-bold uppercase leading-tight">Do not send incorrect amounts. Assets sent to wrong network/amount are non-recoverable.</p>
-            </div>
-        </div>
-
         <Tabs defaultValue="upi" className="w-full">
             <TabsList className="grid grid-cols-2 bg-slate-200/50 p-1 rounded-2xl h-12 mb-4">
                 <TabsTrigger value="upi" className="rounded-xl font-black text-[11px] uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">UPI Portal</TabsTrigger>
@@ -288,17 +244,97 @@ export default function BuyPage() {
             </TabsList>
 
             <TabsContent value="upi">
-                <RenderOptionList type="upi" />
+                <div className="flex flex-col gap-3 pb-24">
+                    {purchaseOptions.map((opt) => (
+                        <Card 
+                            key={opt.id} 
+                            className="p-3 border-none shadow-sm rounded-[24px] active:scale-[0.98] transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
+                            onClick={() => !isMatching && handleP2PMatch(opt.amount, 'upi')}
+                        >
+                            <div className="flex items-center gap-4 relative z-10">
+                                <div className="h-10 w-10 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
+                                    <Wallet className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                         <span className="text-[9px] font-black bg-slate-900 text-white px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-sm border border-white/10">Plan: #{opt.id}</span>
+                                    </div>
+                                    <p className="text-xl font-black text-slate-800 leading-none mt-1.5">₹{opt.amount.toLocaleString()}</p>
+                                    <div className="flex items-center gap-1.5 mt-1.5">
+                                        <BadgePercent className="h-2.5 w-2.5 text-teal-600" />
+                                        <p className="text-[9px] font-black text-teal-600 uppercase tracking-tighter">Get ₹{opt.amount.toLocaleString()} + 6% + ₹5</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-primary text-white p-2 rounded-xl shadow-lg shadow-blue-500/10 group-active:translate-x-1 transition-transform">
+                                <ArrowRight className="h-3.5 w-3.5" />
+                            </div>
+                        </Card>
+                    ))}
+                </div>
             </TabsContent>
 
-            <TabsContent value="usdt">
-                 <RenderOptionList type="usdt" />
+            <TabsContent value="usdt" className="space-y-4 animate-in fade-in duration-300">
+                <Card className="border-none bg-white rounded-[32px] shadow-lg ring-1 ring-slate-100 overflow-hidden">
+                    <CardContent className="p-6 space-y-6">
+                        <div className="text-center space-y-1">
+                            <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">USDT Calculator</h2>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rate: ₹{USDT_RATE}/USDT (TRC20)</p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">USDT Amount</Label>
+                                <div className="relative">
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500 font-black">$</div>
+                                    <Input 
+                                        type="number"
+                                        placeholder="Min 5 USDT"
+                                        value={usdtInput}
+                                        onChange={(e) => setUsdtInput(e.target.value)}
+                                        className="h-14 pl-8 bg-slate-50 border-none ring-2 ring-slate-100 rounded-2xl text-lg font-black focus-visible:ring-primary/20"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="p-4 bg-primary text-white rounded-2xl flex items-center justify-between shadow-xl shadow-blue-500/10">
+                                <div className="space-y-0.5">
+                                    <p className="text-[9px] font-black uppercase opacity-60">You Receive</p>
+                                    <p className="text-2xl font-black tracking-tighter">₹{(Number(usdtInput) * USDT_RATE).toLocaleString()}</p>
+                                </div>
+                                <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
+                                    <TrendingUp className="h-5 w-5 text-white" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex gap-3">
+                            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                            <div className="space-y-1">
+                                <p className="text-[10px] text-red-800 font-black leading-tight uppercase tracking-tight">CRITICAL WARNING</p>
+                                <p className="text-[9px] text-red-600 font-bold uppercase leading-relaxed">
+                                    USE TRC20 NETWORK ONLY. DEPOSITS TO WRONG NETWORK OR INCORRECT AMOUNTS WILL BE LOST PERMANENTLY.
+                                </p>
+                            </div>
+                        </div>
+
+                        <Button 
+                            onClick={() => handleP2PMatch(Number(usdtInput) * USDT_RATE, 'usdt', Number(usdtInput))}
+                            className="w-full h-14 btn-gradient rounded-[20px] font-black text-sm shadow-teal-500/20"
+                            disabled={isMatching || Number(usdtInput) < MIN_USDT}
+                        >
+                            {isMatching ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : "DEPOSIT USDT"}
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                <p className="text-center text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] py-4">Secured by Flex Shield 4.0</p>
             </TabsContent>
         </Tabs>
 
         {isMatching && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[100] flex items-center justify-center p-6 text-center">
-                 <Card className="w-full max-w-xs animate-in zoom-in-95 duration-200 p-10 rounded-[40px] border-none shadow-2xl">
+                 <Card className="w-full max-w-xs animate-in zoom-in-95 duration-200 p-10 rounded-[40px] border-none shadow-2xl bg-white">
                      <div className="relative w-20 h-20 mx-auto mb-6">
                         <Loader2 className="w-20 h-20 text-primary animate-spin" />
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -314,3 +350,4 @@ export default function BuyPage() {
     </div>
   );
 }
+
