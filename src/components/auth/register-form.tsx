@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, User } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/context/language-context";
@@ -22,14 +22,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useFirestore } from "@/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs, limit, serverTimestamp } from "firebase/firestore";
-import { Turnstile } from "./turnstile";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
 export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const { toast } = useToast();
   const { translations } = useLanguage();
   const router = useRouter();
@@ -55,50 +53,21 @@ export function RegisterForm() {
     defaultValues: { fullName: "", phone: "", password: "", confirmPassword: "", invitationCode: invitationCodeFromUrl, agreement: false },
   });
 
-  // Memoize Turnstile callbacks to prevent widget reset on re-render
-  const handleTurnstileVerify = useCallback((token: string) => {
-    setTurnstileToken(token);
-  }, []);
-
-  const handleTurnstileExpire = useCallback(() => {
-    setTurnstileToken(null);
-  }, []);
-
-  const handleTurnstileError = useCallback(() => {
-    setTurnstileToken(null);
-  }, []);
-
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
-    if (!turnstileToken) {
-      toast({ variant: "destructive", title: "Verification Required", description: "Please complete human verification." });
-      return;
-    }
     if (!auth || !firestore) {
       toast({ variant: "destructive", title: "Error", description: "Firebase is not ready." });
       return;
     }
     setIsLoading(true);
     try {
-        // 1. Verify Turnstile Token with Backend
-        const verifyRes = await fetch('/api/verify-turnstile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: turnstileToken }),
-        });
-
-        const verifyData = await verifyRes.json();
-        if (!verifyData.success) {
-          throw new Error("Human verification failed. Please refresh and try again.");
-        }
-
         const email = `91${values.phone}@lgpay.app`;
         
-        // 2. Check if phone already registered
+        // 1. Check if phone already registered
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
         if (!phoneCheckSnap.empty) throw new Error("This phone number is already registered.");
 
-        // 3. Handle invitation code
+        // 2. Handle invitation code
         let inviterUid = null;
         if (values.invitationCode) {
             const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
@@ -106,11 +75,11 @@ export function RegisterForm() {
             if (!inviterSnap.empty) inviterUid = inviterSnap.docs[0].id;
         }
 
-        // 4. Create Firebase Auth User
+        // 3. Create Firebase Auth User
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
 
-        // 5. Create Profile
+        // 4. Create Profile
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
         await setDoc(doc(firestore, 'users', user.uid), {
@@ -216,12 +185,6 @@ export function RegisterForm() {
           )}
         />
 
-        <Turnstile 
-          onVerify={handleTurnstileVerify} 
-          onExpire={handleTurnstileExpire}
-          onError={handleTurnstileError}
-        />
-
         <div className="flex items-center space-x-2 py-2">
           <Checkbox id="agreement" onCheckedChange={(checked) => form.setValue("agreement", checked === true)} checked={form.watch("agreement")} />
           <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium">
@@ -229,7 +192,7 @@ export function RegisterForm() {
           </label>
         </div>
 
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1" disabled={isLoading || !turnstileToken}>
+        <Button type="submit" className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1" disabled={isLoading}>
             {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
             {isLoading ? "CREATING..." : "REGISTER"}
         </Button>

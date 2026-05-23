@@ -13,21 +13,19 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Loader2, Smartphone, LockKeyhole, Eye, EyeOff } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import Link from 'next/link';
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { Turnstile } from "./turnstile";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const { translations } = useLanguage();
   const { toast } = useToast();
   const router = useRouter();
@@ -43,24 +41,7 @@ export function LoginForm() {
     defaultValues: { phone: "", password: "" },
   });
 
-  // Memoize Turnstile callbacks to prevent widget reset on re-render
-  const handleTurnstileVerify = useCallback((token: string) => {
-    setTurnstileToken(token);
-  }, []);
-
-  const handleTurnstileExpire = useCallback(() => {
-    setTurnstileToken(null);
-  }, []);
-
-  const handleTurnstileError = useCallback(() => {
-    setTurnstileToken(null);
-  }, []);
-
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!turnstileToken) {
-      toast({ variant: "destructive", title: "Verification Required", description: "Please complete the human verification." });
-      return;
-    }
     if (ADMIN_PHONES.includes(values.phone)) {
       toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
       return;
@@ -69,19 +50,7 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      // 1. Verify Turnstile Token with Backend
-      const verifyRes = await fetch('/api/verify-turnstile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: turnstileToken }),
-      });
-
-      const verifyData = await verifyRes.json();
-      if (!verifyData.success) {
-        throw new Error("Human verification failed. Please try again.");
-      }
-
-      // 2. Proceed with Login
+      // Proceed with Login directly
       const email = `91${values.phone}@lgpay.app`;
       await signInWithEmailAndPassword(auth, email, values.password);
       
@@ -156,14 +125,8 @@ export function LoginForm() {
             </FormItem>
           )}
         />
-
-        <Turnstile 
-          onVerify={handleTurnstileVerify} 
-          onExpire={handleTurnstileExpire}
-          onError={handleTurnstileError}
-        />
         
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading || !turnstileToken}>
+        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading}>
           {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : translations.login}
         </Button>
       </form>
