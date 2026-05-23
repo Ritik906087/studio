@@ -1,10 +1,11 @@
+
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ChevronLeft, PlaySquare, CircleDollarSign, ShieldCheck, Trophy, Sparkles } from 'lucide-react';
+import { ChevronLeft, PlaySquare, CircleDollarSign, Trophy, Sparkles, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -23,23 +24,11 @@ const TelegramIcon = () => (
 );
 
 const MK_LOGO = "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png";
-const FC_LOGO = "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(3).png";
-
-const MobiKwikFreechargeIcon = () => (
-    <div className="flex items-center -space-x-2.5">
-        <div className="h-6 w-6 rounded-lg bg-white border border-slate-100 p-1 z-10 shadow-sm flex items-center justify-center overflow-hidden">
-            {MK_LOGO && <Image src={MK_LOGO} alt="MK" width={16} height={16} className="object-contain" />}
-        </div>
-        <div className="h-6 w-6 rounded-lg bg-white border border-slate-100 p-1 z-0 shadow-sm flex items-center justify-center overflow-hidden">
-            {FC_LOGO && <Image src={FC_LOGO} alt="FC" width={16} height={16} className="object-contain" />}
-        </div>
-    </div>
-);
 
 const newbieTasksList = [
     { id: 'nb_telegram', title: 'Official Channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/+-W0tnyDk3jBiYjQ1" },
     { id: 'nb_tutorial', title: 'Beginner Guide', icon: <PlaySquare className="h-5 w-5 text-blue-500" />, action: "go", href: "/my/tutorial" },
-    { id: 'nb_upi', title: 'Link MobiKwik / Freecharge', icon: <MobiKwikFreechargeIcon />, action: "go", href: "/my/collection/add" },
+    { id: 'nb_upi', title: 'Link MobiKwik Wallet', icon: <div className="h-6 w-6 rounded-lg bg-white p-0.5 shadow-sm border border-slate-50 flex items-center justify-center overflow-hidden">{MK_LOGO && <Image src={MK_LOGO} alt="MK" width={22} height={22} />}</div>, action: "go", href: "/my/collection/add" },
     { id: 'nb_purchase', title: 'Asset Milestone', icon: <CircleDollarSign className="h-5 w-5 text-orange-500" />, action: 'go', href: '/buy', goal: 1000 },
 ];
 
@@ -63,7 +52,7 @@ export default function NewbieRewardsPage() {
         const status: Record<string, boolean> = {};
         const progress: Record<string, number> = {};
 
-        const isUpiLinked = profile.paymentMethods?.length > 0;
+        const isUpiLinked = (profile.paymentMethods || []).length > 0;
         if (isUpiLinked && !claimed.has('nb_upi')) {
             updateDoc(doc(firestore, 'users', user.uid), { claimedUserRewards: arrayUnion('nb_upi') }).catch(() => {});
         }
@@ -133,17 +122,17 @@ export default function NewbieRewardsPage() {
     const isFinalRewardClaimed = taskStatus[FINAL_REWARD_ID];
 
     return (
-        <div className="flex min-h-screen flex-col bg-[#F5F7FB]">
-          <header className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 bg-white border-b">
+        <div className="flex flex-col h-screen bg-[#F5F7FB] overflow-hidden">
+          <header className="shrink-0 flex items-center gap-2 px-4 py-3 bg-white border-b">
             <Button asChild variant="ghost" size="icon" className="h-8 w-8 -ml-2">
               <Link href="/my"><ChevronLeft className="h-5 w-5" /></Link>
             </Button>
             <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Mission Center</h1>
           </header>
 
-          <main className="p-3 space-y-4">
+          <main className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-4">
             <Card className="border-none bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-[24px] shadow-lg overflow-hidden relative">
-                <div className="absolute top-0 right-0 p-4 opacity-10"><Trophy className="h-24 w-24" /></div>
+                <div className="absolute top-0 right-0 p-4 opacity-10"><Trophy className="h-20 w-20" /></div>
                 <CardContent className="p-5 flex justify-between items-center relative z-10">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-blue-100">Starter Bonus</p>
@@ -153,7 +142,7 @@ export default function NewbieRewardsPage() {
                         isFinalRewardClaimed ? (
                             <div className="bg-white/10 px-3 py-1.5 rounded-lg font-black text-[10px] uppercase border border-white/20">Received</div>
                         ) : (
-                            <Button onClick={handleFinalClaim} disabled={isClaimingFinal} className="bg-white text-blue-600 hover:bg-white/90 font-black text-[10px] uppercase h-8 px-4 rounded-lg animate-pulse shadow-lg">Claim Bonus</Button>
+                            <Button onClick={handleFinalClaim} disabled={isClaimingFinal} className="bg-white text-blue-600 hover:bg-white/90 font-black text-[10px] uppercase h-8 px-4 rounded-lg animate-pulse shadow-lg">Claim Now</Button>
                         )
                     ) : (
                         <div className="bg-black/20 text-white/60 font-black text-[9px] px-3 py-1.5 rounded-lg border border-white/5 uppercase tracking-wider">Locked</div>
@@ -166,7 +155,7 @@ export default function NewbieRewardsPage() {
                 {newbieTasksList.map(task => {
                     const isDone = taskStatus[task.id];
                     return (
-                        <div key={task.id} className="flex items-center justify-between p-3 bg-white rounded-[20px] shadow-sm ring-1 ring-slate-100">
+                        <div key={task.id} className="flex items-center justify-between p-3 bg-white rounded-[20px] shadow-sm ring-1 ring-slate-100/50">
                             <div className="flex items-center gap-3">
                                 <div className="h-9 w-9 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100 overflow-hidden">
                                     {task.icon}
@@ -196,7 +185,7 @@ export default function NewbieRewardsPage() {
 
             <div className="p-4 bg-orange-50 rounded-[20px] border border-orange-100 flex gap-3">
                 <Sparkles className="h-4 w-4 text-orange-500 shrink-0 mt-0.5" />
-                <p className="text-[9px] font-bold text-orange-800 uppercase leading-relaxed tracking-tight">Complete all 4 missions to unlock the starter liquidity bonus. Verification is instant.</p>
+                <p className="text-[9px] font-bold text-orange-800 uppercase leading-relaxed tracking-tight">Complete training to unlock bonuses. Verification is automatic.</p>
             </div>
           </main>
         </div>
