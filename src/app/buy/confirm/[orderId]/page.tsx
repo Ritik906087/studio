@@ -22,6 +22,7 @@ import { useFirestore, useDoc, useStorage } from '@/firebase';
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Loader } from '@/components/ui/loader';
+import { cn } from '@/lib/utils';
 
 type Order = {
     id: string;
@@ -417,7 +418,7 @@ function PaymentDetailsContent() {
                             <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Reason for Cancellation</Label>
                             <RadioGroup value={selectedReason} onValueChange={setSelectedReason} className="space-y-2">
                                 {CANCELLATION_REASONS.map((reason) => (
-                                    <div key={reason} className="flex items-center space-x-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100 active:scale-[0.98] transition-all">
+                                    <div key={reason} className={cn("flex items-center space-x-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100 active:scale-[0.98] transition-all")}>
                                         <RadioGroupItem value={reason} id={reason} />
                                         <Label htmlFor={reason} className="flex-1 font-bold text-slate-600 text-sm">{reason}</Label>
                                     </div>
