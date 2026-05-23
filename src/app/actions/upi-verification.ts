@@ -4,9 +4,6 @@
  * @fileOverview UPI Verification Service using bhimupijs
  */
 
-// @ts-ignore
-import bhim from 'bhimupijs';
-
 export type UpiVerificationResult = {
   isVpaVerified: boolean;
   vpa: string;
@@ -20,7 +17,7 @@ export type UpiVerificationResult = {
 
 /**
  * Verifies a UPI VPA using the bhimupijs library.
- * Runs on the server to handle the library's core dependencies.
+ * This runs on the server to handle the CJS module discovery.
  */
 export async function verifyUpiAction(vpa: string): Promise<{ success: boolean; data?: UpiVerificationResult; error?: string }> {
   try {
@@ -28,11 +25,25 @@ export async function verifyUpiAction(vpa: string): Promise<{ success: boolean; 
         return { success: false, error: "Please enter a valid UPI ID (e.g. name@handle)" };
     }
 
-    // Fixed: Handle bhimupijs export structure correctly
-    // Depending on version, it might be a default or named export
-    const verifyFn = typeof bhim === 'function' ? bhim : (bhim.verifyUPI || (bhim.default && bhim.default.verifyUPI));
+    // Robust discovery of the verification function
+    // bhimupijs has varying export patterns depending on bundling
+    let bhim;
+    try {
+        bhim = require('bhimupijs');
+    } catch (e) {
+        const mod = await import('bhimupijs');
+        bhim = mod.default || mod;
+    }
+
+    // Comprehensive search for the actual function
+    const verifyFn = 
+        (typeof bhim === 'function' ? bhim : null) || 
+        bhim.verifyUPI || 
+        (bhim.default && bhim.default.verifyUPI) ||
+        (bhim.default && typeof bhim.default === 'function' ? bhim.default : null);
     
     if (typeof verifyFn !== 'function') {
+        console.error("Module structure keys:", Object.keys(bhim));
         throw new Error("Verification engine initialization failed. Engine method not found.");
     }
 
@@ -45,7 +56,7 @@ export async function verifyUpiAction(vpa: string): Promise<{ success: boolean; 
     return { 
         success: true, 
         data: {
-            isVpaVerified: result.isVpaVerified || false,
+            isVpaVerified: !!result.isVpaVerified,
             vpa: result.vpa || vpa,
             tpap: result.tpap || "Unknown",
             pspBank: result.pspBank || "Unknown",
