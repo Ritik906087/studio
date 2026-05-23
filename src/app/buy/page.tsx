@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Loader2, Search, Shield, ArrowRight, Wallet, BadgePercent, Coins } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, Shield, ArrowRight, Wallet, BadgePercent, Coins, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
@@ -22,6 +23,17 @@ const purchaseOptions = [
   { id: '105', amount: 5000 },
   { id: '106', amount: 10000 },
 ];
+
+const usdtOptions = [
+  { id: 'U5', usdt: 5 },
+  { id: 'U10', usdt: 10 },
+  { id: 'U20', usdt: 20 },
+  { id: 'U50', usdt: 50 },
+  { id: 'U100', usdt: 100 },
+  { id: 'U200', usdt: 200 },
+];
+
+const USDT_RATE = 110;
 
 export default function BuyPage() {
   const router = useRouter();
@@ -55,11 +67,10 @@ export default function BuyPage() {
   }, [user, firestore]);
 
   const generateRawOrderId = () => {
-    // Generates a 10-digit unique numeric string
     return Math.floor(1000000000 + Math.random() * 9000000000).toString();
   };
 
-  const handleP2PMatch = async (amount: number, type: 'upi' | 'usdt' = 'upi') => {
+  const handleP2PMatch = async (amountInInr: number, type: 'upi' | 'usdt' = 'upi', usdtValue?: number) => {
     if (!user || !firestore) {
         toast({ title: "Session Expired", description: "Please login again.", variant: "destructive" });
         return;
@@ -81,9 +92,8 @@ export default function BuyPage() {
         const displayOrderId = "#" + rawOrderId;
         const bonusPercent = 6;
         const flatBonus = 5;
-        const totalAmount = amount + (amount * bonusPercent / 100) + flatBonus;
+        const totalAmount = amountInInr + (amountInInr * bonusPercent / 100) + flatBonus;
         
-        // Use the raw 10-digit ID as the document ID for clean URL routing
         const buyOrderRef = doc(firestore, 'users', user.uid, 'orders', rawOrderId);
 
         if (type === 'usdt') {
@@ -95,7 +105,8 @@ export default function BuyPage() {
                     userId: user.uid,
                     orderId: displayOrderId,
                     amount: totalAmount,
-                    baseAmount: amount,
+                    baseAmount: amountInInr,
+                    usdtAmount: usdtValue,
                     bonusPercentage: bonusPercent,
                     flatBonus: flatBonus,
                     paymentType: 'usdt',
@@ -121,7 +132,7 @@ export default function BuyPage() {
         );
 
         const sellSnap = await getDocs(sellOrdersQuery);
-        const sellerDoc = sellSnap.docs.find(d => d.data().remainingAmount >= amount);
+        const sellerDoc = sellSnap.docs.find(d => d.data().remainingAmount >= amountInInr);
 
         if (!sellerDoc) {
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
@@ -136,7 +147,7 @@ export default function BuyPage() {
                     userId: user.uid,
                     orderId: displayOrderId,
                     amount: totalAmount,
-                    baseAmount: amount,
+                    baseAmount: amountInInr,
                     bonusPercentage: bonusPercent,
                     flatBonus: flatBonus,
                     paymentType: 'admin_transfer',
@@ -160,17 +171,17 @@ export default function BuyPage() {
             const freshSellerSnap = await transaction.get(sellerDoc.ref);
             const freshSellerData = freshSellerSnap.data();
 
-            if (!freshSellerData || freshSellerData.remainingAmount < amount || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
+            if (!freshSellerData || freshSellerData.remainingAmount < amountInInr || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
                 throw new Error("Match rotation error. Retrying...");
             }
 
-            const newRemaining = freshSellerData.remainingAmount - amount;
+            const newRemaining = freshSellerData.remainingAmount - amountInInr;
             const newStatus = newRemaining <= 0 ? 'processing' : 'partially_filled';
 
             const matchEntry = {
                 buyOrderId: rawOrderId,
                 buyerId: user.uid,
-                amount: amount,
+                amount: amountInInr,
                 status: 'pending_payment',
                 created_at: new Date().toISOString()
             };
@@ -193,7 +204,7 @@ export default function BuyPage() {
                 userId: user.uid,
                 orderId: displayOrderId,
                 amount: totalAmount,
-                baseAmount: amount,
+                baseAmount: amountInInr,
                 bonusPercentage: bonusPercent,
                 flatBonus: flatBonus,
                 paymentType: 'p2p_upi',
@@ -218,33 +229,37 @@ export default function BuyPage() {
 
   const RenderOptionList = ({ type }: { type: 'upi' | 'usdt' }) => (
     <div className="flex flex-col gap-3 pb-24">
-        {purchaseOptions.map((opt) => (
-            <Card 
-                key={opt.id} 
-                className="p-4 border-none shadow-sm rounded-[24px] active:scale-[0.98] transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
-                onClick={() => !isMatching && handleP2PMatch(opt.amount, type)}
-            >
-                <div className="flex items-center gap-4 relative z-10">
-                    <div className="h-12 w-12 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
-                        {type === 'upi' ? <Wallet className="h-6 w-6 text-primary" /> : <Coins className="h-6 w-6 text-amber-500" />}
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-2">
-                             <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">Plan: {opt.id}</span>
-                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Volume</p>
+        {(type === 'upi' ? purchaseOptions : usdtOptions).map((opt: any) => {
+            const displayAmt = type === 'upi' ? opt.amount : opt.usdt;
+            const inrEq = type === 'usdt' ? opt.usdt * USDT_RATE : opt.amount;
+            return (
+                <Card 
+                    key={opt.id} 
+                    className="p-3 border-none shadow-sm rounded-[24px] active:scale-[0.98] transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
+                    onClick={() => !isMatching && handleP2PMatch(inrEq, type, opt.usdt)}
+                >
+                    <div className="flex items-center gap-4 relative z-10">
+                        <div className="h-10 w-10 bg-blue-50 rounded-2xl flex items-center justify-center shrink-0">
+                            {type === 'upi' ? <Wallet className="h-5 w-5 text-primary" /> : <Coins className="h-5 w-5 text-amber-500" />}
                         </div>
-                        <p className="text-xl font-black text-slate-800 leading-none mt-1">₹{opt.amount.toLocaleString()}</p>
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                            <BadgePercent className="h-3 w-3 text-teal-600" />
-                            <p className="text-[10px] font-black text-teal-600 uppercase tracking-tighter">Bonus: 6% + ₹5 Extra</p>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                 <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">Plan: {opt.id}</span>
+                                 {type === 'usdt' && <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest">Rate: ₹{USDT_RATE}/$</p>}
+                            </div>
+                            <p className="text-lg font-black text-slate-800 leading-none mt-1">{type === 'upi' ? '₹' : '$'}{displayAmt.toLocaleString()}</p>
+                            <div className="flex items-center gap-1.5 mt-1">
+                                <BadgePercent className="h-2.5 w-2.5 text-teal-600" />
+                                <p className="text-[9px] font-black text-teal-600 uppercase tracking-tighter">Get ₹{inrEq.toLocaleString()} + Bonus</p>
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div className="bg-primary text-white p-2.5 rounded-xl shadow-lg shadow-blue-500/10">
-                    <ArrowRight className="h-4 w-4" />
-                </div>
-            </Card>
-        ))}
+                    <div className="bg-primary text-white p-2 rounded-xl shadow-lg shadow-blue-500/10">
+                        <ArrowRight className="h-3.5 w-3.5" />
+                    </div>
+                </Card>
+            );
+        })}
     </div>
   );
 
@@ -254,10 +269,18 @@ export default function BuyPage() {
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
           <Link href="/home"><ChevronLeft className="h-5 w-5" /></Link>
         </Button>
-        <h1 className="text-lg font-black text-slate-800">Recharge Center</h1>
+        <h1 className="text-lg font-black text-slate-800">Buy Center</h1>
       </header>
 
       <main className="p-3 space-y-4">
+        <div className="bg-red-50 border border-red-100 p-3 rounded-2xl flex gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+            <div className="space-y-1">
+                <p className="text-[10px] text-red-800 font-black leading-tight uppercase tracking-tight">CRITICAL: USE TRC20 NETWORK ONLY FOR USDT.</p>
+                <p className="text-[9px] text-red-600 font-bold uppercase leading-tight">Do not send incorrect amounts. Assets sent to wrong network/amount are non-recoverable.</p>
+            </div>
+        </div>
+
         <Tabs defaultValue="upi" className="w-full">
             <TabsList className="grid grid-cols-2 bg-slate-200/50 p-1 rounded-2xl h-12 mb-4">
                 <TabsTrigger value="upi" className="rounded-xl font-black text-[11px] uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">UPI Portal</TabsTrigger>

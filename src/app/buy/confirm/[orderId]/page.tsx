@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronLeft, Copy, Upload, Loader2, CheckCircle2, XCircle, AlertCircle, Hash } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import {
@@ -28,6 +28,7 @@ type Order = {
     id: string;
     amount: number;
     baseAmount: number;
+    usdtAmount?: number;
     status: string;
     createdAt: any;
     orderId: string;
@@ -78,6 +79,8 @@ function PaymentDetailsContent() {
     }, [firestore, user, orderId]);
 
     const { data: order, loading } = useDoc<Order>(orderRef);
+
+    const isUsdtOrder = order?.paymentType === 'usdt';
 
     const handleCancelOrder = useCallback(async (reason: string) => {
         if (!order || !user || !firestore || isCancelling) return;
@@ -149,7 +152,8 @@ function PaymentDetailsContent() {
         }
 
         const createdAt = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
-        const expiryTime = new Date(createdAt.getTime() + 10 * 60 * 1000);
+        const duration = isUsdtOrder ? 30 * 60 * 1000 : 10 * 60 * 1000;
+        const expiryTime = new Date(createdAt.getTime() + duration);
 
         const interval = setInterval(() => {
             const now = new Date();
@@ -165,24 +169,35 @@ function PaymentDetailsContent() {
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [order, orderId, router, handleCancelOrder]);
+    }, [order, orderId, router, handleCancelOrder, isUsdtOrder]);
 
     const handleConfirm = async () => {
-        if (!utr || utr.length !== 12) {
-            toast({ variant: 'destructive', title: 'Invalid UTR' });
-            return;
+        if (isUsdtOrder) {
+            if (!utr || utr.length < 10) {
+                toast({ variant: 'destructive', title: 'Invalid Hash', description: 'Please enter valid TXID.' });
+                return;
+            }
+        } else {
+            if (!utr || utr.length !== 12) {
+                toast({ variant: 'destructive', title: 'Invalid UTR' });
+                return;
+            }
+            if (!screenshotFile) {
+                toast({ variant: 'destructive', title: 'Proof Required' });
+                return;
+            }
         }
-        if (!screenshotFile) {
-            toast({ variant: 'destructive', title: 'Proof Required' });
-            return;
-        }
-        if (!user || !firestore || !storage || !order) return;
+        
+        if (!user || !firestore || !order) return;
 
         setIsConfirming(true);
         try {
-            const screenshotRef = ref(storage, `orders/${user.uid}/${orderId}/${Date.now()}.png`);
-            await uploadBytes(screenshotRef, screenshotFile);
-            const downloadUrl = await getDownloadURL(screenshotRef);
+            let downloadUrl = null;
+            if (screenshotFile && storage) {
+                const screenshotRef = ref(storage, `orders/${user.uid}/${orderId}/${Date.now()}.png`);
+                await uploadBytes(screenshotRef, screenshotFile);
+                downloadUrl = await getDownloadURL(screenshotRef);
+            }
 
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
@@ -205,7 +220,7 @@ function PaymentDetailsContent() {
                 transaction.update(buyerOrderRef, {
                     status: 'pending_confirmation',
                     utr: utr,
-                    screenshotURL: downloadUrl,
+                    ...(downloadUrl && { screenshotURL: downloadUrl }),
                     submittedAt: serverTimestamp()
                 });
             });
@@ -222,10 +237,14 @@ function PaymentDetailsContent() {
     const details = order?.sellerWithdrawalDetails;
     
     const qrCodeUrl = useMemo(() => {
+        if (isUsdtOrder) {
+            if (!details?.walletAddress) return "";
+            return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(details.walletAddress)}&size=250x250&qzone=2`;
+        }
         if (!details?.upiId || !order?.baseAmount) return "";
         const upiUrl = `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order.baseAmount}&tn=${order.orderId}`;
         return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=250x250&qzone=2`;
-    }, [details, order]);
+    }, [details, order, isUsdtOrder]);
 
     if (loading) return <div className="p-8 flex justify-center"><Loader size="md" /></div>;
     if (!order) return <div className="p-8 text-center">Order not found.</div>;
@@ -236,7 +255,7 @@ function PaymentDetailsContent() {
                 <Button onClick={() => setIsCancelDialogOpen(true)} variant="ghost" size="icon" className="h-8 w-8">
                     <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
-                <h1 className="text-xl font-bold">Confirm Payment</h1>
+                <h1 className="text-xl font-bold">Confirm Asset</h1>
                 <div className="flex flex-col items-center">
                     <span className="text-[10px] font-bold text-destructive uppercase">Expires</span>
                     <span className="font-mono font-black text-destructive text-lg">{formatTime(timeLeft)}</span>
@@ -251,7 +270,9 @@ function PaymentDetailsContent() {
                     <CardContent className="space-y-3">
                         <div className="flex justify-between items-center">
                             <span className="text-slate-400 font-medium">Payable</span>
-                            <span className="text-2xl font-black text-primary">₹{order.baseAmount?.toFixed(2)}</span>
+                            <span className="text-2xl font-black text-primary">
+                                {isUsdtOrder ? `${order.usdtAmount} USDT` : `₹${order.baseAmount?.toFixed(2)}`}
+                            </span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
                             <span className="text-slate-400 font-medium">Order ID</span>
@@ -266,7 +287,7 @@ function PaymentDetailsContent() {
                 <Card className="border-none shadow-sm rounded-2xl bg-white overflow-hidden">
                     <CardHeader className="bg-slate-50 p-4 border-b">
                         <CardTitle className="text-sm font-bold text-slate-800">
-                            {order.sellerId === 'ADMIN' ? 'Master Payment Server' : 'P2P Trusted Partner'}
+                            {isUsdtOrder ? 'TRC20 Wallet (External)' : (order.sellerId === 'ADMIN' ? 'Master Payment Server' : 'P2P Trusted Partner')}
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 space-y-4">
@@ -285,18 +306,23 @@ function PaymentDetailsContent() {
                                     <Loader2 className="animate-spin text-slate-300" />
                                 </div>
                              )}
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scan using any UPI App</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Scan using {isUsdtOrder ? 'Binance/TrustWallet' : 'any UPI App'}</p>
                         </div>
                         <div className="space-y-3 border-t border-dashed pt-4">
                             <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-400 font-medium">Recipient</span>
-                                <span className="font-bold text-slate-800">{details?.accountHolderName || details?.name || 'Authorized Seller'}</span>
+                                <span className="text-slate-400 font-medium">{isUsdtOrder ? 'Network' : 'Recipient'}</span>
+                                <span className="font-bold text-slate-800">{isUsdtOrder ? 'TRC20' : (details?.accountHolderName || details?.name || 'Authorized Seller')}</span>
                             </div>
-                            <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-400 font-medium">UPI ID</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-mono font-black text-primary">{details?.upiId}</span>
-                                    <Copy className="h-3.5 w-3.5 text-slate-300 cursor-pointer" onClick={() => { if(details?.upiId) { navigator.clipboard.writeText(details.upiId); toast({ title: 'Copied!' }); } }} />
+                            <div className="flex flex-col gap-1 text-xs">
+                                <span className="text-slate-400 font-medium">{isUsdtOrder ? 'Wallet Address' : 'UPI ID'}</span>
+                                <div className="flex items-center gap-2 mt-1 bg-slate-50 p-2.5 rounded-xl border border-dashed">
+                                    <span className="font-mono font-black text-primary break-all flex-1 text-[10px]">
+                                        {isUsdtOrder ? details?.walletAddress : details?.upiId}
+                                    </span>
+                                    <Copy className="h-4 w-4 text-slate-400 cursor-pointer shrink-0" onClick={() => { 
+                                        const val = isUsdtOrder ? details?.walletAddress : details?.upiId;
+                                        if(val) { navigator.clipboard.writeText(val); toast({ title: 'Copied!' }); } 
+                                    }} />
                                 </div>
                             </div>
                         </div>
@@ -306,35 +332,55 @@ function PaymentDetailsContent() {
                 <Card className="border-none shadow-sm rounded-2xl bg-white">
                     <CardContent className="p-4 space-y-4">
                         <div className="space-y-2">
-                            <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Transaction UTR (12 Digits)</Label>
-                            <Input 
-                                placeholder="Enter 12-digit UTR" 
-                                value={utr} 
-                                onChange={(e) => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                                className="h-12 rounded-xl bg-slate-50 border-none font-mono text-lg font-black"
-                                type="tel"
-                            />
+                            <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                                {isUsdtOrder ? 'Transaction Hash / TXID' : 'Transaction UTR (12 Digits)'}
+                            </Label>
+                            <div className="relative">
+                                {isUsdtOrder ? (
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><Hash className="h-4 w-4" /></div>
+                                ) : null}
+                                <Input 
+                                    placeholder={isUsdtOrder ? "Paste Hash Here" : "Enter 12-digit UTR"} 
+                                    value={utr} 
+                                    onChange={(e) => {
+                                        if (isUsdtOrder) setUtr(e.target.value);
+                                        else setUtr(e.target.value.replace(/\D/g, '').slice(0, 12));
+                                    }}
+                                    className={cn("h-12 rounded-xl bg-slate-50 border-none font-mono font-black", isUsdtOrder ? "pl-10 text-sm" : "text-lg")}
+                                    type="text"
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
-                            <Button 
-                                variant="outline" 
-                                onClick={() => fileInputRef.current?.click()}
-                                className="w-full h-14 border-dashed rounded-xl bg-slate-50 text-slate-500 font-bold"
-                            >
-                                {screenshotFile ? (
-                                    <div className="flex items-center gap-2 text-teal-600">
-                                        <CheckCircle2 className="h-4 w-4" />
-                                        File Attached ✓
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center gap-2">
-                                        <Upload className="h-4 w-4" />
-                                        Upload Payment Proof
-                                    </div>
-                                )}
-                            </Button>
-                        </div>
+                        
+                        {!isUsdtOrder && (
+                            <div className="space-y-2">
+                                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full h-14 border-dashed rounded-xl bg-slate-50 text-slate-500 font-bold"
+                                >
+                                    {screenshotFile ? (
+                                        <div className="flex items-center gap-2 text-teal-600">
+                                            <CheckCircle2 className="h-4 w-4" />
+                                            File Attached ✓
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2">
+                                            <Upload className="h-4 w-4" />
+                                            Upload Payment Proof
+                                        </div>
+                                    )}
+                                </Button>
+                            </div>
+                        )}
+                        
+                        {isUsdtOrder && (
+                             <div className="p-3 bg-red-50 rounded-xl border border-red-100 flex gap-3">
+                                <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                                <p className="text-[9px] text-red-800 font-bold leading-tight uppercase">ENSURE YOU SEND TRC20 ONLY. WRONG NETWORK TRANSFERS WILL NEVER BE CREDITED.</p>
+                             </div>
+                        )}
                     </CardContent>
                 </Card>
             </main>
@@ -352,9 +398,9 @@ function PaymentDetailsContent() {
                 <Button 
                     onClick={handleConfirm} 
                     className="h-12 btn-gradient rounded-xl font-black shadow-teal-500/20" 
-                    disabled={isConfirming || isCancelling || utr.length !== 12 || !screenshotFile}
+                    disabled={isConfirming || isCancelling || (!isUsdtOrder && (utr.length !== 12 || !screenshotFile)) || (isUsdtOrder && utr.length < 10)}
                 >
-                    {isConfirming ? <Loader size="xs" /> : "PAYMENT DONE"}
+                    {isConfirming ? <Loader size="xs" /> : "I'VE PAID"}
                 </Button>
             </footer>
 
@@ -364,8 +410,8 @@ function PaymentDetailsContent() {
                         <div className="h-16 w-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
                             <XCircle className="h-8 w-8 text-red-500" />
                         </div>
-                        <DialogTitle className="text-xl font-black text-slate-800">Cancel Recharge?</DialogTitle>
-                        <DialogDescription className="text-xs font-bold text-red-400 uppercase mt-1">This action will release the P2P match</DialogDescription>
+                        <DialogTitle className="text-xl font-black text-slate-800">Cancel Order?</DialogTitle>
+                        <DialogDescription className="text-xs font-bold text-red-400 uppercase mt-1">This action will release the matched session</DialogDescription>
                     </div>
                     <div className="p-6 space-y-6">
                         <div className="space-y-3">

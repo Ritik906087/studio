@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -33,12 +34,15 @@ export default function HomeLayout({
   if (!isMounted) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
-        <Loader size="md" />
+        <div className="animate-pulse">
+           <Loader size="md" />
+        </div>
       </div>
     );
   }
 
-  const hideNavOn = ['/confirm', '/report-problem', '/key', '/login', '/register'];
+  // Removed navigation for Buy and Confirm pages as requested
+  const hideNavOn = ['/confirm', '/report-problem', '/key', '/login', '/register', '/buy'];
   const showNavBar = !hideNavOn.some(route => pathname.includes(route));
 
   return (
@@ -55,7 +59,7 @@ export default function HomeLayout({
 
         {showNavBar && (
           <div className="fixed bottom-0 left-0 w-full md:absolute z-50">
-            <nav className="relative flex h-16 items-center justify-around bg-white border-t border-slate-100 px-2 shadow-[0_-5px_25px_rgba(0,0,0,0.05)] overflow-hidden">
+            <nav className="relative flex h-14 items-center justify-around bg-white border-t border-slate-100 px-2 shadow-[0_-5px_25px_rgba(0,0,0,0.05)] overflow-hidden">
                 {navItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
@@ -70,7 +74,7 @@ export default function HomeLayout({
                     {isActive && (
                         <motion.div 
                             layoutId="activeGlow"
-                            className="absolute top-0 w-10 h-0.5 bg-blue-600 rounded-b-full shadow-[0_0_8px_rgba(37,99,235,0.4)]"
+                            className="absolute top-0 w-8 h-0.5 bg-blue-600 rounded-b-full shadow-[0_0_8px_rgba(37,99,235,0.4)]"
                         />
                     )}
                     <div className={cn(
