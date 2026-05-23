@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -261,9 +262,9 @@ export default function AdminDashboardPage() {
                                                     <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-2">
-                                                            {providerLogos[o.withdrawalMethod?.name] && (
+                                                            {o.withdrawalMethod?.name && providerLogos[o.withdrawalMethod.name] && (
                                                                 <div className="h-6 w-6 rounded-lg bg-slate-50 p-1 flex items-center justify-center">
-                                                                    <Image src={providerLogos[o.withdrawalMethod?.name]} alt="" width={14} height={14} />
+                                                                    <Image src={providerLogos[o.withdrawalMethod.name]} alt="" width={14} height={14} />
                                                                 </div>
                                                             )}
                                                             <span className="font-mono text-[9px] font-black">{o.withdrawalMethod?.upiId}</span>
@@ -364,7 +365,7 @@ export default function AdminDashboardPage() {
                                                                 <Input placeholder="TRC20 Wallet" defaultValue={method.usdtWalletAddress} onChange={e => method.usdtWalletAddress = e.target.value} />
                                                             )}
                                                             <div className="pt-4 flex gap-3">
-                                                                <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px]" onClick={() => setEditingPayment(null)}>CANCEL</Button>
+                                                                <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px]" onClick={() => editingPayment && setEditingPayment(null)}>CANCEL</Button>
                                                                 <Button className="flex-1 bg-blue-600 rounded-xl font-black text-[10px]" onClick={() => handleUpdateAdminPayment(type, method)}>SAVE CONNECTION</Button>
                                                             </div>
                                                         </div>
