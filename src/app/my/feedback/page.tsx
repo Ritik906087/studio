@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -6,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
-import { useUser, useFirestore } from '@/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useUser } from '@/firebase';
+import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader } from '@/components/ui/loader';
@@ -17,7 +16,6 @@ export default function FeedbackPage() {
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user, profile } = useUser();
-  const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -26,24 +24,27 @@ export default function FeedbackPage() {
       toast({ variant: 'destructive', title: 'Please enter your feedback.' });
       return;
     }
-    if (!user || !profile || !firestore) {
+    if (!user || !profile) {
       toast({ variant: 'destructive', title: 'Error', description: 'Session data not found.' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(firestore, 'feedback'), {
+      // Save to Supabase to save Firestore Quota
+      const { error } = await supabase.from('feedback').insert({
         userId: user.uid,
         userNumericId: profile.numericId,
         message: message,
-        createdAt: serverTimestamp(),
       });
+
+      if (error) throw error;
+
       toast({ title: 'Feedback Submitted', description: 'Thank you for your suggestion!' });
       setMessage('');
       router.push('/my');
     } catch (error: any) {
-      console.error('Failed to submit feedback', error);
+      console.error('Failed to submit feedback to Supabase', error);
       toast({ variant: 'destructive', title: 'Submission Failed', description: error.message });
     } finally {
       setIsSubmitting(false);

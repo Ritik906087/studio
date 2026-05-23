@@ -2,19 +2,19 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Replace these with your actual Supabase credentials in .env
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://your-project.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key';
+// User provided credentials
+const supabaseUrl = 'https://slytlppadlmnnloszuwd.supabase.co';
+const supabaseAnonKey = 'sb_publishable_b17Qw8jmbfhisK4E69BbxQ__9KZwKXN';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
  * Helper to upload a file to Supabase Storage and get the public URL.
- * Bucket name: "proofs" (Make sure to create this bucket in Supabase and set public access)
+ * Bucket name: "payment" (as requested)
  */
 export async function uploadToSupabase(file: File, path: string): Promise<string> {
     const { data, error } = await supabase.storage
-        .from('proofs')
+        .from('payment')
         .upload(path, file, {
             cacheControl: '3600',
             upsert: true
@@ -25,7 +25,7 @@ export async function uploadToSupabase(file: File, path: string): Promise<string
     }
 
     const { data: { publicUrl } } = supabase.storage
-        .from('proofs')
+        .from('payment')
         .getPublicUrl(data.path);
 
     return publicUrl;
