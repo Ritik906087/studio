@@ -1,9 +1,9 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
+import { Button } from '@/components/ui/button';
 import { ArrowUpToLine, ArrowDownToLine, BadgeCheck, TrendingUp, Wallet, ArrowRight, Zap, Target } from 'lucide-react';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
