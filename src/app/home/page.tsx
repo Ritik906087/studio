@@ -12,7 +12,7 @@ import {
     DollarSign, 
     Repeat, 
     TrendingUp, 
-    ChevronRight 
+    Clock
 } from 'lucide-react';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
@@ -107,13 +107,13 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* PROMO BANNERS CAROUSEL - ASPECT RATIO 1280:719 */}
+        {/* PROMO BANNERS CAROUSEL - ASPECT RATIO 1536:664 */}
         <div className="w-full">
             <Carousel className="w-full" plugins={[plugin.current]}>
                 <CarouselContent>
                     {banners.map((banner) => (
                     <CarouselItem key={banner.id}>
-                        <div className="relative w-full aspect-[1280/719] rounded-[20px] overflow-hidden shadow-sm ring-1 ring-slate-100">
+                        <div className="relative w-full aspect-[1536/664] rounded-[20px] overflow-hidden shadow-sm ring-1 ring-slate-100">
                         {banner.imageUrl && (
                             <Image 
                             src={banner.imageUrl} 
@@ -172,7 +172,7 @@ export default function HomePage() {
                     </div>
                 </div>
 
-                {/* 2. Action Buttons - Smaller for mobile friendly layout */}
+                {/* 2. Action Buttons */}
                 <div className="p-4 pt-0 grid grid-cols-2 gap-3 pb-6">
                     <Button asChild className="h-14 btn-gradient rounded-[18px] flex flex-col items-center justify-center gap-1 shadow-blue-500/20 active:scale-95 transition-all">
                         <Link href="/buy">
