@@ -40,7 +40,7 @@ export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: Turns
       if (window.turnstile && containerRef.current && !isRendered.current) {
         try {
           const id = window.turnstile.render(containerRef.current, {
-            sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+            sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x0000000000000000000000000000000AA',
             callback: (token: string) => {
               onVerify(token);
             },
@@ -74,9 +74,6 @@ export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: Turns
 
     return () => {
       if (interval) clearInterval(interval);
-      if (widgetIdRef.current && window.turnstile) {
-        // Cleanup happens but we don't force remove to prevent flickering
-      }
     };
   }, [onVerify, onExpire, onError, theme]);
 

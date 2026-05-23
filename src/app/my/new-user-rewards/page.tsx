@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ChevronLeft, PlaySquare, CircleDollarSign, ShieldCheck, Trophy, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
@@ -21,10 +22,24 @@ const TelegramIcon = () => (
     </svg>
 );
 
+const MK_LOGO = "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png";
+const FC_LOGO = "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(3).png";
+
+const MobiKwikFreechargeIcon = () => (
+    <div className="flex items-center -space-x-2.5">
+        <div className="h-6 w-6 rounded-lg bg-white border border-slate-100 p-1 z-10 shadow-sm flex items-center justify-center overflow-hidden">
+            {MK_LOGO && <Image src={MK_LOGO} alt="MK" width={16} height={16} className="object-contain" />}
+        </div>
+        <div className="h-6 w-6 rounded-lg bg-white border border-slate-100 p-1 z-0 shadow-sm flex items-center justify-center overflow-hidden">
+            {FC_LOGO && <Image src={FC_LOGO} alt="FC" width={16} height={16} className="object-contain" />}
+        </div>
+    </div>
+);
+
 const newbieTasksList = [
     { id: 'nb_telegram', title: 'Official Channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/+-W0tnyDk3jBiYjQ1" },
     { id: 'nb_tutorial', title: 'Beginner Guide', icon: <PlaySquare className="h-5 w-5 text-blue-500" />, action: "go", href: "/my/tutorial" },
-    { id: 'nb_upi', title: 'Link Primary UPI', icon: <ShieldCheck className="h-5 w-5 text-emerald-500" />, action: "go", href: "/my/collection/add" },
+    { id: 'nb_upi', title: 'Link MobiKwik / Freecharge', icon: <MobiKwikFreechargeIcon />, action: "go", href: "/my/collection/add" },
     { id: 'nb_purchase', title: 'Asset Milestone', icon: <CircleDollarSign className="h-5 w-5 text-orange-500" />, action: 'go', href: '/buy', goal: 1000 },
 ];
 
@@ -153,7 +168,9 @@ export default function NewbieRewardsPage() {
                     return (
                         <div key={task.id} className="flex items-center justify-between p-3 bg-white rounded-[20px] shadow-sm ring-1 ring-slate-100">
                             <div className="flex items-center gap-3">
-                                <div className="h-9 w-9 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100">{task.icon}</div>
+                                <div className="h-9 w-9 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100 overflow-hidden">
+                                    {task.icon}
+                                </div>
                                 <div>
                                     <p className="text-[11px] font-black text-slate-800 leading-none">{task.title}</p>
                                     {task.goal && (
