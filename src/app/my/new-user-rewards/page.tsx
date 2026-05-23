@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -26,7 +25,7 @@ const TelegramIcon = () => (
 const MK_LOGO = "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png";
 
 const newbieTasksList = [
-    { id: 'nb_telegram', title: 'Official Channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/+-W0tnyDk3jBiYjQ1" },
+    { id: 'nb_telegram', title: 'Official Channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/+LNEKI3SSaUU2NWE9" },
     { id: 'nb_tutorial', title: 'Beginner Guide', icon: <PlaySquare className="h-5 w-5 text-blue-500" />, action: "go", href: "/my/tutorial" },
     { id: 'nb_upi', title: 'Link MobiKwik Wallet', icon: <div className="h-6 w-6 rounded-lg bg-white p-0.5 shadow-sm border border-slate-50 flex items-center justify-center overflow-hidden">{MK_LOGO && <Image src={MK_LOGO} alt="MK" width={22} height={22} />}</div>, action: "go", href: "/my/collection/add" },
     { id: 'nb_purchase', title: 'Asset Milestone', icon: <CircleDollarSign className="h-5 w-5 text-orange-500" />, action: 'go', href: '/buy', goal: 1000 },
