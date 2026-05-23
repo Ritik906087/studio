@@ -10,7 +10,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
  * Helper to upload a file to Supabase Storage and get the public URL.
- * Bucket name: "payment" (as requested)
+ * Bucket name: "payment"
  */
 export async function uploadToSupabase(file: File, path: string): Promise<string> {
     const { data, error } = await supabase.storage

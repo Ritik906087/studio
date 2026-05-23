@@ -193,7 +193,7 @@ function PaymentDetailsContent() {
         try {
             let downloadUrl = null;
             if (screenshotFile) {
-                // Upload to Supabase to save Firebase bandwidth
+                // Upload to Supabase Storage bucket 'payment'
                 const path = `orders/${user.uid}/${orderId}/${Date.now()}.png`;
                 downloadUrl = await uploadToSupabase(screenshotFile, path);
             }
