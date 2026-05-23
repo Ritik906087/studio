@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -50,14 +49,14 @@ export default function HomeLayout({
       <div className="relative flex h-screen w-full flex-col bg-[#F5F7FB] md:h-[844px] md:max-w-[390px] md:rounded-[3rem] md:shadow-2xl md:my-4 overflow-hidden border border-white/50 ring-1 ring-black/5">
         <main className={cn(
           "flex-1 overflow-y-auto no-scrollbar",
-          showNavBar ? "pb-24" : ""
+          showNavBar ? "pb-20" : ""
         )}>
           {children}
         </main>
 
         {showNavBar && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] md:absolute z-50">
-            <nav className="relative flex h-20 items-center justify-around bg-white/80 backdrop-blur-2xl rounded-[32px] px-2 shadow-[0_20px_50px_rgba(0,0,0,0.1)] border border-white ring-1 ring-black/5 overflow-hidden">
+          <div className="fixed bottom-0 left-0 w-full md:absolute z-50">
+            <nav className="relative flex h-20 items-center justify-around bg-white border-t border-slate-100 px-2 shadow-[0_-5px_25px_rgba(0,0,0,0.05)] overflow-hidden">
                 {navItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
@@ -65,19 +64,19 @@ export default function HomeLayout({
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'relative flex flex-col items-center justify-center gap-1.5 p-2 transition-all duration-500 w-16 h-16',
-                      isActive ? 'text-blue-600 scale-110' : 'text-slate-400'
+                      'relative flex flex-col items-center justify-center gap-1 p-2 transition-all duration-300 w-16 h-16',
+                      isActive ? 'text-blue-600' : 'text-slate-400'
                     )}
                   >
                     {isActive && (
                         <motion.div 
                             layoutId="activeGlow"
-                            className="absolute -top-1 w-10 h-1.5 bg-blue-600 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)]"
+                            className="absolute top-0 w-12 h-1 bg-blue-600 rounded-b-full shadow-[0_0_10px_rgba(37,99,235,0.4)]"
                         />
                     )}
                     <div className={cn(
                         "transition-all duration-300",
-                        isActive ? "drop-shadow-[0_0_8px_rgba(37,99,235,0.4)]" : ""
+                        isActive ? "scale-110" : ""
                     )}>
                         <item.icon className={cn("h-6 w-6", isActive ? "stroke-[2.5px]" : "stroke-2")} />
                     </div>

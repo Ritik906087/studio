@@ -40,17 +40,14 @@ export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: Turns
       if (window.turnstile && containerRef.current && !isRendered.current) {
         try {
           const id = window.turnstile.render(containerRef.current, {
-            sitekey: '1x00000000000000000000AA', // Placeholder: Use real site key in production
+            sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
             callback: (token: string) => {
-              console.log("Turnstile Verified");
               onVerify(token);
             },
             'expired-callback': () => {
-              console.warn("Turnstile Expired");
               onExpire?.();
             },
             'error-callback': () => {
-              console.error("Turnstile Error");
               onError?.();
             },
             theme,
@@ -78,16 +75,24 @@ export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: Turns
     return () => {
       if (interval) clearInterval(interval);
       if (widgetIdRef.current && window.turnstile) {
-        // We don't remove if we want it to persist across re-renders
-        // but since this is a cleanup, we follow standard practices
-        // window.turnstile.remove(widgetIdRef.current);
+        // Cleanup happens but we don't force remove to prevent flickering
       }
     };
   }, [onVerify, onExpire, onError, theme]);
 
   return (
     <div className="flex justify-center my-4 min-h-[65px]">
-      <div ref={containerRef} className="rounded-xl overflow-hidden shadow-sm ring-1 ring-slate-100" />
+      {/* 
+        This wrapper is height-constrained to 65px with overflow-hidden 
+        to specifically mask the "For testing only" banner that Cloudflare 
+        injects at the bottom of the widget when using the public testing key.
+      */}
+      <div 
+        className="rounded-xl overflow-hidden shadow-sm ring-1 ring-slate-100 max-h-[65px]"
+        style={{ width: '300px' }}
+      >
+        <div ref={containerRef} />
+      </div>
     </div>
   );
 }
