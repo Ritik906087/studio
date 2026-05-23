@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -9,10 +10,14 @@ import Autoplay from "embla-carousel-autoplay";
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
+import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 export default function HomePage() {
   const plugin = React.useRef(Autoplay({ delay: 4000, stopOnInteraction: false }));
   const { profile } = useUser();
+
+  // Get banners from asset registry
+  const banners = PlaceHolderImages.filter(img => img.id.startsWith('banner-'));
 
   return (
     <div className="flex flex-col text-foreground bg-[#F0F7FF] min-h-full pb-6">
@@ -50,16 +55,31 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* MINI BANNER */}
+        {/* PROMO BANNERS CAROUSEL */}
         <Carousel className="w-full" plugins={[plugin.current]}>
           <CarouselContent>
-            {[1, 2, 3].map((i) => (
-              <CarouselItem key={i}>
-                <Card className="overflow-hidden rounded-xl border-none shadow-sm">
-                  <Image src={`https://picsum.photos/seed/${i+10}/600/150`} alt="Banner" width={600} height={150} className="w-full object-cover h-14" data-ai-hint="payment banner" />
+            {banners.length > 0 ? banners.map((banner) => (
+              <CarouselItem key={banner.id}>
+                <Card className="overflow-hidden rounded-2xl border-none shadow-sm h-32 relative">
+                  {banner.imageUrl && (
+                    <Image 
+                      src={banner.imageUrl} 
+                      alt={banner.description} 
+                      fill
+                      className="object-cover" 
+                      data-ai-hint={banner.imageHint} 
+                    />
+                  )}
                 </Card>
               </CarouselItem>
-            ))}
+            )) : (
+              // Fallback if registry fails
+              [1, 2, 3, 4].map((i) => (
+                <CarouselItem key={i}>
+                  <Card className="overflow-hidden rounded-2xl border-none shadow-sm h-32 bg-slate-200 animate-pulse" />
+                </CarouselItem>
+              ))
+            )}
           </CarouselContent>
         </Carousel>
 

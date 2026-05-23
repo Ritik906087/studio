@@ -1,3 +1,28 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "banner-1",
+      "description": "Flex Pay Promo Banner 1",
+      "imageUrl": "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/IMG_20260523_141529_015.jpg",
+      "imageHint": "payment banner"
+    },
+    {
+      "id": "banner-2",
+      "description": "Flex Pay Promo Banner 2",
+      "imageUrl": "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/IMG_20260523_141540_454.jpg",
+      "imageHint": "digital wallet"
+    },
+    {
+      "id": "banner-3",
+      "description": "Flex Pay Promo Banner 3",
+      "imageUrl": "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/IMG_20260523_141543_591.jpg",
+      "imageHint": "secure payment"
+    },
+    {
+      "id": "banner-4",
+      "description": "Flex Pay Promo Banner 4",
+      "imageUrl": "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/IMG_20260523_141547_636.jpg",
+      "imageHint": "recharge rewards"
+    }
+  ]
 }
