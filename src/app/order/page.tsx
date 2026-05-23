@@ -6,7 +6,7 @@ import { ChevronLeft, ClipboardList, TrendingUp, TrendingDown } from 'lucide-rea
 import Link from 'next/link';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, limit } from 'firebase/firestore';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader } from '@/components/ui/loader';
 import { Button } from '@/components/ui/button';
@@ -20,20 +20,28 @@ export default function OrderHistoryPage() {
   const [sellOrders, setSellOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Optimized: Use getDocs instead of onSnapshot to save reads
   useEffect(() => {
     if (!user || !firestore) return;
     setLoading(true);
 
-    const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), orderBy('createdAt', 'desc'));
-    const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), orderBy('createdAt', 'desc'));
+    async function fetchHistory() {
+        try {
+            const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), orderBy('createdAt', 'desc'), limit(50));
+            const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), orderBy('createdAt', 'desc'), limit(50));
 
-    const unsubBuy = onSnapshot(buyQ, (snap) => setBuyOrders(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubSell = onSnapshot(sellQ, (snap) => { 
-        setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() }))); 
-        setLoading(false); 
-    });
+            const [buySnap, sellSnap] = await Promise.all([getDocs(buyQ), getDocs(sellQ)]);
+            
+            setBuyOrders(buySnap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setSellOrders(sellSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    }
 
-    return () => { unsubBuy(); unsubSell(); };
+    fetchHistory();
   }, [user, firestore]);
 
   const OrderItem = ({ o, isBuy }: { o: any, isBuy: boolean }) => (

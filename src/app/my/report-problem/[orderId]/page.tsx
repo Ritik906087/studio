@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, Suspense, useCallback } from 'react';
@@ -12,9 +11,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { ChevronLeft, Loader, Paperclip } from 'lucide-react';
-import { useUser, useFirestore, useDoc, useStorage } from '@/firebase';
+import { useUser, useFirestore, useDoc } from '@/firebase';
 import { doc, collection, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { uploadToSupabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -67,7 +66,6 @@ function ReportProblemForm() {
 
   const { user } = useUser();
   const firestore = useFirestore();
-  const storage = useStorage();
 
   const [problemType, setProblemType] = useState('');
   const [message, setMessage] = useState('');
@@ -140,35 +138,6 @@ function ReportProblemForm() {
     }
   };
 
-  const uploadFile = useCallback((file: File, path: string, progressSetter: (p: number) => void): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        if (!storage) {
-            return reject(new Error("Firebase Storage is not initialized."));
-        }
-        const storageRef = ref(storage, path);
-        const uploadTask = uploadBytesResumable(storageRef, file);
-
-        uploadTask.on('state_changed',
-            (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                progressSetter(progress);
-            },
-            (error) => {
-                console.error('Upload failed:', error);
-                reject(error);
-            },
-            async () => {
-                try {
-                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                    resolve(downloadURL);
-                } catch (error) {
-                    reject(error);
-                }
-            }
-        );
-    });
-  }, [storage]);
-
   const handleSubmit = async () => {
     if (!problemType) {
         toast({ variant: 'destructive', title: 'Please select a problem type.' });
@@ -186,26 +155,26 @@ function ReportProblemForm() {
     const caseId = `LGRPT${Date.now()}`;
 
     try {
-        const uploadPromises: Promise<any>[] = [];
         const fileData: { [key: string]: string } = {};
 
-        const addUpload = (file: File | null, type: 'screenshot' | 'video' | 'statement', progressSetter: (p: number) => void) => {
-            if (file) {
-                const extension = file.name.split('.').pop() || 'file';
-                const path = `reports/${user.uid}/${reportId}/${type}.${extension}`;
-                uploadPromises.push(
-                    uploadFile(file, path, progressSetter).then(url => {
-                        fileData[`${type}URL`] = url;
-                    })
-                );
-            }
-        };
+        // Upload to Supabase to save bandwidth
+        if (screenshotFile) {
+            setScreenshotProgress(50);
+            fileData.screenshotURL = await uploadToSupabase(screenshotFile, `reports/${user.uid}/${reportId}/screenshot`);
+            setScreenshotProgress(100);
+        }
 
-        addUpload(screenshotFile, 'screenshot', setScreenshotProgress);
-        addUpload(bankStatementFile, 'statement', setBankStatementProgress);
-        addUpload(videoFile, 'video', setVideoProgress);
+        if (bankStatementFile) {
+            setBankStatementProgress(50);
+            fileData.statementURL = await uploadToSupabase(bankStatementFile, `reports/${user.uid}/${reportId}/statement`);
+            setBankStatementProgress(100);
+        }
 
-        await Promise.all(uploadPromises);
+        if (videoFile) {
+            setVideoProgress(50);
+            fileData.videoURL = await uploadToSupabase(videoFile, `reports/${user.uid}/${reportId}/video`);
+            setVideoProgress(100);
+        }
 
         await setDoc(newReportRef, {
             caseId: caseId,
@@ -227,7 +196,7 @@ function ReportProblemForm() {
     } catch (error) {
         console.error("Error submitting report:", error);
         toast({ variant: 'destructive', title: 'Submission Failed', description: 'An error occurred. Please try again.'});
-        setIsSubmitting(false); // Only set to false on error, success navigates away
+        setIsSubmitting(false);
     }
   };
 

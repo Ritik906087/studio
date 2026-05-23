@@ -1,19 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { 
   LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
-  Edit3, Eye, Wallet, ArrowRight, Check
+  Edit3, Eye, Wallet, ArrowRight, Check, RefreshCw
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp, getDocs, limit } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { Loader } from '@/components/ui/loader';
 
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
@@ -39,6 +40,7 @@ export default function AdminDashboardPage() {
     
     const [activeTab, setActiveTab] = useState('dashboard');
     const [allUsers, setAllUsers] = useState<any[]>([]);
+    const [usersLoading, setUsersLoading] = useState(false);
     const [sellOrders, setSellOrders] = useState<any[]>([]);
     const [pendingBuyOrders, setPendingBuyOrders] = useState<any[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
@@ -55,21 +57,33 @@ export default function AdminDashboardPage() {
         }
     }, [router]);
 
+    // Optimized: Fetch users once on mount or manually to save quota
+    const fetchUsers = useCallback(async () => {
+        if (!firestore) return;
+        setUsersLoading(true);
+        try {
+            const q = query(collection(firestore, 'users'), orderBy('createdAt', 'desc'), limit(100));
+            const snap = await getDocs(q);
+            setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setUsersLoading(false);
+        }
+    }, [firestore]);
+
     useEffect(() => {
         if (!firestore) return;
+        
+        fetchUsers();
 
-        const unsubUsers = onSnapshot(query(collection(firestore, 'users'), orderBy('createdAt', 'desc')), (snap) => {
-            setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-
-        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), orderBy('createdAt', 'desc')), (snap) => {
+        // High priority listeners (Keep real-time for operation)
+        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), where('status', 'in', ['pending', 'partially_filled']), limit(50)), (snap) => {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        // Use a simpler query without createdAt to avoid needing a complex composite index for collectionGroup
-        const buyOrdersQuery = query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation'));
+        const buyOrdersQuery = query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation'), limit(50));
         const unsubBuy = onSnapshot(buyOrdersQuery, (snap) => {
-            // Sort in memory to avoid Firebase Error
             const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => {
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
                 const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -82,8 +96,8 @@ export default function AdminDashboardPage() {
             setPaymentMethods(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        return () => { unsubUsers(); unsubSell(); unsubBuy(); unsubPM(); };
-    }, [firestore]);
+        return () => { unsubSell(); unsubBuy(); unsubPM(); };
+    }, [firestore, fetchUsers]);
 
     const handleLogout = () => {
         localStorage.removeItem('flex_admin_session');
@@ -207,40 +221,49 @@ export default function AdminDashboardPage() {
 
                         <TabsContent value="users">
                             <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                <CardHeader className="p-6 border-b"><CardTitle className="text-sm font-black uppercase">Registry</CardTitle></CardHeader>
+                                <CardHeader className="p-6 border-b flex flex-row items-center justify-between">
+                                    <CardTitle className="text-sm font-black uppercase">Registry (Last 100)</CardTitle>
+                                    <Button onClick={fetchUsers} disabled={usersLoading} variant="ghost" size="sm" className="h-8 rounded-lg font-black text-[10px]">
+                                        <RefreshCw className={cn("h-3 w-3 mr-2", usersLoading && "animate-spin")} /> REFRESH
+                                    </Button>
+                                </CardHeader>
                                 <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader className="bg-slate-50/50">
-                                            <TableRow className="border-none">
-                                                <TableHead className="font-black text-[10px] uppercase pl-6 py-4">UID</TableHead>
-                                                <TableHead className="font-black text-[10px] uppercase">User</TableHead>
-                                                <TableHead className="font-black text-[10px] uppercase">Balance</TableHead>
-                                                <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {allUsers.map(u => (
-                                                <TableRow key={u.id} className="border-slate-50">
-                                                    <TableCell className="font-mono text-xs font-black text-blue-600 pl-6">{u.numericId}</TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-3">
-                                                            <Avatar className="h-8 w-8"><AvatarImage src={u.photoURL} /><AvatarFallback>U</AvatarFallback></Avatar>
-                                                            <div className="flex flex-col">
-                                                                <span className="font-bold text-xs">{u.displayName}</span>
-                                                                <span className="text-[9px] text-slate-400">+91 {u.phoneNumber}</span>
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="font-black text-xs text-slate-700">₹{u.balance?.toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right pr-6">
-                                                        <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-lg">
-                                                            <Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link>
-                                                        </Button>
-                                                    </TableCell>
+                                    {usersLoading ? (
+                                        <div className="p-20 text-center"><Loader size="sm" /></div>
+                                    ) : (
+                                        <Table>
+                                            <TableHeader className="bg-slate-50/50">
+                                                <TableRow className="border-none">
+                                                    <TableHead className="font-black text-[10px] uppercase pl-6 py-4">UID</TableHead>
+                                                    <TableHead className="font-black text-[10px] uppercase">User</TableHead>
+                                                    <TableHead className="font-black text-[10px] uppercase">Balance</TableHead>
+                                                    <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
                                                 </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {allUsers.map(u => (
+                                                    <TableRow key={u.id} className="border-slate-50">
+                                                        <TableCell className="font-mono text-xs font-black text-blue-600 pl-6">{u.numericId}</TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-3">
+                                                                <Avatar className="h-8 w-8"><AvatarImage src={u.photoURL} /><AvatarFallback>U</AvatarFallback></Avatar>
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-bold text-xs">{u.displayName}</span>
+                                                                    <span className="text-[9px] text-slate-400">+91 {u.phoneNumber}</span>
+                                                                </div>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="font-black text-xs text-slate-700">₹{u.balance?.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-right pr-6">
+                                                            <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-lg">
+                                                                <Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link>
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    )}
                                 </div>
                             </Card>
                         </TabsContent>

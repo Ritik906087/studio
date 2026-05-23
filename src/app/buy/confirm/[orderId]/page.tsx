@@ -18,9 +18,9 @@ import {
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useUser } from '@/hooks/use-user';
-import { useFirestore, useDoc, useStorage } from '@/firebase';
+import { useFirestore, useDoc } from '@/firebase';
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadToSupabase } from '@/lib/supabase';
 import { Loader } from '@/components/ui/loader';
 import { cn } from '@/lib/utils';
 
@@ -60,7 +60,6 @@ function PaymentDetailsContent() {
     const { toast } = useToast();
     const { user } = useUser();
     const firestore = useFirestore();
-    const storage = useStorage();
 
     const orderId = params.orderId as string;
     const [utr, setUtr] = useState('');
@@ -193,10 +192,10 @@ function PaymentDetailsContent() {
         setIsConfirming(true);
         try {
             let downloadUrl = null;
-            if (screenshotFile && storage) {
-                const screenshotRef = ref(storage, `orders/${user.uid}/${orderId}/${Date.now()}.png`);
-                await uploadBytes(screenshotRef, screenshotFile);
-                downloadUrl = await getDownloadURL(screenshotRef);
+            if (screenshotFile) {
+                // Upload to Supabase to save Firebase bandwidth
+                const path = `orders/${user.uid}/${orderId}/${Date.now()}.png`;
+                downloadUrl = await uploadToSupabase(screenshotFile, path);
             }
 
             await runTransaction(firestore, async (transaction) => {
@@ -354,7 +353,7 @@ function PaymentDetailsContent() {
                         
                         {!isUsdtOrder && (
                             <div className="space-y-2">
-                                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
+                                <input type="file" opacity="0" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
                                 <Button 
                                     variant="outline" 
                                     onClick={() => fileInputRef.current?.click()}
