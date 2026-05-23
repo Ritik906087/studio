@@ -1,9 +1,8 @@
-
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, CheckCircle2, ShieldCheck, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, ShieldCheck, AlertTriangle, Info, User, Landmark, Zap } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -21,24 +20,25 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { verifyUpiAction, type UpiVerificationResult } from "@/app/actions/upi-verification";
 
-type PaymentMethod = {
+type ProviderConfig = {
   id: string;
   name: string;
   logo: string;
   brandColor: string;
   handles: string[];
-  description: string;
+  tpapKeywords: string[]; // Keywords to match against the API's 'tpap' field
 };
 
-const PROVIDERS: PaymentMethod[] = [
+const PROVIDERS: ProviderConfig[] = [
   { 
     id: "phonepe",
     name: "PhonePe", 
     logo: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(4).png", 
     brandColor: "#6739B7",
     handles: ["@ybl", "@ibl", "@axl"],
-    description: "Link your primary PhonePe UPI"
+    tpapKeywords: ["PHONEPE", "YBL", "IBL", "AXL"]
   },
   { 
     id: "paytm",
@@ -46,7 +46,7 @@ const PROVIDERS: PaymentMethod[] = [
     logo: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(5).png", 
     brandColor: "#00BAF2",
     handles: ["@paytm", "@ptyes"],
-    description: "Instant settlement via Paytm Wallet"
+    tpapKeywords: ["PAYTM", "PPBL"]
   },
   { 
     id: "mobikwik",
@@ -54,7 +54,7 @@ const PROVIDERS: PaymentMethod[] = [
     logo: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png", 
     brandColor: "#0057E0",
     handles: ["@ikwik", "@mbkns"],
-    description: "Secure payments with MobiKwik"
+    tpapKeywords: ["MOBIKWIK", "IKWIK"]
   },
   { 
     id: "freecharge",
@@ -62,7 +62,7 @@ const PROVIDERS: PaymentMethod[] = [
     logo: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(3).png", 
     brandColor: "#FF5E00",
     handles: ["@freecharge"],
-    description: "Fast UPI link for Freecharge users"
+    tpapKeywords: ["FREECHARGE"]
   },
   { 
     id: "airtel",
@@ -70,7 +70,7 @@ const PROVIDERS: PaymentMethod[] = [
     logo: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(2).png", 
     brandColor: "#E11900",
     handles: ["@airtel"],
-    description: "Link Airtel Payments Bank UPI"
+    tpapKeywords: ["AIRTEL"]
   },
 ];
 
@@ -79,53 +79,72 @@ export default function AddCollectionPage() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const [selectedProvider, setSelectedProvider] = useState<PaymentMethod | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderConfig | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [upiId, setUpiId] = useState("");
   
   const [isVerifying, setIsVerifying] = useState(false);
-  const [verifiedName, setVerifiedName] = useState<string | null>(null);
+  const [verificationData, setVerificationData] = useState<UpiVerificationResult | null>(null);
+  const [manualName, setManualName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleProviderClick = (provider: PaymentMethod) => {
+  const handleProviderClick = (provider: ProviderConfig) => {
     setSelectedProvider(provider);
     setIsSheetOpen(true);
     setUpiId("");
-    setVerifiedName(null);
-  };
-
-  const validateHandle = (id: string, provider: PaymentMethod) => {
-    const handle = id.substring(id.lastIndexOf("@"));
-    return provider.handles.includes(handle.toLowerCase());
+    setVerificationData(null);
+    setManualName("");
   };
 
   const handleVerify = async () => {
-    if (!selectedProvider) return;
+    if (!selectedProvider || !upiId) return;
     
-    if (!upiId.includes("@")) {
-        toast({ variant: "destructive", title: "Invalid Format", description: "Please enter a complete UPI ID (e.g. name@handle)" });
-        return;
-    }
-
-    if (!validateHandle(upiId, selectedProvider)) {
-        toast({ 
-            variant: "destructive", 
-            title: "Invalid Handle", 
-            description: `Only ${selectedProvider.handles.join(", ")} handles are allowed for ${selectedProvider.name}.` 
-        });
-        return;
-    }
-
     setIsVerifying(true);
-    setTimeout(() => {
-        setVerifiedName(profile?.displayName || "Verified Account User");
+    try {
+        const result = await verifyUpiAction(upiId.trim().toLowerCase());
+
+        if (!result.success || !result.data) {
+            throw new Error(result.error || "Verification failed.");
+        }
+
+        const data = result.data;
+
+        // 1. Check if VPA is actually verified
+        if (!data.isVpaVerified) {
+            throw new Error("UPI ID is not registered or inactive.");
+        }
+
+        // 2. Validate TPAP matches the chosen provider
+        const matchedTpap = selectedProvider.tpapKeywords.some(keyword => 
+            data.tpap.toUpperCase().includes(keyword)
+        );
+
+        if (!matchedTpap) {
+            throw new Error(`Security Alert: This UPI ID belongs to ${data.tpap}, but you selected ${selectedProvider.name}. Please select the correct provider.`);
+        }
+
+        setVerificationData(data);
+        if (data.payeeAccountName) {
+            setManualName(data.payeeAccountName);
+        }
+
+        toast({ title: "Account Verified", description: `Matched with ${data.pspBank}` });
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "Verification Failed", description: error.message });
+        setVerificationData(null);
+    } finally {
         setIsVerifying(false);
-        toast({ title: "UPI Verified", description: "Bank account details fetched successfully." });
-    }, 1800);
+    }
   };
 
   const handleSave = async () => {
-    if (!user || !firestore || !selectedProvider || !verifiedName) return;
+    if (!user || !firestore || !selectedProvider || !verificationData) return;
+    
+    const finalName = manualName.trim() || verificationData.payeeAccountName;
+    if (!finalName) {
+        toast({ variant: "destructive", title: "Name Required", description: "Please enter your bank account holder name." });
+        return;
+    }
 
     setIsSaving(true);
     try {
@@ -135,21 +154,23 @@ export default function AddCollectionPage() {
         if (!userSnap.exists()) throw new Error("Profile not found.");
 
         const currentMethods = userSnap.data().paymentMethods || [];
-        const isDuplicate = currentMethods.some((pm: any) => pm.upiId === upiId);
+        const isDuplicate = currentMethods.some((pm: any) => pm.upiId === verificationData.vpa);
 
         if (isDuplicate) throw new Error("This UPI ID is already linked.");
         
         const methodData = {
             type: 'upi',
             name: selectedProvider.name,
-            upiId: upiId,
-            verifiedName: verifiedName,
+            upiId: verificationData.vpa,
+            verifiedName: finalName,
+            pspBank: verificationData.pspBank,
+            tpap: verificationData.tpap,
             linkedAt: new Date().toISOString()
         };
 
         await updateDoc(userRef, { paymentMethods: [...currentMethods, methodData] });
       
-        toast({ title: "Account Linked!", description: `${selectedProvider.name} has been added to your wallet.` });
+        toast({ title: "Success", description: `${selectedProvider.name} linked successfully.` });
         setIsSheetOpen(false);
     } catch (error: any) {
        toast({ variant: "destructive", title: "Link Failed", description: error.message });
@@ -222,7 +243,7 @@ export default function AddCollectionPage() {
       </main>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-[40px] px-6 pb-10 pt-8 border-none shadow-2xl">
+        <SheetContent side="bottom" className="rounded-t-[40px] px-6 pb-10 pt-8 border-none shadow-2xl h-[90vh] overflow-y-auto no-scrollbar">
           <SheetHeader className="text-left mb-6">
             <div className="flex items-center gap-4 mb-2">
                 <div className="h-12 w-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-sm">
@@ -233,7 +254,7 @@ export default function AddCollectionPage() {
                 <SheetTitle className="text-2xl font-black tracking-tight">Link {selectedProvider?.name}</SheetTitle>
             </div>
             <SheetDescription className="text-xs font-medium text-slate-500">
-                Link your verified UPI ID for instant P2P withdrawals.
+                BHIM UPI Verification Engine will confirm your identity.
             </SheetDescription>
           </SheetHeader>
 
@@ -244,11 +265,12 @@ export default function AddCollectionPage() {
                     <Input 
                         placeholder="example@handle" 
                         value={upiId}
-                        onChange={(e) => { setUpiId(e.target.value.toLowerCase()); setVerifiedName(null); }}
-                        className="h-14 rounded-2xl bg-white border-none ring-2 ring-slate-100 focus-visible:ring-primary/20 text-lg font-black"
+                        onChange={(e) => { setUpiId(e.target.value.toLowerCase()); setVerificationData(null); }}
+                        className="h-14 rounded-2xl bg-slate-50 border-none ring-2 ring-slate-100 focus-visible:ring-primary/20 text-lg font-black"
+                        disabled={isVerifying}
                     />
                     <AnimatePresence>
-                        {verifiedName && (
+                        {verificationData?.isVpaVerified && (
                             <motion.div 
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
@@ -260,34 +282,67 @@ export default function AddCollectionPage() {
                         )}
                     </AnimatePresence>
                 </div>
-                {!verifiedName && upiId && (
-                    <p className="text-[10px] font-bold text-slate-400 mt-1 ml-1 uppercase">
-                        Supported: {selectedProvider?.handles.join(", ")}
-                    </p>
-                )}
             </div>
 
-            {verifiedName && (
+            {verificationData && (
                 <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-slate-900 rounded-2xl text-white flex items-center justify-between"
+                    className="space-y-3"
                 >
-                    <div className="space-y-0.5">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Full Name</p>
-                        <p className="font-black text-base">{verifiedName} ✓</p>
+                    <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                    <Landmark className="h-2 w-2" /> PSP Bank
+                                </p>
+                                <p className="font-bold text-xs truncate">{verificationData.pspBank}</p>
+                            </div>
+                            <div className="space-y-1 text-right">
+                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1 justify-end">
+                                    <Zap className="h-2 w-2" /> App
+                                </p>
+                                <p className="font-bold text-xs truncate">{verificationData.tpap}</p>
+                            </div>
+                        </div>
+                        
+                        <div className="border-t border-white/5 pt-3">
+                            <Label className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Bank Account Name</Label>
+                            {verificationData.payeeAccountName ? (
+                                <p className="font-black text-base flex items-center gap-2">
+                                    {verificationData.payeeAccountName} <CheckCircle2 className="h-4 w-4 text-green-400" />
+                                </p>
+                            ) : (
+                                <div className="space-y-2 mt-1">
+                                    <div className="flex items-center gap-2 bg-amber-500/10 text-amber-500 p-2 rounded-lg border border-amber-500/20 mb-2">
+                                        <Info className="h-3 w-3" />
+                                        <p className="text-[9px] font-bold uppercase">Name not found. Please enter manually.</p>
+                                    </div>
+                                    <Input 
+                                        placeholder="Full Bank Name" 
+                                        value={manualName}
+                                        onChange={(e) => setManualName(e.target.value.toUpperCase())}
+                                        className="h-10 bg-white/5 border-white/10 text-white rounded-xl text-sm"
+                                    />
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
-                        <CheckCircle2 className="h-6 w-6 text-green-400" />
+                    
+                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex gap-2 items-start">
+                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+                        <p className="text-[9px] text-blue-700 font-bold uppercase leading-relaxed">
+                            Verification Success. This account belongs to UID: {verificationData.userId}. Ensure the name matches your official bank records.
+                        </p>
                     </div>
                 </motion.div>
             )}
 
             <div className="grid grid-cols-2 gap-3 pt-4">
-                <Button variant="outline" className="h-14 rounded-2xl font-black text-slate-400 uppercase tracking-widest" onClick={() => setIsSheetOpen(false)}>
+                <Button variant="outline" className="h-14 rounded-2xl font-black text-slate-400 uppercase tracking-widest" onClick={() => setIsSheetOpen(false)} disabled={isSaving}>
                     Cancel
                 </Button>
-                {verifiedName ? (
+                {verificationData ? (
                     <Button 
                         onClick={handleSave} 
                         className="h-14 btn-gradient rounded-2xl font-black uppercase tracking-widest shadow-blue-500/20"
