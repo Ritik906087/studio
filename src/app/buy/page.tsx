@@ -15,12 +15,12 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
 const purchaseOptions = [
-  { id: 'B-101', amount: 100 },
-  { id: 'B-102', amount: 500 },
-  { id: 'B-103', amount: 1000 },
-  { id: 'B-104', amount: 2000 },
-  { id: 'B-105', amount: 5000 },
-  { id: 'B-106', amount: 10000 },
+  { id: '101', amount: 100 },
+  { id: '102', amount: 500 },
+  { id: '103', amount: 1000 },
+  { id: '104', amount: 2000 },
+  { id: '105', amount: 5000 },
+  { id: '106', amount: 10000 },
 ];
 
 export default function BuyPage() {
@@ -48,16 +48,15 @@ export default function BuyPage() {
         }
     });
 
-    // Fetch USDT address for the USDT tab
     const usdtQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'usdt'), limit(1));
     getDocs(usdtQuery).then(snap => {
         if (!snap.empty) setUsdtAddress(snap.docs[0].data().usdtWalletAddress);
     });
   }, [user, firestore]);
 
-  const generateOrderId = () => {
-    const num = Math.floor(1000000000 + Math.random() * 9000000000);
-    return `#${num}`;
+  const generateRawOrderId = () => {
+    // Generates a 10-digit unique numeric string
+    return Math.floor(1000000000 + Math.random() * 9000000000).toString();
   };
 
   const handleP2PMatch = async (amount: number, type: 'upi' | 'usdt' = 'upi') => {
@@ -78,18 +77,21 @@ export default function BuyPage() {
 
     setIsMatching(true);
     try {
-        const displayOrderId = generateOrderId();
+        const rawOrderId = generateRawOrderId();
+        const displayOrderId = "#" + rawOrderId;
         const bonusPercent = 6;
         const flatBonus = 5;
-        // Calculation: Base + (Base * 6%) + 5
         const totalAmount = amount + (amount * bonusPercent / 100) + flatBonus;
-        const buyOrderRef = doc(collection(firestore, 'users', user.uid, 'orders'));
+        
+        // Use the raw 10-digit ID as the document ID for clean URL routing
+        const buyOrderRef = doc(firestore, 'users', user.uid, 'orders', rawOrderId);
 
         if (type === 'usdt') {
             if (!usdtAddress) throw new Error("USDT Payment Server is offline.");
             
             await runTransaction(firestore, async (transaction) => {
                 transaction.set(buyOrderRef, {
+                    id: rawOrderId,
                     userId: user.uid,
                     orderId: displayOrderId,
                     amount: totalAmount,
@@ -108,11 +110,10 @@ export default function BuyPage() {
                     createdAt: serverTimestamp(),
                 });
             });
-            router.push(`/buy/confirm/${buyOrderRef.id}`);
+            router.push(`/buy/confirm/${rawOrderId}`);
             return;
         }
 
-        // --- UPI / P2P Logic ---
         const sellOrdersQuery = query(
             collection(firestore, 'sellOrders'),
             where('status', 'in', ['pending', 'partially_filled']),
@@ -123,7 +124,6 @@ export default function BuyPage() {
         const sellerDoc = sellSnap.docs.find(d => d.data().remainingAmount >= amount);
 
         if (!sellerDoc) {
-            // Fallback to Admin UPI
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
             if (adminPMSnap.empty) throw new Error("Liquidity Pool Busy. Try again in 5 mins.");
@@ -132,6 +132,7 @@ export default function BuyPage() {
 
             await runTransaction(firestore, async (transaction) => {
                 transaction.set(buyOrderRef, {
+                    id: rawOrderId,
                     userId: user.uid,
                     orderId: displayOrderId,
                     amount: totalAmount,
@@ -150,11 +151,10 @@ export default function BuyPage() {
                     createdAt: serverTimestamp(),
                 });
             });
-            router.push(`/buy/confirm/${buyOrderRef.id}`);
+            router.push(`/buy/confirm/${rawOrderId}`);
             return;
         }
 
-        // P2P Match
         const sellerOrderId = sellerDoc.id;
         await runTransaction(firestore, async (transaction) => {
             const freshSellerSnap = await transaction.get(sellerDoc.ref);
@@ -168,7 +168,7 @@ export default function BuyPage() {
             const newStatus = newRemaining <= 0 ? 'processing' : 'partially_filled';
 
             const matchEntry = {
-                buyOrderId: buyOrderRef.id,
+                buyOrderId: rawOrderId,
                 buyerId: user.uid,
                 amount: amount,
                 status: 'pending_payment',
@@ -189,6 +189,7 @@ export default function BuyPage() {
             });
 
             transaction.set(buyOrderRef, {
+                id: rawOrderId,
                 userId: user.uid,
                 orderId: displayOrderId,
                 amount: totalAmount,
@@ -206,7 +207,7 @@ export default function BuyPage() {
         });
 
         toast({ title: "Match Success!" });
-        router.push(`/buy/confirm/${buyOrderRef.id}`);
+        router.push(`/buy/confirm/${rawOrderId}`);
 
     } catch (e: any) {
         toast({ title: "Matching Failed", description: e.message, variant: "destructive" });
@@ -229,7 +230,7 @@ export default function BuyPage() {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                             <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">No: {opt.id}</span>
+                             <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase tracking-tighter">Plan: {opt.id}</span>
                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Volume</p>
                         </div>
                         <p className="text-xl font-black text-slate-800 leading-none mt-1">₹{opt.amount.toLocaleString()}</p>
