@@ -1,10 +1,20 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { Button } from '@/components/ui/button';
-import { ArrowUpToLine, ArrowDownToLine, BadgeCheck, TrendingUp, Wallet, ArrowRight, Zap, Target } from 'lucide-react';
+import { 
+    ArrowUpToLine, 
+    ArrowDownToLine, 
+    BadgeCheck, 
+    ShoppingBag, 
+    DollarSign, 
+    Repeat, 
+    TrendingUp, 
+    ChevronRight 
+} from 'lucide-react';
 import Image from 'next/image';
 import Autoplay from "embla-carousel-autoplay";
 import Link from 'next/link';
@@ -12,14 +22,24 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function HomePage() {
   const plugin = React.useRef(Autoplay({ delay: 4000, stopOnInteraction: false }));
   const { user, profile } = useUser();
   const firestore = useFirestore();
 
-  const [stats, setStats] = useState({ todayBuy: 0, todaySell: 0, totalIncome: 0 });
+  const [stats, setStats] = useState({ 
+    buyQuantity: 0, 
+    todayBuy: 0, 
+    todaySell: 0, 
+    totalIncome: 0 
+  });
+
+  const formatValue = (val: number) => {
+    if (val >= 1000) return (val / 1000).toFixed(1) + 'K';
+    return val.toFixed(1);
+  };
 
   useEffect(() => {
     if (!user || !firestore) return;
@@ -30,13 +50,15 @@ export default function HomePage() {
         const todayMs = today.getTime();
 
         try {
-            // Fetch completed Buy Orders (Optimized to avoid composite index)
+            // Fetch completed Buy Orders
             const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), where('status', '==', 'completed'));
             const buySnap = await getDocs(buyQ);
-            const todayBuy = buySnap.docs
+            const todayBuyDocs = buySnap.docs
                 .map(d => d.data())
-                .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs)
-                .reduce((acc, d) => acc + (d.baseAmount || 0), 0);
+                .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs);
+            
+            const buyQuantity = todayBuyDocs.length;
+            const todayBuy = todayBuyDocs.reduce((acc, d) => acc + (d.baseAmount || 0), 0);
 
             // Fetch completed Sell Orders
             const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), where('status', '==', 'completed'));
@@ -51,9 +73,9 @@ export default function HomePage() {
             const incomeSnap = await getDocs(incomeQ);
             const totalIncome = incomeSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
 
-            setStats({ todayBuy, todaySell, totalIncome });
+            setStats({ buyQuantity, todayBuy, todaySell, totalIncome });
         } catch (e) {
-            console.warn("Stats calculation fell back due to index restriction or data mismatch.");
+            console.warn("Stats calculation fell back due to index restriction.");
         }
     }
 
@@ -63,7 +85,7 @@ export default function HomePage() {
   const banners = PlaceHolderImages.filter(img => img.id.startsWith('banner-'));
 
   return (
-    <div className="flex flex-col text-foreground bg-[#F5F7FB] min-h-full pb-10">
+    <div className="flex flex-col text-foreground bg-[#F5F7FB] min-h-full pb-20">
       <main className="px-3 pt-3 space-y-4">
         {/* COMPACT BALANCE CARD */}
         <Card className="border-none balance-gradient text-white rounded-[24px] shadow-xl shadow-blue-500/10 overflow-hidden relative">
@@ -110,27 +132,54 @@ export default function HomePage() {
             </Carousel>
         </div>
 
-        {/* UNIFIED OPERATIONS CENTER (Stats + Actions + Income Detail) */}
+        {/* UNIFIED OPERATIONS CENTER (Image-style Stats + Actions) */}
         <Card className="border-none bg-white rounded-[28px] shadow-lg shadow-blue-500/5 overflow-hidden ring-1 ring-slate-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
             <CardContent className="p-0">
-                {/* 1. Quick Stats Grid */}
-                <div className="grid grid-cols-3 p-4 bg-slate-50/40 border-b border-slate-100">
-                    <div className="text-center space-y-0.5">
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Today Buy</p>
-                        <p className="text-sm font-black text-slate-800 tabular-nums">₹{stats.todayBuy.toLocaleString()}</p>
+                {/* 1. Dashboard Grid (Matching Request Image) */}
+                <div className="p-6 space-y-6">
+                    <div className="grid grid-cols-2 gap-y-6">
+                        {/* Buy Quantity */}
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-slate-400">
+                                <ShoppingBag className="h-4 w-4" />
+                                <span className="text-sm font-medium">Buy quantity</span>
+                            </div>
+                            <p className="text-2xl font-black text-slate-900 tabular-nums">{stats.buyQuantity}</p>
+                        </div>
+                        {/* Buy Amount */}
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-slate-400">
+                                <DollarSign className="h-4 w-4 text-yellow-500" />
+                                <span className="text-sm font-medium">Buy Amount</span>
+                            </div>
+                            <p className="text-2xl font-black text-yellow-500 tabular-nums">{formatValue(stats.todayBuy)}</p>
+                        </div>
+                        {/* Sell Today */}
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-slate-400">
+                                <Repeat className="h-4 w-4" />
+                                <span className="text-sm font-medium">Sell today</span>
+                            </div>
+                            <p className="text-2xl font-black text-slate-900 tabular-nums">{formatValue(stats.todaySell)}</p>
+                        </div>
+                        {/* Total Revenue */}
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-slate-400">
+                                <TrendingUp className="h-4 w-4 text-green-600" />
+                                <span className="text-sm font-medium">Total revenue</span>
+                            </div>
+                            <p className="text-2xl font-black text-green-600 tabular-nums">{formatValue(stats.totalIncome)}</p>
+                        </div>
                     </div>
-                    <div className="text-center space-y-0.5 border-x border-slate-100">
-                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Today Sell</p>
-                        <p className="text-sm font-black text-slate-800 tabular-nums">₹{stats.todaySell.toLocaleString()}</p>
-                    </div>
-                    <div className="text-center space-y-0.5">
-                        <p className="text-[8px] font-black text-teal-500 uppercase tracking-widest">Net Income</p>
-                        <p className="text-sm font-black text-teal-600 tabular-nums">₹{stats.totalIncome.toLocaleString()}</p>
-                    </div>
+
+                    {/* More Link */}
+                    <Link href="/order" className="flex items-center justify-center gap-1 text-slate-400 font-medium text-sm pt-2 hover:text-primary transition-colors">
+                        More <ChevronRight className="h-4 w-4" />
+                    </Link>
                 </div>
 
                 {/* 2. Large Action Buttons */}
-                <div className="p-4 grid grid-cols-2 gap-3">
+                <div className="p-4 pt-0 grid grid-cols-2 gap-3 pb-6">
                     <Button asChild className="h-20 btn-gradient rounded-[22px] flex flex-col items-center justify-center gap-1.5 shadow-blue-500/30 active:scale-95 transition-all">
                         <Link href="/buy">
                             <ArrowUpToLine className="h-6 w-6" />
@@ -144,29 +193,10 @@ export default function HomePage() {
                         </Link>
                     </Button>
                 </div>
-
-                {/* 3. Total Income Detail Bar (Vault Summary) */}
-                <Link href="/my/transactions" className="flex items-center justify-between px-5 py-4 bg-slate-900 text-white active:bg-slate-950 transition-colors">
-                    <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-md">
-                            <Zap className="h-4 w-4 text-teal-400 fill-teal-400" />
-                        </div>
-                        <div>
-                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none">Profits Vault</p>
-                            <div className="flex items-baseline gap-1 mt-1">
-                                <p className="text-base font-black text-white tabular-nums">₹{stats.totalIncome.toFixed(2)}</p>
-                                <span className="text-[7px] font-bold text-teal-500 uppercase">Available</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-slate-500">
-                        <span className="text-[8px] font-black uppercase tracking-widest">History</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                    </div>
-                </Link>
             </CardContent>
         </Card>
       </main>
     </div>
   );
 }
+
