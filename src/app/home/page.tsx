@@ -55,19 +55,20 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* PROMO BANNERS CAROUSEL */}
+        {/* PROMO BANNERS CAROUSEL - ADJUSTED TO 1280x719 ASPECT RATIO */}
         <Carousel className="w-full" plugins={[plugin.current]}>
           <CarouselContent>
             {banners.length > 0 ? banners.map((banner) => (
               <CarouselItem key={banner.id}>
-                <Card className="overflow-hidden rounded-2xl border-none shadow-sm h-32 relative">
+                <Card className="overflow-hidden rounded-2xl border-none shadow-sm relative w-full aspect-[1280/719]">
                   {banner.imageUrl && (
                     <Image 
                       src={banner.imageUrl} 
                       alt={banner.description} 
                       fill
                       className="object-cover" 
-                      data-ai-hint={banner.imageHint} 
+                      data-ai-hint={banner.imageHint}
+                      priority
                     />
                   )}
                 </Card>
@@ -76,7 +77,7 @@ export default function HomePage() {
               // Fallback if registry fails
               [1, 2, 3, 4].map((i) => (
                 <CarouselItem key={i}>
-                  <Card className="overflow-hidden rounded-2xl border-none shadow-sm h-32 bg-slate-200 animate-pulse" />
+                  <Card className="overflow-hidden rounded-2xl border-none shadow-sm w-full aspect-[1280/719] bg-slate-200 animate-pulse" />
                 </CarouselItem>
               ))
             )}
