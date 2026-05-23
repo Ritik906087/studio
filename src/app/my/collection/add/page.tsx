@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, CheckCircle2, ShieldCheck, AlertCircle, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, ShieldCheck, Search } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -35,7 +35,7 @@ const PROVIDERS: PaymentMethod[] = [
   { 
     id: "phonepe",
     name: "PhonePe", 
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f", 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(4).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDQpLnBuZyIsImlhdCI6MTc3NTE0ODYyMSwiZXhwIjoxODA2Njg0NjIxfQ.b_cMHhiCw52krGt2edtt1k5C1Keo8uGJwYIWpe6vZVo", 
     gradient: "from-[#6739B7] to-[#512DA8]",
     handles: ["@ybl", "@ibl", "@axl"],
     description: "Link your primary PhonePe UPI"
@@ -43,7 +43,7 @@ const PROVIDERS: PaymentMethod[] = [
   { 
     id: "paytm",
     name: "Paytm", 
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8", 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(5).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDUpLnBuZyIsImlhdCI6MTc3NTE0ODYzMiwiZXhwIjoxODA2Njg0NjMyfQ.QXSbgSLV3ULTcV3ss9Co9ZMe1oj3tb9bR_OP8xY-Nds", 
     gradient: "from-[#00BAF2] to-[#002E6E]",
     handles: ["@paytm", "@ptyes"],
     description: "Instant settlement via Paytm Wallet"
@@ -51,7 +51,7 @@ const PROVIDERS: PaymentMethod[] = [
   { 
     id: "mobikwik",
     name: "MobiKwik", 
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7", 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(1).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDEpLnBuZyIsImlhdCI6MTc3NTE0ODU3MywiZXhwIjoxODA2Njg0NTczfQ.m8Z7gn5FV-0ss58kTEUZ833u8Wv_bFun3YZeZtyIa9s", 
     gradient: "from-[#0057E0] to-[#002B70]",
     handles: ["@ikwik", "@mbkns"],
     description: "Secure payments with MobiKwik"
@@ -59,7 +59,7 @@ const PROVIDERS: PaymentMethod[] = [
   { 
     id: "freecharge",
     name: "Freecharge", 
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4", 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(3).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDMpLnBuZyIsImlhdCI6MTc3NTE0ODYwOSwiZXhwIjoxODA2Njg0NjA5fQ.pus8pOlgEXCFb2pjIzNsVtU9DxnIxEeaVaeR3TuIQPc", 
     gradient: "from-[#FF5E00] to-[#E64A19]",
     handles: ["@freecharge"],
     description: "Fast UPI link for Freecharge users"
@@ -67,7 +67,7 @@ const PROVIDERS: PaymentMethod[] = [
   { 
     id: "airtel",
     name: "Airtel", 
-    logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Airtel%2001.png?alt=media&token=357342fd-85df-43c1-a7fb-d9d57315df1d", 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(2).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDIpLnBuZyIsImlhdCI6MTc3NTE0ODU5OSwiZXhwIjoxODA2Njg0NTk5fQ.yDb5CBUsF_MCejlDIzrQVjg6IMylJbAzEmHFaozfNjE", 
     gradient: "from-[#E11900] to-[#B71C1C]",
     handles: ["@airtel"],
     description: "Link Airtel Payments Bank UPI"
@@ -191,7 +191,7 @@ export default function AddCollectionPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
                 >
-                    <Card 
+                    <div 
                         className={cn(
                             "relative overflow-hidden rounded-[28px] border-none shadow-sm cursor-pointer active:scale-[0.98] transition-all",
                             "bg-white hover:shadow-md"
@@ -201,8 +201,10 @@ export default function AddCollectionPage() {
                         <div className={cn("absolute inset-y-0 left-0 w-2 bg-gradient-to-b", provider.gradient)} />
                         <div className="p-5 flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                                <div className={cn("h-14 w-14 rounded-2xl bg-gradient-to-br flex items-center justify-center p-3 shadow-inner", provider.gradient)}>
-                                    <Image src={provider.logo} alt={provider.name} width={40} height={40} className="object-contain brightness-0 invert" />
+                                <div className={cn("h-14 w-14 rounded-2xl bg-gradient-to-br flex items-center justify-center p-2 shadow-inner", provider.gradient)}>
+                                    {provider.logo && (
+                                      <Image src={provider.logo} alt={provider.name} width={40} height={40} className="object-contain brightness-0 invert" />
+                                    )}
                                 </div>
                                 <div>
                                     <h3 className="font-black text-slate-800">{provider.name}</h3>
@@ -219,7 +221,7 @@ export default function AddCollectionPage() {
                                 </div>
                             </div>
                         </div>
-                    </Card>
+                    </div>
                 </motion.div>
             ))}
         </div>
@@ -234,7 +236,9 @@ export default function AddCollectionPage() {
           <SheetHeader className="text-left mb-6">
             <div className="flex items-center gap-4 mb-2">
                 <div className={cn("h-12 w-12 rounded-2xl bg-gradient-to-br flex items-center justify-center p-2.5", selectedProvider?.gradient)}>
-                    <Image src={selectedProvider?.logo || ""} alt="logo" width={32} height={32} className="object-contain brightness-0 invert" />
+                    {selectedProvider?.logo && (
+                      <Image src={selectedProvider.logo} alt="logo" width={32} height={32} className="object-contain brightness-0 invert" />
+                    )}
                 </div>
                 <SheetTitle className="text-2xl font-black tracking-tight">Link {selectedProvider?.name}</SheetTitle>
             </div>
@@ -324,12 +328,3 @@ export default function AddCollectionPage() {
     </div>
   );
 }
-
-function Card({ children, className, onClick }: { children: React.ReactNode, className?: string, onClick?: () => void }) {
-    return (
-        <div className={className} onClick={onClick}>
-            {children}
-        </div>
-    );
-}
-

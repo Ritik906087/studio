@@ -1,9 +1,10 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ChevronLeft, Plus, Wallet, Trash2 } from "lucide-react";
+import { ChevronLeft, Plus, Wallet, Trash2, ShieldCheck, BadgeCheck } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser } from '@/hooks/use-user';
@@ -12,20 +13,38 @@ import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 type LinkedPaymentMethod = {
   type: 'upi' | 'bank';
   name: string;
   upiId?: string;
   accountNumber?: string;
+  verifiedName?: string;
 };
 
-const paymentMethodDetails: Record<string, { logo: string; bgColor: string }> = {
-  PhonePe: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Phonepay.png?alt=media&token=579a228d-121f-4d5b-933d-692d791dec2f", bgColor: "bg-violet-600" },
-  Paytm: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download%20(2).png?alt=media&token=1fd9f09a-1f02-4dd9-ab3b-06c756856bd8", bgColor: "bg-sky-500" },
-  MobiKwik: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/MobiKwik.png?alt=media&token=bf924e98-9b78-459d-8eb7-396c305a11d7", bgColor: "bg-blue-600" },
-  Freecharge: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/download.png?alt=media&token=fab572ac-b45e-4c62-8276-8c87108756e4", bgColor: "bg-orange-500" },
-  Airtel: { logo: "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/Airtel%2001.png?alt=media&token=357342fd-85df-43c1-a7fb-d9d57315df1d", bgColor: "bg-red-500" },
+const providerConfig: Record<string, { logo: string; gradient: string }> = {
+  PhonePe: { 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(4).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDQpLnBuZyIsImlhdCI6MTc3NTE0ODYyMSwiZXhwIjoxODA2Njg0NjIxfQ.b_cMHhiCw52krGt2edtt1k5C1Keo8uGJwYIWpe6vZVo", 
+    gradient: "from-[#6739B7] to-[#512DA8]" 
+  },
+  Paytm: { 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(5).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDUpLnBuZyIsImlhdCI6MTc3NTE0ODYzMiwiZXhwIjoxODA2Njg0NjMyfQ.QXSbgSLV3ULTcV3ss9Co9ZMe1oj3tb9bR_OP8xY-Nds", 
+    gradient: "from-[#00BAF2] to-[#002E6E]" 
+  },
+  MobiKwik: { 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(1).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDEpLnBuZyIsImlhdCI6MTc3NTE0ODU3MywiZXhwIjoxODA2Njg0NTczfQ.m8Z7gn5FV-0ss58kTEUZ833u8Wv_bFun3YZeZtyIa9s", 
+    gradient: "from-[#0057E0] to-[#002B70]" 
+  },
+  Freecharge: { 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(3).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDMpLnBuZyIsImlhdCI6MTc3NTE0ODYwOSwiZXhwIjoxODA2Njg0NjA5fQ.pus8pOlgEXCFb2pjIzNsVtU9DxnIxEeaVaeR3TuIQPc", 
+    gradient: "from-[#FF5E00] to-[#E64A19]" 
+  },
+  Airtel: { 
+    logo: "https://gfpzygqegzakluihhkkr.supabase.co/storage/v1/object/sign/Lg%20pay/download%20(2).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9jMWRjNDIxNy1iODI0LTQ4ZjEtODQ3ZS04OWU1NWI3YzdhMjEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJMZyBwYXkvZG93bmxvYWQgKDIpLnBuZyIsImlhdCI6MTc3NTE0ODU5OSwiZXhwIjoxODA2Njg0NTk5fQ.yDb5CBUsF_MCejlDIzrQVjg6IMylJbAzEmHFaozfNjE", 
+    gradient: "from-[#E11900] to-[#B71C1C]" 
+  },
 };
 
 export default function CollectionPage() {
@@ -56,72 +75,118 @@ export default function CollectionPage() {
 
   const handleDelete = async (index: number) => {
     if (!user || !firestore) return;
-    if (!confirm("Are you sure?")) return;
+    if (!confirm("Are you sure you want to remove this account?")) return;
 
     try {
         const updatedMethods = [...paymentMethods];
         updatedMethods.splice(index, 1);
         await updateDoc(doc(firestore, 'users', user.uid), { paymentMethods: updatedMethods });
-        toast({ title: "Removed" });
+        toast({ title: "Account Removed", description: "Your withdrawal method has been updated." });
     } catch (e: any) {
         toast({ variant: "destructive", title: "Error", description: e.message });
     }
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-secondary">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4">
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-          <Link href="/my"><ChevronLeft className="h-6 w-6 text-muted-foreground" /></Link>
-        </Button>
-        <h1 className="text-xl font-bold">{translations.collection}</h1>
-        <div className="w-8"></div>
+    <div className="flex min-h-screen flex-col bg-[#F5F7FB]">
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b px-4 py-6">
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-slate-100">
+                    <Link href="/my"><ChevronLeft className="h-6 w-6 text-slate-800" /></Link>
+                </Button>
+                <div className="flex flex-col">
+                    <h1 className="text-xl font-black text-slate-900 tracking-tight">Withdrawal Hub</h1>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Manage your linked accounts</p>
+                </div>
+            </div>
+            <Link href="/my/collection/add">
+                <Button size="icon" className="h-10 w-10 rounded-2xl btn-gradient">
+                    <Plus className="h-5 w-5" />
+                </Button>
+            </Link>
+        </div>
       </header>
 
-      <main className="flex-grow space-y-4 p-4">
+      <main className="flex-grow space-y-6 p-4 pb-32">
         {profileLoading ? (
             <div className="flex items-center justify-center pt-20"><Loader size="md" /></div>
         ) : paymentMethods.length > 0 ? (
-            <div className="space-y-3">
-              {paymentMethods.map((method, idx) => {
-                const details = paymentMethodDetails[method.name] || { logo: "", bgColor: "bg-slate-700" };
-                return (
-                  <div key={idx} className={`flex h-20 w-full items-center justify-between gap-4 rounded-xl px-4 py-2 text-white shadow-md ${details.bgColor}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white p-1">
-                        {method.type === 'bank' ? <Wallet className="text-slate-700 h-6 w-6"/> : (
-                           details.logo ? <Image src={details.logo} alt="" width={32} height={32} className="object-contain" /> : <Wallet className="h-6 w-6" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-lg font-semibold truncate block">{method.name}</span>
-                        <p className="text-xs font-mono text-white/80 truncate block">
-                            {method.type === 'upi' ? method.upiId : `****${method.accountNumber?.slice(-4)}`}
-                        </p>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(idx)} className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/10">
-                        <Trash2 className="h-5 w-5" />
-                    </Button>
-                  </div>
-                );
-              })}
+            <div className="space-y-4">
+              <AnimatePresence>
+                {paymentMethods.map((method, idx) => {
+                    const config = providerConfig[method.name] || { logo: "", gradient: "from-slate-700 to-slate-900" };
+                    return (
+                        <motion.div
+                            key={idx}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className={cn(
+                                "relative overflow-hidden rounded-[32px] p-6 text-white shadow-xl shadow-blue-500/5 group",
+                                "bg-gradient-to-br",
+                                config.gradient
+                            )}
+                        >
+                            <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-500">
+                                <ShieldCheck className="h-32 w-32" />
+                            </div>
+                            
+                            <div className="relative z-10 flex flex-col h-full justify-between gap-8">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center p-2.5 border border-white/20 shadow-inner">
+                                            {config.logo ? (
+                                              <Image src={config.logo} alt={method.name} width={32} height={32} className="object-contain brightness-0 invert" />
+                                            ) : (
+                                              <Wallet className="h-6 w-6" />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h3 className="font-black text-lg tracking-tight leading-none">{method.name}</h3>
+                                            <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest mt-1">Verified Gateway</p>
+                                        </div>
+                                    </div>
+                                    <Button variant="ghost" size="icon" onClick={() => handleDelete(idx)} className="h-9 w-9 rounded-xl bg-white/10 hover:bg-red-500 hover:text-white transition-all text-white/70">
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">UPI Identifier</p>
+                                    <p className="text-xl font-mono font-black tracking-tighter truncate">
+                                        {method.upiId}
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-white/10 pt-4 mt-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-white/80">{method.verifiedName || 'Active Link'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 bg-white/10 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter border border-white/10">
+                                        <BadgeCheck className="h-2.5 w-2.5" />
+                                        Linked
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    );
+                })}
+              </AnimatePresence>
             </div>
         ) : (
-             <div className="flex flex-col items-center justify-center pt-20 text-center text-muted-foreground">
-                <Wallet className="h-16 w-16 opacity-30" />
-                <p className="mt-4 text-lg font-medium">No accounts linked.</p>
+             <div className="flex flex-col items-center justify-center pt-20 text-center px-10">
+                <div className="h-24 w-24 rounded-[32px] bg-slate-100 flex items-center justify-center mb-6">
+                    <Wallet className="h-10 w-10 text-slate-300" />
+                </div>
+                <h3 className="text-xl font-black text-slate-800 tracking-tight">No Accounts Found</h3>
+                <p className="text-sm text-slate-400 mt-2 font-medium">Link your UPI identifier to start receiving P2P settlements directly to your bank.</p>
+                <Button asChild className="mt-8 px-10 rounded-2xl btn-gradient h-12">
+                    <Link href="/my/collection/add">Add First Account</Link>
+                </Button>
             </div>
         )}
-
-        <Link href="/my/collection/add" className="block !mt-6">
-          <Card className="bg-white hover:bg-gray-50 transition-colors">
-            <CardContent className="flex items-center justify-center gap-3 p-4">
-              <Plus className="h-4 w-4" />
-              <span className="font-semibold">Add Payment Method</span>
-            </CardContent>
-          </Card>
-        </Link>
       </main>
     </div>
   );
