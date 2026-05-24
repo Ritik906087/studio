@@ -130,9 +130,16 @@ export default function BuyPage() {
         );
 
         const sellSnap = await getDocs(sellOrdersQuery);
-        const sellerDoc = sellSnap.docs.find(d => d.data().remainingAmount >= amountInInr);
+        
+        // CRITICAL CHANGE: Specifically exclude orders belonging to the current user
+        // This prevents "Self-Buying" which blocks liquidity.
+        const sellerDoc = sellSnap.docs.find(d => 
+            d.data().userId !== user.uid && 
+            d.data().remainingAmount >= amountInInr
+        );
 
         if (!sellerDoc) {
+            // FALLBACK: If no other sellers found, use Admin Server
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
             if (adminPMSnap.empty) throw new Error("Liquidity Pool Busy. Try again in 5 mins.");
