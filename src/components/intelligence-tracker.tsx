@@ -28,8 +28,11 @@ export function IntelligenceTracker() {
         try {
             const ipRes = await fetch('/api/get-client-ip', { cache: 'no-store' });
             if (ipRes.ok) {
-                const ipData = await ipRes.json();
-                ip = ipData.ip;
+                const text = await ipRes.text();
+                if (text) {
+                    const ipData = JSON.parse(text);
+                    ip = ipData.ip;
+                }
             }
         } catch (e) { /* silent fallback */ }
 
@@ -38,10 +41,14 @@ export function IntelligenceTracker() {
         try {
             const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
             if (geoRes.ok) {
-                geoData = await geoRes.json();
+                const text = await geoRes.text();
+                if (text) geoData = JSON.parse(text);
             } else {
                 const altRes = await fetch('https://ip-api.com/json/');
-                if (altRes.ok) geoData = await altRes.json();
+                if (altRes.ok) {
+                    const text = await altRes.text();
+                    if (text) geoData = JSON.parse(text);
+                }
             }
         } catch (e) { 
             console.warn("Geo fetch restricted by provider."); 

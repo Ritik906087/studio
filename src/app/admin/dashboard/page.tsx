@@ -74,12 +74,19 @@ export default function AdminDashboardPage() {
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
         if (!sessionStr) { router.replace('/admin/key'); return; }
-        const session = JSON.parse(sessionStr);
-        if (!session.authenticated || !ALLOWED_ADMINS.includes(session.masterId) || session.expires < Date.now()) {
+        
+        try {
+            const session = JSON.parse(sessionStr);
+            if (!session || !session.authenticated || !ALLOWED_ADMINS.includes(session.masterId) || session.expires < Date.now()) {
+                localStorage.removeItem('flex_admin_session');
+                router.replace('/admin/key');
+            } else {
+                setAdminId(session.masterId);
+            }
+        } catch (e) {
+            console.error("Session parse error:", e);
             localStorage.removeItem('flex_admin_session');
             router.replace('/admin/key');
-        } else {
-            setAdminId(session.masterId);
         }
     }, [router]);
 

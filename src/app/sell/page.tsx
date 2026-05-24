@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -135,7 +134,16 @@ export default function SellPage() {
             <div className="space-y-2 px-1">
                 <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Withdraw To</Label>
                 {profile?.paymentMethods?.length > 0 ? (
-                    <RadioGroup onValueChange={v => setSelectedMethod(JSON.parse(v))} className="space-y-3">
+                    <RadioGroup 
+                        onValueChange={v => {
+                            try {
+                                if (v) setSelectedMethod(JSON.parse(v));
+                            } catch (e) {
+                                console.error("Method parse error:", e);
+                            }
+                        }} 
+                        className="space-y-3"
+                    >
                         {profile.paymentMethods.map((m: any, i: number) => (
                             <Label key={i} className={cn(
                                 "flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl transition-all active:scale-[0.98]",
