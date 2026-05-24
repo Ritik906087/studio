@@ -169,70 +169,97 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         try {
             await runTransaction(firestore, async (transaction) => {
+                // 1. ALL READS FIRST
                 const buyerRef = doc(firestore, 'users', order.userId);
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
-                
                 const buyerSnap = await transaction.get(buyerRef);
-                const currentBuyerBalance = buyerSnap.data()?.balance || 0;
+                const buyerOrderSnap = await transaction.get(orderRef);
                 
+                let sellSnap = null;
+                let sellerSnap = null;
+                let sellOrderRef = null;
+                let sellerProfileRef = null;
+                let sellerUserSellRef = null;
+
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
+                    sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    sellerProfileRef = doc(firestore, 'users', order.sellerId);
+                    sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
+                    
+                    sellSnap = await transaction.get(sellOrderRef);
+                    sellerSnap = await transaction.get(sellerProfileRef);
+                }
+
+                // 2. ALL WRITES SECOND
+                if (!buyerSnap.exists()) throw new Error("Buyer profile missing");
+                
+                const currentBuyerBalance = buyerSnap.data()?.balance || 0;
                 transaction.update(buyerRef, { balance: currentBuyerBalance + order.amount });
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp() });
                 
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
-                    const sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    const sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
-                    const sellerProfileRef = doc(firestore, 'users', order.sellerId);
-
-                    const sellSnap = await transaction.get(sellOrderRef);
-                    const sellerSnap = await transaction.get(sellerProfileRef);
-
-                    if (sellSnap.exists()) {
-                        const updatedMatches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => 
-                            m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
-                        );
-                        const allCompleted = updatedMatches.every((m: any) => m.status === 'completed') && sellSnap.data().remainingAmount === 0;
-                        
-                        transaction.update(sellOrderRef, { 
-                            matchedBuyOrders: updatedMatches,
-                            status: allCompleted ? 'completed' : 'processing'
-                        });
+                if (sellSnap && sellSnap.exists()) {
+                    const sellData = sellSnap.data();
+                    const updatedMatches = (sellData.matchedBuyOrders || []).map((m: any) => 
+                        m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
+                    );
+                    const allCompleted = updatedMatches.every((m: any) => m.status === 'completed') && sellData.remainingAmount === 0;
+                    
+                    transaction.update(sellOrderRef!, { 
+                        matchedBuyOrders: updatedMatches,
+                        status: allCompleted ? 'completed' : 'processing'
+                    });
+                    
+                    if (sellerUserSellRef) {
                         transaction.update(sellerUserSellRef, { 
                             matchedBuyOrders: updatedMatches,
                             status: allCompleted ? 'completed' : 'processing'
                         });
                     }
+                }
 
-                    if (sellerSnap.exists()) {
-                        const currentSellerHold = sellerSnap.data()?.holdBalance || 0;
-                        transaction.update(sellerProfileRef, { holdBalance: Math.max(0, currentSellerHold - order.baseAmount) });
-                    }
+                if (sellerSnap && sellerSnap.exists()) {
+                    const currentSellerHold = sellerSnap.data()?.holdBalance || 0;
+                    transaction.update(sellerProfileRef!, { holdBalance: Math.max(0, currentSellerHold - order.baseAmount) });
                 }
             });
             toast({ title: "Order Approved", description: `Assets credited to ${order.userNumericId}` });
-        } catch (e: any) { toast({ variant: "destructive", title: "Approval Failed", description: e.message }); }
+        } catch (e: any) { 
+            console.error("Approval error:", e);
+            toast({ variant: "destructive", title: "Approval Failed", description: e.message }); 
+        }
     };
 
     const handleRejectBuy = async (order: any) => {
         if (!firestore) return;
         try {
             await runTransaction(firestore, async (transaction) => {
+                // 1. ALL READS FIRST
+                let sellSnap = null;
+                let sellOrderRef = null;
+                let sellerUserSellRef = null;
+
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
+                    sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
+                    sellSnap = await transaction.get(sellOrderRef);
+                }
+
+                // 2. ALL WRITES SECOND
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 transaction.update(orderRef, { status: 'failed', rejectionReason: 'Admin Rejected Proof' });
                 
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
-                    const sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    const sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
+                if (sellSnap && sellSnap.exists()) {
+                    const sellData = sellSnap.data();
+                    const currentRemaining = sellData.remainingAmount || 0;
+                    const updatedMatches = (sellData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
                     
-                    const sellSnap = await transaction.get(sellOrderRef);
-                    if (sellSnap.exists()) {
-                        const currentRemaining = sellSnap.data().remainingAmount || 0;
-                        const updatedMatches = (sellSnap.data().matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
-                        
-                        transaction.update(sellOrderRef, { 
-                            remainingAmount: currentRemaining + order.baseAmount,
-                            status: 'partially_filled',
-                            matchedBuyOrders: updatedMatches
-                        });
+                    transaction.update(sellOrderRef!, { 
+                        remainingAmount: currentRemaining + order.baseAmount,
+                        status: 'partially_filled',
+                        matchedBuyOrders: updatedMatches
+                    });
+                    
+                    if (sellerUserSellRef) {
                         transaction.update(sellerUserSellRef, { 
                             remainingAmount: currentRemaining + order.baseAmount,
                             status: 'partially_filled',
@@ -242,7 +269,10 @@ export default function AdminDashboardPage() {
                 }
             });
             toast({ title: "Order Rejected" });
-        } catch (e: any) { toast({ variant: "destructive", title: "Rejection Failed" }); }
+        } catch (e: any) { 
+            console.error("Rejection error:", e);
+            toast({ variant: "destructive", title: "Rejection Failed", description: e.message }); 
+        }
     };
 
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
@@ -413,14 +443,23 @@ export default function AdminDashboardPage() {
                                 />
                             </div>
 
-                             {indexError && <Alert variant="destructive"><AlertTitle>Index Missing</AlertTitle></Alert>}
+                             {indexError && (
+                                <Alert variant="destructive" className="rounded-2xl border-dashed">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertTitle className="font-black text-xs uppercase">Firestore Index Required</AlertTitle>
+                                    <AlertDescription className="text-[10px] font-medium mt-1">
+                                        P2P matching needs a collection-group index. 
+                                        <a href={`https://console.firebase.google.com/v1/r/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'studio-7114417830-300d7'}/firestore/indexes?create_exemption=Clpwcm9qZWN0cy9zdHVkaW8tNzExNDQxNzgzMC0zMDBkNy9kYXRhYmFzZXMvKGRlZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvb3JkZXJzL2ZpZWxkcy9zdGF0dXMQAhoKCgZzdGF0dXMQAQ`} target="_blank" className="ml-1 underline font-black text-blue-600">Click here to enable</a>.
+                                    </AlertDescription>
+                                </Alert>
+                             )}
 
                              <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
                                 <div className="overflow-x-auto">
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
                                             <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase pl-6">Buyer & Amount</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase pl-6 py-4">Buyer & Amount</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Payment App</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">UTR & Proof</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Recipient (Seller)</TableHead>
