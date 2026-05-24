@@ -16,7 +16,6 @@ export const FirebaseClientProvider = ({ children }: { children: ReactNode }) =>
       const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
       const auth = getAuth(app);
       
-      // Fixed: experimentalForceLongPolling is the most stable for cloud workstations.
       const firestore = initializeFirestore(app, {
         experimentalForceLongPolling: true,
         ignoreUndefinedProperties: true,
