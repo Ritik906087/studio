@@ -35,22 +35,26 @@ export default function BuyPage() {
   const { toast } = useToast();
 
   const [isMatching, setIsMatching] = useState(false);
-  const [inProgressOrder, setInProgressOrder] = useState<any>(null);
+  const [activePaymentOrder, setActivePaymentOrder] = useState<any>(null);
   const [usdtAddress, setUsdtAddress] = useState<string | null>(null);
   const [usdtInput, setUsdtInput] = useState<string>('5');
 
   useEffect(() => {
     if (!user || !firestore) return;
+    
+    // Changed: Only look for 'pending_payment' to block new orders.
+    // If order is 'pending_confirmation' (Verifying), user can buy again.
     const q = query(
       collection(firestore, 'users', user.uid, 'orders'), 
-      where('status', 'in', ['pending_payment', 'pending_confirmation']), 
+      where('status', '==', 'pending_payment'), 
       limit(1)
     );
+    
     getDocs(q).then(snap => { 
         if (!snap.empty) {
-            setInProgressOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); 
+            setActivePaymentOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); 
         } else {
-            setInProgressOrder(null);
+            setActivePaymentOrder(null);
         }
     });
 
@@ -70,13 +74,14 @@ export default function BuyPage() {
         return;
     }
 
-    if (inProgressOrder) { 
-        toast({ title: "Pending Order", description: "Please complete or cancel your existing order first.", variant: "destructive" }); 
-        if (inProgressOrder.status === 'pending_payment') {
-            router.push(`/buy/confirm/${inProgressOrder.id}`);
-        } else {
-            router.push(`/order/${inProgressOrder.id}`);
-        }
+    // Check if there is an order waiting for payment (UTR not submitted)
+    if (activePaymentOrder) { 
+        toast({ 
+          title: "Complete Previous Order", 
+          description: "You have an order pending payment. Please complete or cancel it first.", 
+          variant: "destructive" 
+        }); 
+        router.push(`/buy/confirm/${activePaymentOrder.id}`);
         return; 
     }
 
