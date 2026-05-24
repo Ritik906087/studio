@@ -7,7 +7,8 @@ import { useRouter } from 'next/navigation';
 import { 
   LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
-  Edit3, Eye, Wallet, ArrowRight, Check, RefreshCw
+  Edit3, Eye, Wallet, ArrowRight, Check, RefreshCw,
+  ExternalLink, Ban, BadgeCheck
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -57,7 +58,6 @@ export default function AdminDashboardPage() {
         }
     }, [router]);
 
-    // Optimized: Fetch users once on mount or manually to save quota
     const fetchUsers = useCallback(async () => {
         if (!firestore) return;
         setUsersLoading(true);
@@ -77,7 +77,6 @@ export default function AdminDashboardPage() {
         
         fetchUsers();
 
-        // High priority listeners (Keep real-time for operation)
         const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), where('status', 'in', ['pending', 'partially_filled']), limit(50)), (snap) => {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
@@ -121,24 +120,85 @@ export default function AdminDashboardPage() {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 
                 const buyerSnap = await transaction.get(buyerRef);
-                const currentBalance = buyerSnap.data()?.balance || 0;
+                const currentBuyerBalance = buyerSnap.data()?.balance || 0;
                 
-                transaction.update(buyerRef, { balance: currentBalance + order.amount });
+                // 1. Credit Buyer Balance (Total = Base + Bonus)
+                transaction.update(buyerRef, { balance: currentBuyerBalance + order.amount });
+                
+                // 2. Mark Order as Completed
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp() });
                 
-                if (order.matchedSellOrderId) {
+                // 3. Deduct from Seller's Hold Balance if it's a P2P match
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
                     const sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    const sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
+                    const sellerProfileRef = doc(firestore, 'users', order.sellerId);
+
                     const sellSnap = await transaction.get(sellOrderRef);
+                    const sellerSnap = await transaction.get(sellerProfileRef);
+
                     if (sellSnap.exists()) {
                         const updatedMatches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => 
                             m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
                         );
-                        transaction.update(sellOrderRef, { matchedBuyOrders: updatedMatches });
+                        // Check if ALL matches are completed and remaining is 0
+                        const allCompleted = updatedMatches.every((m: any) => m.status === 'completed') && sellSnap.data().remainingAmount === 0;
+                        
+                        transaction.update(sellOrderRef, { 
+                            matchedBuyOrders: updatedMatches,
+                            status: allCompleted ? 'completed' : 'processing'
+                        });
+                        transaction.update(sellerUserSellRef, { 
+                            matchedBuyOrders: updatedMatches,
+                            status: allCompleted ? 'completed' : 'processing'
+                        });
+                    }
+
+                    if (sellerSnap.exists()) {
+                        const currentSellerHold = sellerSnap.data()?.holdBalance || 0;
+                        transaction.update(sellerProfileRef, { holdBalance: Math.max(0, currentSellerHold - order.baseAmount) });
                     }
                 }
             });
-            toast({ title: "Order Approved" });
-        } catch (e: any) { toast({ variant: 'destructive', title: "Error", description: e.message }); }
+            toast({ title: "Order Approved", description: `Assets credited to ${order.userNumericId || 'Buyer'}` });
+        } catch (e: any) { 
+            console.error(e);
+            toast({ variant: 'destructive', title: "Approval Failed", description: e.message }); 
+        }
+    };
+
+    const handleRejectBuy = async (order: any) => {
+        if (!firestore) return;
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
+                transaction.update(orderRef, { status: 'failed', rejectionReason: 'Admin Rejected Proof' });
+                
+                // If P2P, release liquidity back to seller's matching pool
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
+                    const sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    const sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
+                    
+                    const sellSnap = await transaction.get(sellOrderRef);
+                    if (sellSnap.exists()) {
+                        const currentRemaining = sellSnap.data().remainingAmount || 0;
+                        const updatedMatches = (sellSnap.data().matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
+                        
+                        transaction.update(sellOrderRef, { 
+                            remainingAmount: currentRemaining + order.baseAmount,
+                            status: 'partially_filled',
+                            matchedBuyOrders: updatedMatches
+                        });
+                        transaction.update(sellerUserSellRef, { 
+                            remainingAmount: currentRemaining + order.baseAmount,
+                            status: 'partially_filled',
+                            matchedBuyOrders: updatedMatches
+                        });
+                    }
+                }
+            });
+            toast({ title: "Order Rejected", description: "Liquidity returned to pool." });
+        } catch (e: any) { toast({ variant: 'destructive', title: "Rejection Failed", description: e.message }); }
     };
 
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
@@ -212,11 +272,6 @@ export default function AdminDashboardPage() {
                                     <div className="text-3xl font-black text-red-600 mt-2">₹0</div>
                                 </Card>
                             </div>
-                            <Card className="border-none shadow-sm rounded-3xl bg-white p-12 text-center border-t-4 border-t-primary">
-                                <Activity className="h-12 w-12 mx-auto mb-4 text-primary animate-pulse" />
-                                <h3 className="font-black text-lg">System Pulse Active</h3>
-                                <p className="text-slate-400 text-sm mt-1">Monitoring P2P rotation and Liquidity fallback.</p>
-                            </Card>
                         </TabsContent>
 
                         <TabsContent value="users">
@@ -317,29 +372,51 @@ export default function AdminDashboardPage() {
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
                                             <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase pl-6">Order ID</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase pl-6">Buyer UID / Amount</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">UTR / Proof</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">Recipient (Seller)</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase text-right pr-6">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {pendingBuyOrders.map(o => (
                                                 <TableRow key={o.id}>
-                                                    <TableCell className="font-mono text-xs font-bold text-slate-500 pl-6">{o.orderId}</TableCell>
+                                                    <TableCell className="pl-6">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-black text-blue-600 text-xs">{o.userNumericId || 'UID N/A'}</span>
+                                                            <span className="font-black text-slate-800 text-base">₹{o.amount.toFixed(2)}</span>
+                                                            <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">ID: {o.orderId}</span>
+                                                        </div>
+                                                    </TableCell>
                                                     <TableCell>
                                                         <div className="flex flex-col gap-1">
                                                             <span className="font-mono text-xs font-black text-primary">{o.utr}</span>
                                                             {o.screenshotURL ? (
-                                                                <a href={o.screenshotURL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[9px] text-blue-600 font-bold hover:underline">
-                                                                    VIEW IMAGE <ArrowRight className="h-2 w-2" />
+                                                                <a href={o.screenshotURL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[9px] text-blue-600 font-black hover:underline uppercase">
+                                                                    VIEW IMAGE <ExternalLink className="h-2 w-2" />
                                                                 </a>
-                                                            ) : <span className="text-[9px] text-slate-300 italic">No Image</span>}
+                                                            ) : <span className="text-[9px] text-slate-300 italic uppercase">No Image</span>}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[9px] font-black text-slate-400 uppercase">UID: {o.sellerId}</span>
+                                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                                <div className="h-5 w-5 bg-slate-50 rounded flex items-center justify-center">
+                                                                    <Wallet className="h-2.5 w-2.5 text-slate-400" />
+                                                                </div>
+                                                                <span className="font-mono text-[9px] font-black text-slate-600">{o.sellerWithdrawalDetails?.upiId || 'ADMIN'}</span>
+                                                            </div>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
                                                         <div className="flex justify-end gap-2">
-                                                            <Button size="sm" onClick={() => handleApproveBuy(o)} className="bg-green-600 hover:bg-green-700 h-7 text-[9px] font-black rounded-lg">APPROVE</Button>
-                                                            <Button size="sm" variant="destructive" className="h-7 text-[9px] font-black rounded-lg">REJECT</Button>
+                                                            <Button size="sm" onClick={() => handleApproveBuy(o)} className="bg-green-600 hover:bg-green-700 h-9 px-4 text-[9px] font-black rounded-xl shadow-lg shadow-green-100">
+                                                                <BadgeCheck className="h-3 w-3 mr-1" /> APPROVE
+                                                            </Button>
+                                                            <Button size="sm" variant="outline" onClick={() => handleRejectBuy(o)} className="h-9 px-4 text-[9px] font-black rounded-xl border-red-50 text-red-500 hover:bg-red-50">
+                                                                <Ban className="h-3 w-3 mr-1" /> REJECT
+                                                            </Button>
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>

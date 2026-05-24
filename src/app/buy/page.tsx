@@ -42,8 +42,6 @@ export default function BuyPage() {
   useEffect(() => {
     if (!user || !firestore) return;
     
-    // Changed: Only look for 'pending_payment' to block new orders.
-    // If order is 'pending_confirmation' (Verifying), user can buy again.
     const q = query(
       collection(firestore, 'users', user.uid, 'orders'), 
       where('status', '==', 'pending_payment'), 
@@ -69,12 +67,11 @@ export default function BuyPage() {
   };
 
   const handleP2PMatch = async (amountInInr: number, type: 'upi' | 'usdt' = 'upi', usdtValue?: number) => {
-    if (!user || !firestore) {
+    if (!user || !profile || !firestore) {
         toast({ title: "Session Expired", description: "Please login again.", variant: "destructive" });
         return;
     }
 
-    // Check if there is an order waiting for payment (UTR not submitted)
     if (activePaymentOrder) { 
         toast({ 
           title: "Complete Previous Order", 
@@ -103,6 +100,7 @@ export default function BuyPage() {
                 transaction.set(buyOrderRef, {
                     id: rawOrderId,
                     userId: user.uid,
+                    userNumericId: profile.numericId,
                     orderId: displayOrderId,
                     amount: totalAmount,
                     baseAmount: amountInInr,
@@ -145,6 +143,7 @@ export default function BuyPage() {
                 transaction.set(buyOrderRef, {
                     id: rawOrderId,
                     userId: user.uid,
+                    userNumericId: profile.numericId,
                     orderId: displayOrderId,
                     amount: totalAmount,
                     baseAmount: amountInInr,
@@ -202,6 +201,7 @@ export default function BuyPage() {
             transaction.set(buyOrderRef, {
                 id: rawOrderId,
                 userId: user.uid,
+                userNumericId: profile.numericId,
                 orderId: displayOrderId,
                 amount: totalAmount,
                 baseAmount: amountInInr,
