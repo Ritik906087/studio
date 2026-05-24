@@ -2,21 +2,12 @@
 
 import React, { Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Copy, Upload, Loader2, CheckCircle2, XCircle, AlertCircle, Hash, Clock, Info, HelpCircle } from 'lucide-react';
+import { ChevronLeft, CheckCircle2, XCircle, AlertCircle, Hash, Clock, HelpCircle, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import Image from 'next/image';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc } from '@/firebase';
 import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
@@ -28,17 +19,15 @@ type Order = {
     id: string;
     amount: number;
     baseAmount: number;
-    usdtAmount?: number;
     status: string;
     createdAt: any;
     orderId: string;
     paymentType: string;
-    paymentProvider: string;
-    sellerId?: string;
     sellerWithdrawalDetails?: any;
-    matchedSellOrderId?: string;
     buyerSelectedProvider?: string;
     buyerSelectedUpi?: string;
+    matchedSellOrderId?: string;
+    sellerId?: string;
 };
 
 const formatTime = (seconds: number) => {
@@ -49,37 +38,24 @@ const formatTime = (seconds: number) => {
     return `${hours} : ${mins} : ${secs}`;
 };
 
-const CANCELLATION_REASONS = [
-    "I don't want to buy anymore",
-    "Payment method is not working",
-    "Information provided is incorrect",
-    "Accidentally created the order",
-    "Other reasons"
-];
-
 const CopyRow = ({ label, value }: { label: string, value?: string | number }) => {
     const { toast } = useToast();
     const handleCopy = () => {
         if (!value) return;
         navigator.clipboard.writeText(value.toString());
-        toast({ title: 'Copied', description: `${label} copied to clipboard.` });
+        toast({ title: 'Copied', description: `${label} copied.` });
     };
 
     return (
-        <div className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
-            <span className="text-sm font-medium text-slate-500 w-24">{label}</span>
-            <span className="flex-1 text-sm font-black text-slate-800 truncate px-2">{value || '...'}</span>
-            <button 
-                onClick={handleCopy}
-                className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100 active:scale-95 transition-all uppercase"
-            >
-                Copy
-            </button>
+        <div className="flex items-center justify-between py-3.5 border-b border-slate-50 last:border-0">
+            <span className="text-[11px] font-black uppercase text-slate-400 w-20">{label}</span>
+            <span className="flex-1 text-sm font-black text-slate-800 truncate px-2 text-right">{value || '...'}</span>
+            <button onClick={handleCopy} className="ml-2 text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100 active:scale-90 uppercase">Copy</button>
         </div>
     );
 };
 
-function PaymentDetailsContent() {
+function ConfirmPageContent() {
     const router = useRouter();
     const params = useParams();
     const { toast } = useToast();
@@ -87,17 +63,11 @@ function PaymentDetailsContent() {
     const firestore = useFirestore();
 
     const orderId = params.orderId as string;
+    const [view, setView] = useState<'info' | 'prove'>('info');
     const [utr, setUtr] = useState('');
     const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
-    const [isConfirming, setIsConfirming] = useState(false);
-    const [isCancelling, setIsCancelling] = useState(false);
-    const [timeLeft, setTimeLeft] = useState<number>(1800); 
-    const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
-    const [selectedReason, setSelectedReason] = useState(CANCELLATION_REASONS[0]);
-    
-    // View state to toggle between payment info and proof submission
-    const [view, setView] = useState<'info' | 'prove'>('info');
-    
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [timeLeft, setTimeLeft] = useState<number>(1800);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const orderRef = useMemo(() => {
@@ -107,113 +77,44 @@ function PaymentDetailsContent() {
 
     const { data: order, loading } = useDoc<Order>(orderRef);
 
-    const handleCancelOrder = useCallback(async (reason: string) => {
-        if (!order || !user || !firestore || isCancelling) return;
-        
-        setIsCancelling(true);
-        try {
-            await runTransaction(firestore, async (transaction) => {
-                const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
-                
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'SYSTEM_VAULT') {
-                    const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    const sellerUserOrderRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
-
-                    const sellerSnap = await transaction.get(sellerOrderRef);
-                    if (sellerSnap.exists()) {
-                        const sellerData = sellerSnap.data();
-                        const newRemaining = (sellerData.remainingAmount || 0) + (order.baseAmount || 0);
-                        
-                        let newStatus = 'partially_filled';
-                        if (newRemaining >= sellerData.amount) {
-                            newStatus = 'pending';
-                        }
-
-                        const updatedMatches = (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId);
-
-                        transaction.update(sellerOrderRef, {
-                            remainingAmount: newRemaining,
-                            status: newStatus,
-                            matchedBuyOrders: updatedMatches
-                        });
-
-                        transaction.update(sellerUserOrderRef, {
-                            remainingAmount: newRemaining,
-                            status: newStatus,
-                            matchedBuyOrders: updatedMatches
-                        });
-                    }
-                }
-
-                transaction.update(buyerOrderRef, {
-                    status: 'cancelled',
-                    cancellationReason: reason,
-                    cancelledAt: serverTimestamp()
-                });
-            });
-
-            toast({ title: 'Order Cancelled', description: reason });
-            router.replace('/home');
-        } catch (e: any) {
-            toast({ variant: 'destructive', title: 'Cancellation Failed', description: e.message });
-        } finally {
-            setIsCancelling(false);
-            setIsCancelDialogOpen(false);
-        }
-    }, [order, user, firestore, router, toast, isCancelling, orderId]);
-
     useEffect(() => {
         if (!order) return;
-        
         if (order.status !== 'pending_payment') {
-            if (['cancelled', 'failed'].includes(order.status)) {
-                router.replace('/home');
-            } else {
-                router.push(`/order/${orderId}`);
-            }
+            router.replace(`/order/${orderId}`);
             return;
         }
 
         const createdAt = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
-        const duration = 30 * 60 * 1000;
-        const expiryTime = new Date(createdAt.getTime() + duration);
+        const expiryTime = new Date(createdAt.getTime() + 30 * 60 * 1000);
 
         const interval = setInterval(() => {
-            const now = new Date();
-            const secondsLeft = Math.floor((expiryTime.getTime() - now.getTime()) / 1000);
-
-            if (secondsLeft <= 0) {
+            const diff = Math.floor((expiryTime.getTime() - Date.now()) / 1000);
+            if (diff <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                handleCancelOrder("Payment timeout exceeded");
             } else {
-                setTimeLeft(secondsLeft);
+                setTimeLeft(diff);
             }
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [order, orderId, router, handleCancelOrder]);
+    }, [order, orderId, router]);
 
-    const handleConfirm = async () => {
+    const handleConfirmSubmit = async () => {
         if (!utr || utr.length < 10) {
-            toast({ variant: 'destructive', title: 'Invalid Ref', description: 'Please enter a valid reference number.' });
+            toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please enter a valid reference number.' });
             return;
         }
-        
-        if (order?.paymentType !== 'usdt' && !screenshotFile) {
-            toast({ variant: 'destructive', title: 'Proof Required', description: 'Please upload the payment screenshot.' });
+        if (!screenshotFile) {
+            toast({ variant: 'destructive', title: 'Screenshot Required', description: 'Please upload payment proof.' });
             return;
         }
-        
         if (!user || !firestore || !order) return;
 
-        setIsConfirming(true);
+        setIsSubmitting(true);
         try {
-            let downloadUrl = null;
-            if (screenshotFile) {
-                const path = `orders/${user.uid}/${orderId}/${Date.now()}.png`;
-                downloadUrl = await uploadToSupabase(screenshotFile, path);
-            }
+            const path = `orders/${user.uid}/${orderId}/${Date.now()}.png`;
+            const downloadUrl = await uploadToSupabase(screenshotFile, path);
 
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
@@ -236,252 +137,180 @@ function PaymentDetailsContent() {
                 transaction.update(buyerOrderRef, {
                     status: 'pending_confirmation',
                     utr: utr,
-                    ...(downloadUrl && { screenshotURL: downloadUrl }),
+                    screenshotURL: downloadUrl,
                     submittedAt: serverTimestamp()
                 });
             });
 
-            toast({ title: 'Payment Submitted', description: 'Process is now in review.' });
+            toast({ title: 'Submitted Successfully', description: 'Redirecting to status page...' });
             router.push(`/order/${orderId}`);
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Submission Failed', description: e.message });
         } finally {
-            setIsConfirming(false);
+            setIsSubmitting(false);
         }
     };
 
-    const details = order?.sellerWithdrawalDetails;
-    
-    const handleGoPay = () => {
-        if (!details?.upiId) return;
-        const upiUrl = `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Verified Recipient')}&am=${order?.baseAmount}&tn=${order?.orderId}`;
-        window.location.href = upiUrl;
-    };
+    if (loading) return <div className="flex h-screen items-center justify-center bg-white"><Loader size="md" /></div>;
+    if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400">Order Expired</div>;
 
-    if (loading) return <div className="p-8 flex justify-center"><Loader size="md" /></div>;
-    if (!order) return <div className="p-8 text-center">Session not found.</div>;
+    const details = order.sellerWithdrawalDetails;
 
     return (
-        <div className="flex flex-col min-h-screen bg-white">
+        <div className="flex flex-col min-h-screen bg-white font-body">
             {/* Header */}
-            <header className="flex items-center justify-between p-3 border-b bg-white sticky top-0 z-50">
-                <Button onClick={() => view === 'prove' ? setView('info') : setIsCancelDialogOpen(true)} variant="ghost" size="icon" className="h-8 w-8 -ml-1">
-                    <ChevronLeft className="h-6 w-6 text-slate-600" />
+            <header className="flex items-center justify-between p-4 border-b bg-white sticky top-0 z-50">
+                <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
+                    <ChevronLeft className="h-6 w-6 text-slate-800" />
                 </Button>
-                <h1 className="text-base font-bold text-slate-700">Buy FP details</h1>
+                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">Buy FP Center</h1>
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
 
             {/* Timer Banner */}
-            <div className="bg-red-50 px-4 py-2.5 flex items-center gap-3 text-red-500">
+            <div className="bg-red-50 px-4 py-3 flex items-center gap-3 text-red-500 border-b border-red-100">
                 <Clock className="h-5 w-5" />
                 <span className="font-mono font-black text-base">{formatTime(timeLeft)}</span>
-                <span className="text-xs font-bold uppercase tracking-tight">Please pay in time</span>
-                <div className="ml-auto flex items-center justify-center h-5 w-5 rounded-full border-2 border-red-500">
-                    <span className="text-[10px] font-black">!</span>
-                </div>
+                <span className="text-[10px] font-black uppercase tracking-tight ml-1">Time Remaining to Pay</span>
             </div>
 
-            {/* Progress Steps */}
-            <div className="px-4 pt-6 pb-2">
+            {/* Steps */}
+            <div className="px-6 py-6">
                 <div className="flex items-center justify-between relative px-2 mb-2">
-                    <div className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-slate-100 -translate-y-1/2 z-0" />
-                    <div className={cn("relative z-10 h-3.5 w-3.5 rounded-full border-2", (view === 'info' || view === 'prove') ? "bg-blue-500 border-blue-500" : "bg-white border-slate-200")} />
-                    <div className={cn("relative z-10 h-3.5 w-3.5 rounded-full border-2", view === 'prove' ? "bg-blue-500 border-blue-500" : "bg-white border-slate-200")} />
-                    <div className="relative z-10 h-3.5 w-3.5 rounded-full border-2 bg-white border-slate-200" />
+                    <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-slate-100 -translate-y-1/2 z-0" />
+                    <div className={cn("relative z-10 h-4 w-4 rounded-full border-2 transition-all", (view === 'info' || view === 'prove') ? "bg-blue-600 border-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.4)]" : "bg-white border-slate-200")} />
+                    <div className={cn("relative z-10 h-4 w-4 rounded-full border-2 transition-all", view === 'prove' ? "bg-blue-600 border-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.4)]" : "bg-white border-slate-200")} />
+                    <div className="relative z-10 h-4 w-4 rounded-full border-2 bg-white border-slate-200" />
                 </div>
-                <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
-                    <span className={cn(view === 'info' && "text-blue-500")}>Payment info</span>
-                    <span className={cn(view === 'prove' && "text-blue-500")}>Payment prove</span>
-                    <span>Audit</span>
+                <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-slate-400">
+                    <span className={cn(view === 'info' && "text-blue-600")}>1. Payment Info</span>
+                    <span className={cn(view === 'prove' && "text-blue-600")}>2. Payment Prove</span>
+                    <span>3. Audit Result</span>
                 </div>
             </div>
 
             <main className="flex-1 p-4 overflow-y-auto no-scrollbar pb-32">
                 {view === 'info' ? (
                     <div className="space-y-6 animate-in fade-in duration-300">
-                        {/* Instruction Section */}
-                        <div className="space-y-1">
-                            <p className="text-base font-black text-red-600 leading-tight">
-                                Please use the {order.buyerSelectedProvider || 'app'}({order.buyerSelectedUpi || 'linked account'}) of your choice to pay
-                            </p>
-                        </div>
-
-                        {/* Payment Data Section */}
-                        <div className="space-y-0.5 mt-4">
-                            <CopyRow label="Name" value={details?.accountHolderName || details?.name || 'Verified Channel'} />
-                            <CopyRow label="UPI ID" value={details?.upiId} />
-                            <CopyRow label="Amount" value={order.baseAmount} />
-                            <CopyRow label="Order ID" value={order.orderId} />
-                        </div>
-
-                        {/* Notice Section */}
-                        <div className="space-y-3 pt-4">
-                            <p className="text-[11px] font-bold text-red-600 leading-tight">
-                                Notice: The remittance amount must be consistent, otherwise the transaction will not be completed.
-                            </p>
-                            <p className="text-[11px] font-bold text-red-600 leading-tight">
-                                Notice: If you have already paid, please wait patiently for the transaction review, please do not cancel the order
-                            </p>
-                        </div>
-
-                        <div className="flex justify-center pt-4">
-                             <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 shadow-sm text-blue-500 active:scale-95 transition-transform">
-                                <HelpCircle className="h-5 w-5" />
-                             </div>
-                        </div>
-
-                        <div className="text-center pt-4">
-                             <p className="text-xs font-medium text-slate-400">
-                                Unable to complete payment? <button onClick={() => setIsCancelDialogOpen(true)} className="text-red-600 font-bold hover:underline">Cancel</button> my order.
+                        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+                             <p className="text-xs font-black text-blue-700 leading-tight">
+                                PLEASE USE {order.buyerSelectedProvider?.toUpperCase() || 'ANY UPI APP'} TO SEND THE EXACT AMOUNT TO THE DESTINATION BELOW.
                              </p>
+                        </div>
+
+                        <div className="space-y-1 bg-slate-50 p-2 rounded-[24px] border border-slate-100 shadow-inner">
+                            <CopyRow label="Receiver" value={details?.name || 'Verified Node'} />
+                            <CopyRow label="UPI ID" value={details?.upiId} />
+                            <CopyRow label="Amount" value={`₹${order.baseAmount.toFixed(2)}`} />
+                            <CopyRow label="Token ID" value={order.orderId} />
+                        </div>
+
+                        <div className="space-y-3 pt-2">
+                            <p className="text-[10px] font-bold text-red-600 leading-tight uppercase flex gap-2">
+                                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                Amount must be consistent, otherwise transaction will fail.
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-400 leading-tight uppercase flex gap-2">
+                                <Info className="h-3.5 w-3.5 shrink-0" />
+                                If already paid, do not cancel. Wait for system audit.
+                            </p>
                         </div>
                     </div>
                 ) : (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                         {/* WARNING SECTION */}
-                        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3">
-                            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                            <div className="space-y-1">
-                                <p className="text-[11px] text-red-800 font-black uppercase tracking-tight leading-tight">
-                                    CRITICAL WARNING: SUBMISSION AUDIT ACTIVE
-                                </p>
-                                <p className="text-[10px] text-red-700 font-bold leading-relaxed uppercase">
-                                    Submitting a fake screenshot, incorrect UTR, wrong payment amount, or using an unauthorized payment method will result in an immediate order rejection and permanent system ban. Flex Pay is NOT responsible for funds lost due to non-compliance.
-                                </p>
+                        <div className="p-5 bg-red-600 text-white rounded-[24px] shadow-lg shadow-red-200">
+                            <div className="flex items-center gap-3 mb-2">
+                                <AlertCircle className="h-6 w-6" />
+                                <h3 className="font-black text-sm uppercase tracking-tight">Security Protocol Active</h3>
                             </div>
+                            <p className="text-[10px] font-bold leading-relaxed uppercase opacity-90">
+                                Submitting fake screenshots, wrong UTR, or incorrect amounts will lead to immediate permanent ban and total asset freeze. Flex Pay is NOT responsible for funds lost due to non-compliance with these rules.
+                            </p>
                         </div>
 
-                        <Card className="border-none shadow-sm rounded-2xl bg-slate-50 overflow-hidden">
-                            <CardContent className="p-5 space-y-5">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                                        Enter UTR / Reference ID
-                                    </Label>
-                                    <div className="relative">
-                                        <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                        <Input 
-                                            placeholder="12-Digit Reference Number" 
-                                            value={utr} 
-                                            onChange={(e) => setUtr(e.target.value.replace(/\s/g, '').toUpperCase())}
-                                            className="h-12 pl-10 rounded-xl bg-white border-none font-mono font-black text-sm ring-1 ring-slate-200 focus-visible:ring-primary/40"
-                                            maxLength={12}
-                                        />
-                                    </div>
-                                    <p className="text-[8px] text-slate-400 font-bold uppercase ml-1">Check your bank SMS for the 12-digit UTR</p>
+                        <div className="space-y-5">
+                            <div className="space-y-1.5 px-1">
+                                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">UTR / Reference Number</Label>
+                                <div className="relative group">
+                                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300 group-focus-within:text-primary transition-colors" />
+                                    <Input 
+                                        placeholder="12-Digit Reference ID" 
+                                        value={utr} 
+                                        onChange={(e) => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                                        className="h-14 pl-11 rounded-2xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black text-base focus-visible:ring-primary/40"
+                                    />
                                 </div>
-                                
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                                        Upload Transfer Screenshot
-                                    </Label>
-                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
-                                    <div 
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className={cn(
-                                            "w-full h-32 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all",
-                                            screenshotFile ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-white border-slate-200 text-slate-400 hover:border-blue-300"
-                                        )}
-                                    >
-                                        {screenshotFile ? (
-                                            <div className="text-center space-y-2">
-                                                <div className="h-10 w-10 bg-teal-500 rounded-full flex items-center justify-center mx-auto shadow-md">
-                                                    <CheckCircle2 className="h-6 w-6 text-white" />
-                                                </div>
-                                                <p className="text-xs font-black uppercase">Proof Selected ✓</p>
-                                                <p className="text-[9px] font-bold opacity-60 truncate max-w-[200px] mx-auto">{screenshotFile.name}</p>
-                                            </div>
-                                        ) : (
-                                            <div className="text-center space-y-2">
-                                                <Upload className="h-8 w-8 mx-auto opacity-30" />
-                                                <p className="text-[10px] font-black uppercase">Tap to choose image</p>
-                                                <p className="text-[8px] font-bold opacity-50 uppercase">Only genuine screenshots accepted</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase ml-1">Check your bank SMS for the UTR</p>
+                            </div>
 
-                        <button onClick={() => setView('info')} className="w-full flex items-center justify-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest py-2 hover:text-slate-600 transition-colors">
-                            <ChevronLeft className="h-3 w-3" /> Back to details
-                        </button>
+                            <div className="space-y-1.5 px-1">
+                                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Transfer Screenshot</Label>
+                                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
+                                <div 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className={cn(
+                                        "w-full h-40 border-2 border-dashed rounded-[28px] flex flex-col items-center justify-center cursor-pointer transition-all",
+                                        screenshotFile ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-white border-slate-200 text-slate-300 hover:border-primary"
+                                    )}
+                                >
+                                    {screenshotFile ? (
+                                        <div className="text-center space-y-2">
+                                            <div className="h-12 w-12 bg-teal-500 rounded-full flex items-center justify-center mx-auto shadow-md">
+                                                <CheckCircle2 className="h-7 w-7 text-white" />
+                                            </div>
+                                            <p className="text-xs font-black uppercase">Proof Attached ✓</p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center space-y-3">
+                                            <div className="h-12 w-12 rounded-full bg-slate-50 flex items-center justify-center mx-auto border border-slate-100 shadow-sm">
+                                                <Upload className="h-6 w-6 opacity-30" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tap to upload</p>
+                                                <p className="text-[8px] font-bold opacity-40 uppercase">JPEG or PNG only</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
             </main>
 
-            {/* Bottom Buttons */}
-            <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-md border-t grid grid-cols-2 gap-4 z-50">
+            {/* Sticky Footer */}
+            <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-xl border-t grid grid-cols-2 gap-3 z-50">
                 <Button 
                     variant="outline" 
-                    className="h-12 rounded-xl text-blue-600 border-slate-200 font-black text-xs uppercase" 
-                    onClick={handleGoPay}
-                    disabled={isCancelling}
+                    className="h-14 rounded-2xl text-slate-500 border-slate-200 font-black text-xs uppercase" 
+                    onClick={() => view === 'info' ? router.push('/buy') : setView('info')}
                 >
-                    Go pay
+                    {view === 'info' ? "Cancel" : "Back"}
                 </Button>
 
                 {view === 'info' ? (
-                    <Button 
-                        onClick={() => setView('prove')} 
-                        className="h-12 btn-gradient rounded-xl font-black text-xs shadow-blue-500/20 uppercase" 
-                    >
-                        Finish payment
+                    <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase shadow-blue-500/20">
+                        Finish Payment
                     </Button>
                 ) : (
                     <Button 
-                        onClick={handleConfirm} 
-                        className="h-12 btn-gradient rounded-xl font-black text-xs shadow-teal-500/20 uppercase" 
-                        disabled={isConfirming || utr.length < 10 || !screenshotFile}
+                        onClick={handleConfirmSubmit} 
+                        className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase shadow-teal-500/20" 
+                        disabled={isSubmitting || utr.length < 10 || !screenshotFile}
                     >
-                        {isConfirming ? <Loader size="xs" /> : "I FINISHED"}
+                        {isSubmitting ? <Loader size="xs" /> : "I FINISHED"}
                     </Button>
                 )}
             </footer>
-
-            {/* Cancel Dialog */}
-            <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
-                <DialogContent className="rounded-[32px] max-w-[90%] sm:max-w-md border-none p-0 overflow-hidden shadow-2xl">
-                    <div className="bg-red-50 p-8 text-center flex flex-col items-center">
-                        <div className="h-16 w-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
-                            <XCircle className="h-8 w-8 text-red-500" />
-                        </div>
-                        <DialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight">Terminate Transfer?</DialogTitle>
-                        <DialogDescription className="text-[10px] font-bold text-red-400 uppercase mt-1 tracking-widest">Node connection will be closed</DialogDescription>
-                    </div>
-                    <div className="p-6 space-y-6">
-                        <div className="space-y-3">
-                            <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Cancellation Reason</Label>
-                            <RadioGroup value={selectedReason} onValueChange={setSelectedReason} className="space-y-2">
-                                {CANCELLATION_REASONS.map((reason) => (
-                                    <div key={reason} className={cn("flex items-center space-x-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100")}>
-                                        <RadioGroupItem value={reason} id={reason} />
-                                        <Label htmlFor={reason} className="flex-1 font-bold text-slate-600 text-xs">{reason}</Label>
-                                    </div>
-                                ))}
-                            </RadioGroup>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 pt-2">
-                            <Button variant="outline" className="h-12 rounded-xl font-black text-slate-400 text-xs" onClick={() => setIsCancelDialogOpen(false)}>BACK</Button>
-                            <Button 
-                                onClick={() => handleCancelOrder(selectedReason)} 
-                                className="h-12 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black shadow-red-200 shadow-lg text-xs"
-                                disabled={isCancelling}
-                            >
-                                {isCancelling ? <Loader size="xs" /> : "YES, CANCEL"}
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }
 
 export default function ConfirmPage() {
-  return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader size="md" /></div>}>
-      <PaymentDetailsContent />
-    </Suspense>
-  )
+    return (
+        <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader size="md" /></div>}>
+            <ConfirmPageContent />
+        </Suspense>
+    );
 }
