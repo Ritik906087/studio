@@ -6,15 +6,17 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Loader2, Search, ArrowRight, Wallet, BadgePercent, AlertCircle, TrendingUp } from 'lucide-react';
+import { ChevronLeft, Loader2, Search, ArrowRight, Wallet, BadgePercent, AlertCircle, TrendingUp, CheckCircle2, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
 import { collection, query, where, getDocs, doc, runTransaction, serverTimestamp, limit } from 'firebase/firestore';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { cn } from '@/lib/utils';
 import { Loader } from '@/components/ui/loader';
+import Image from 'next/image';
 
 const purchaseOptions = [
   { id: '100029384756', amount: 100 },
@@ -28,6 +30,11 @@ const purchaseOptions = [
 const USDT_RATE = 108; 
 const MIN_USDT = 5;
 
+const PROVIDER_LOGOS: Record<string, string> = {
+  "MobiKwik": "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png",
+  "Freecharge": "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(3).png"
+};
+
 export default function BuyPage() {
   const router = useRouter();
   const { user, profile } = useUser();
@@ -38,6 +45,11 @@ export default function BuyPage() {
   const [activePaymentOrder, setActivePaymentOrder] = useState<any>(null);
   const [usdtAddress, setUsdtAddress] = useState<string | null>(null);
   const [usdtInput, setUsdtInput] = useState<string>('5');
+  
+  // Method Selection State
+  const [isMethodSheetOpen, setIsMethodSheetOpen] = useState(false);
+  const [pendingPurchaseAmount, setPendingPurchaseAmount] = useState<number | null>(null);
+  const [selectedBuyerMethod, setSelectedBuyerMethod] = useState<any>(null);
 
   useEffect(() => {
     if (!user || !firestore) return;
@@ -54,35 +66,41 @@ export default function BuyPage() {
         } else {
             setActivePaymentOrder(null);
         }
-    });
+    }).catch(() => {});
 
     const usdtQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'usdt'), limit(1));
     getDocs(usdtQuery).then(snap => {
         if (!snap.empty) setUsdtAddress(snap.docs[0].data().usdtWalletAddress);
-    });
+    }).catch(() => {});
   }, [user, firestore]);
 
   const generateRawOrderId = () => {
     return Math.floor(100000000000 + Math.random() * 900000000000).toString();
   };
 
-  const handleP2PMatch = async (amountInInr: number, type: 'upi' | 'usdt' = 'upi', usdtValue?: number) => {
-    if (!user || !profile || !firestore) {
-        toast({ title: "Session Expired", description: "Please login again.", variant: "destructive" });
-        return;
-    }
-
+  const handleCardClick = (amount: number) => {
     if (activePaymentOrder) { 
         toast({ 
           title: "Complete Previous Order", 
-          description: "You have an order pending payment. Please complete or cancel it first.", 
+          description: "You have an order pending payment.", 
           variant: "destructive" 
         }); 
         router.push(`/buy/confirm/${activePaymentOrder.id}`);
         return; 
     }
+    setPendingPurchaseAmount(amount);
+    setIsMethodSheetOpen(true);
+  };
+
+  const handleP2PMatch = async (amountInInr: number, type: 'upi' | 'usdt' = 'upi', usdtValue?: number, buyerMethod?: any) => {
+    if (!user || !profile || !firestore) {
+        toast({ title: "Session Expired", description: "Please login again.", variant: "destructive" });
+        return;
+    }
 
     setIsMatching(true);
+    setIsMethodSheetOpen(false);
+    
     try {
         const rawOrderId = generateRawOrderId();
         const displayOrderId = "#" + rawOrderId;
@@ -131,22 +149,17 @@ export default function BuyPage() {
         );
 
         const sellSnap = await getDocs(sellOrdersQuery);
-        
-        // 1. FILTER CANDIDATES: Must not be current user and must have enough balance
         const candidates = sellSnap.docs.filter(d => 
             d.data().userId !== user.uid && 
             d.data().remainingAmount >= amountInInr
         );
 
         let sellerDoc = null;
-
         if (candidates.length > 0) {
-            // 2. RANDOM ROTATION: Pick a random node from candidates to ensure fair distribution
             const randomIndex = Math.floor(Math.random() * candidates.length);
             sellerDoc = candidates[randomIndex];
         }
 
-        // 3. LAST RESORT FALLBACK: If no suitable rotation match, use System Node
         if (!sellerDoc) {
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
@@ -168,6 +181,8 @@ export default function BuyPage() {
                     paymentProvider: 'SYSTEM_NODE',
                     status: 'pending_payment',
                     sellerId: 'SYSTEM_VAULT',
+                    buyerSelectedUpi: buyerMethod?.upiId || 'N/A',
+                    buyerSelectedProvider: buyerMethod?.name || 'N/A',
                     sellerWithdrawalDetails: {
                         type: 'upi',
                         name: adminMethod.upiHolderName || 'System Master Channel',
@@ -180,7 +195,6 @@ export default function BuyPage() {
             return;
         }
 
-        // 4. ROTATION EXECUTION
         const sellerOrderId = sellerDoc.id;
         await runTransaction(firestore, async (transaction) => {
             const freshSellerSnap = await transaction.get(sellerDoc.ref);
@@ -227,6 +241,8 @@ export default function BuyPage() {
                 paymentProvider: 'Verified-Node',
                 status: 'pending_payment',
                 sellerId: freshSellerData.userId,
+                buyerSelectedUpi: buyerMethod?.upiId || 'N/A',
+                buyerSelectedProvider: buyerMethod?.name || 'N/A',
                 sellerWithdrawalDetails: freshSellerData.withdrawalMethod,
                 matchedSellOrderId: sellerOrderId,
                 createdAt: serverTimestamp(),
@@ -242,6 +258,10 @@ export default function BuyPage() {
         setIsMatching(false);
     }
   };
+
+  const filteredMethods = (profile?.paymentMethods || []).filter((m: any) => 
+    m.name === "MobiKwik" || m.name === "Freecharge"
+  );
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
@@ -265,7 +285,7 @@ export default function BuyPage() {
                         <Card 
                             key={opt.id} 
                             className="p-3 border-none shadow-sm rounded-[20px] active:scale-[0.98] transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
-                            onClick={() => !isMatching && handleP2PMatch(opt.amount, 'upi')}
+                            onClick={() => handleCardClick(opt.amount)}
                         >
                             <div className="flex items-center gap-3 relative z-10">
                                 <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
@@ -337,8 +357,6 @@ export default function BuyPage() {
                         </Button>
                     </CardContent>
                 </Card>
-
-                <p className="text-center text-[8px] font-black text-slate-400 uppercase tracking-[0.3em] py-2">Secured by Flex Shield 4.0</p>
             </TabsContent>
         </Tabs>
 
@@ -356,6 +374,65 @@ export default function BuyPage() {
                  </Card>
             </div>
         )}
+
+        <Sheet open={isMethodSheetOpen} onOpenChange={setIsMethodSheetOpen}>
+            <SheetContent side="bottom" className="rounded-t-[32px] px-5 pb-10 pt-6 border-none shadow-2xl bg-[#F5F7FB] max-h-[70vh] overflow-y-auto no-scrollbar">
+                <SheetHeader className="text-center mb-6">
+                    <SheetTitle className="text-xl font-black tracking-tight uppercase">Select Payment Mode</SheetTitle>
+                    <SheetDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Choose your linked verified wallet
+                    </SheetDescription>
+                </SheetHeader>
+
+                <div className="space-y-3">
+                    {filteredMethods.length > 0 ? (
+                        filteredMethods.map((m: any, idx: number) => (
+                            <div 
+                                key={idx} 
+                                className={cn(
+                                    "p-4 rounded-[22px] bg-white border border-slate-100 shadow-sm flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all",
+                                    selectedBuyerMethod?.upiId === m.upiId ? "ring-2 ring-primary border-transparent" : ""
+                                )}
+                                onClick={() => setSelectedBuyerMethod(m)}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="h-11 w-11 rounded-xl bg-slate-50 flex items-center justify-center p-2 border border-slate-50">
+                                        <Image src={PROVIDER_LOGOS[m.name]} alt={m.name} width={32} height={32} className="object-contain" />
+                                    </div>
+                                    <div>
+                                        <p className="font-black text-slate-800 text-xs uppercase">{m.name}</p>
+                                        <p className="text-[9px] font-mono font-bold text-slate-400 mt-0.5 tracking-tight">{m.upiId}</p>
+                                    </div>
+                                </div>
+                                {selectedBuyerMethod?.upiId === m.upiId ? (
+                                    <CheckCircle2 className="h-6 w-6 text-primary" />
+                                ) : (
+                                    <div className="h-6 w-6 rounded-full border-2 border-slate-100" />
+                                )}
+                            </div>
+                        ))
+                    ) : (
+                        <div className="py-10 text-center space-y-4">
+                            <Wallet className="h-10 w-10 mx-auto text-slate-200" />
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No MobiKwik or Freecharge Linked</p>
+                            <Button asChild className="btn-gradient rounded-xl px-6 h-10 text-[9px] font-black uppercase">
+                                <Link href="/my/collection/add">Link Verified Account</Link>
+                            </Button>
+                        </div>
+                    )}
+
+                    {filteredMethods.length > 0 && (
+                        <Button 
+                            className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase shadow-blue-500/20 mt-4" 
+                            disabled={!selectedBuyerMethod || !pendingPurchaseAmount}
+                            onClick={() => pendingPurchaseAmount && handleP2PMatch(pendingPurchaseAmount, 'upi', undefined, selectedBuyerMethod)}
+                        >
+                            SYNC SECURE NODE
+                        </Button>
+                    )}
+                </div>
+            </SheetContent>
+        </Sheet>
       </main>
     </div>
   );

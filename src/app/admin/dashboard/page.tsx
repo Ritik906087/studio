@@ -9,7 +9,7 @@ import {
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
   ExternalLink, Ban, BadgeCheck, AlertTriangle, HelpCircle, Search, ImageIcon,
-  Clock, Hash, ArrowUpRight, ArrowDownLeft, Info, History
+  Clock, Hash, ArrowUpRight, ArrowDownLeft, Info, History, User as UserIcon
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -199,7 +199,7 @@ export default function AdminDashboardPage() {
                 let sellerProfileRef = null;
                 let sellerUserSellRef = null;
 
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN' && order.sellerId !== 'SYSTEM_VAULT') {
                     sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     sellerProfileRef = doc(firestore, 'users', order.sellerId);
                     sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
@@ -254,7 +254,7 @@ export default function AdminDashboardPage() {
                 let sellOrderRef = null;
                 let sellerUserSellRef = null;
 
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN' && order.sellerId !== 'SYSTEM_VAULT') {
                     sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
                     sellSnap = await transaction.get(sellOrderRef);
@@ -263,7 +263,6 @@ export default function AdminDashboardPage() {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 transaction.update(orderRef, { status: 'failed', rejectionReason: reason, rejectedBy: adminId, rejectedAt: serverTimestamp() });
                 
-                // Return liquidity to pool
                 if (sellSnap && sellSnap.exists()) {
                     const sellData = sellSnap.data();
                     const currentRemaining = sellData.remainingAmount || 0;
@@ -271,7 +270,7 @@ export default function AdminDashboardPage() {
                     
                     transaction.update(sellOrderRef!, { 
                         remainingAmount: currentRemaining + order.baseAmount,
-                        status: 'partially_filled', // Back to matching pool
+                        status: 'partially_filled',
                         matchedBuyOrders: updatedMatches
                     });
                     
@@ -426,32 +425,25 @@ export default function AdminDashboardPage() {
                                                 <TableHead className="text-[10px] font-black uppercase pl-6">UID & ID</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Amount</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">UPI ID</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Type</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase text-right pr-6">Status</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {filteredSellOrders.map(o => {
-                                                const isP2P = true; // All sell orders in this app are P2P matching
-                                                return (
-                                                    <TableRow key={o.id} className="hover:bg-slate-50/50">
-                                                        <TableCell className="pl-6 py-4">
-                                                            <p className="font-black text-[11px] text-blue-600">{o.userNumericId}</p>
-                                                            <p className="text-[9px] text-slate-400 uppercase font-bold">{o.orderId}</p>
-                                                        </TableCell>
-                                                        <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
-                                                        <TableCell>
-                                                            <p className="font-mono text-[10px] font-black text-slate-700">{o.withdrawalMethod?.upiId || 'Direct'}</p>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <Badge className="bg-orange-50 text-orange-600 border-none text-[8px] font-black uppercase">P2P Matched</Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-right pr-6">
-                                                            <Badge className="bg-slate-100 text-slate-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })}
+                                            {filteredSellOrders.map(o => (
+                                                <TableRow key={o.id} className="hover:bg-slate-50/50">
+                                                    <TableCell className="pl-6 py-4">
+                                                        <p className="font-black text-[11px] text-blue-600">{o.userNumericId}</p>
+                                                        <p className="text-[9px] text-slate-400 uppercase font-bold">{o.orderId}</p>
+                                                    </TableCell>
+                                                    <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
+                                                    <TableCell>
+                                                        <p className="font-mono text-[10px] font-black text-slate-700">{o.withdrawalMethod?.upiId || 'Direct'}</p>
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6">
+                                                        <Badge className="bg-slate-100 text-slate-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
                                         </TableBody>
                                     </Table>
                                 </div>
@@ -468,17 +460,6 @@ export default function AdminDashboardPage() {
                                     onChange={e => setConfirmSearch(e.target.value)}
                                 />
                             </div>
-
-                             {indexError && (
-                                <Alert variant="destructive" className="rounded-2xl border-dashed">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <AlertTitle className="font-black text-xs uppercase">Firestore Index Required</AlertTitle>
-                                    <AlertDescription className="text-[10px] font-medium mt-1">
-                                        P2P matching needs a collection-group index. 
-                                        <a href={`https://console.firebase.google.com/v1/r/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}/firestore/indexes`} target="_blank" className="ml-1 underline font-black text-blue-600">Click here to enable</a>.
-                                    </AlertDescription>
-                                </Alert>
-                             )}
 
                              <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
                                 <div className="overflow-x-auto">
@@ -534,7 +515,7 @@ export default function AdminDashboardPage() {
                                                                     <div className="p-8 space-y-6">
                                                                         <DialogHeader>
                                                                             <DialogTitle className="text-2xl font-black tracking-tight text-slate-900">Review Assets</DialogTitle>
-                                                                            <DialogDescription className="text-[10px] font-black uppercase text-slate-400 tracking-widest">P2P Verification Engine</DialogDescription>
+                                                                            <DialogDescription className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Network Verification Engine</DialogDescription>
                                                                         </DialogHeader>
 
                                                                         <div className="space-y-4">
@@ -543,6 +524,17 @@ export default function AdminDashboardPage() {
                                                                                 <div className="grid grid-cols-2 gap-4">
                                                                                     <div><p className="text-[8px] font-bold text-slate-400 uppercase">UID</p><p className="text-sm font-black text-blue-600">{o.userNumericId}</p></div>
                                                                                     <div><p className="text-[8px] font-bold text-slate-400 uppercase">Amount</p><p className="text-sm font-black text-slate-900">₹{o.amount.toFixed(2)}</p></div>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 space-y-2">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <UserIcon className="h-3.5 w-3.5 text-blue-600" />
+                                                                                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Buyer Selection</p>
+                                                                                </div>
+                                                                                <div className="flex flex-col">
+                                                                                    <p className="text-[11px] font-black text-slate-800 uppercase">{o.buyerSelectedProvider || 'Other App'}</p>
+                                                                                    <p className="text-[10px] font-mono font-bold text-slate-500">{o.buyerSelectedUpi || 'No UPI Captured'}</p>
                                                                                 </div>
                                                                             </div>
 
