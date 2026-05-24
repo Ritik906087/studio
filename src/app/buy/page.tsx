@@ -60,23 +60,43 @@ export default function BuyPage() {
   const [pendingPurchaseAmount, setPendingPurchaseAmount] = useState<number | null>(null);
   const [selectedBuyerMethod, setSelectedBuyerMethod] = useState<any>(null);
 
-  // Helper to generate a batch of random orders
+  // Helper to generate a 15-digit random numeric string
+  const generateNodeId = () => {
+    let result = '';
+    for (let i = 0; i < 15; i++) {
+        result += Math.floor(Math.random() * 10).toString();
+    }
+    return result;
+  };
+
+  // Helper to generate a batch of random orders (200-300 orders)
   const generateRandomBatch = useCallback(() => {
-    const count = Math.floor(Math.random() * 10) + 15; // 15-25 orders
+    const count = Math.floor(Math.random() * 101) + 200; // 200-300 orders
     const newOrders = [];
     for (let i = 0; i < count; i++) {
-        // Generate values mostly in multiples of 50 or 100 to look realistic
-        let base = Math.floor(Math.random() * 149) + 1; // 1-150
-        let amount = base * 100;
+        let amount = 0;
+        const rand = Math.random();
         
-        // Add some "odd" amounts occasionally
-        if (Math.random() > 0.8) {
-            amount += (Math.floor(Math.random() * 90) + 5);
+        if (rand < 0.6) {
+            // 60% chance for small amounts (100-1500)
+            amount = Math.floor(Math.random() * 1401) + 100;
+        } else if (rand < 0.9) {
+            // 30% chance for mid amounts (1501-8000)
+            amount = Math.floor(Math.random() * 6500) + 1501;
+        } else {
+            // 10% chance for large amounts (8001-15000)
+            amount = Math.floor(Math.random() * 7000) + 8001;
+        }
+
+        // Round to nearest 10 for realism, occasionally adding small offsets
+        if (Math.random() > 0.3) {
+            amount = Math.round(amount / 10) * 10;
         }
 
         if (amount >= 100 && amount <= 15000) {
             newOrders.push({
                 id: Math.random().toString(36).substr(2, 9),
+                nodeId: generateNodeId(),
                 amount: amount
             });
         }
@@ -389,7 +409,7 @@ export default function BuyPage() {
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-1.5">
                                         <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Active Node</span>
+                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">#{opt.nodeId}</span>
                                     </div>
                                     <span className="text-[11px] text-blue-500 font-black uppercase tracking-tight">Reward 6.0%+₹5</span>
                                 </div>
@@ -420,6 +440,11 @@ export default function BuyPage() {
                             </div>
                         );
                     })}
+                    {filteredOptions.length === 0 && (
+                        <div className="p-20 text-center text-slate-300 font-bold text-xs uppercase tracking-widest">
+                            No orders matching filters
+                        </div>
+                    )}
                 </div>
             </TabsContent>
 
