@@ -11,12 +11,11 @@ import {
 import { useLanguage } from "@/context/language-context";
 
 export function LanguageSwitcher() {
-  const { language, setLanguage, translations } = useLanguage();
+  const { language, setLanguage } = useLanguage();
 
   const languageLabels: { [key: string]: string } = {
     en: "English",
     hi: "हिंदी",
-    ur: "اردو",
   };
 
   return (
@@ -37,9 +36,6 @@ export function LanguageSwitcher() {
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => setLanguage("hi")}>
           <span>हिंदी</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => setLanguage("ur")}>
-          <span>اردو</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

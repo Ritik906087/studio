@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, User } from "lucide-react";
-import { useState } from "react";
+import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, Zap } from "lucide-react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/context/language-context";
@@ -39,19 +39,25 @@ export function RegisterForm() {
 
   const registerSchema = z
     .object({
-      fullName: z.string().min(2, { message: "Full name is required" }),
       phone: z.string().length(10, { message: translations.phoneRequired }).regex(/^[6-9]\d{9}$/, { message: translations.phoneInvalid }),
       password: z.string().min(6, { message: translations.passwordMin }),
       confirmPassword: z.string(),
-      invitationCode: z.string().optional(),
+      invitationCode: z.string().min(1, { message: translations.invitationCodeRequired }),
       agreement: z.literal(true, { errorMap: () => ({ message: translations.agreementRequired }) }),
     })
     .refine((data) => data.password === data.confirmPassword, { message: translations.passwordsDontMatch, path: ["confirmPassword"] });
 
   const form = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { fullName: "", phone: "", password: "", confirmPassword: "", invitationCode: invitationCodeFromUrl, agreement: false },
+    defaultValues: { phone: "", password: "", confirmPassword: "", invitationCode: invitationCodeFromUrl, agreement: false },
   });
+
+  // Pre-fill invitation code if present in URL
+  useEffect(() => {
+    if (invitationCodeFromUrl) {
+      form.setValue("invitationCode", invitationCodeFromUrl);
+    }
+  }, [invitationCodeFromUrl, form]);
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     if (!auth || !firestore) {
@@ -62,28 +68,35 @@ export function RegisterForm() {
     try {
         const email = `91${values.phone}@lgpay.app`;
         
+        // 1. Check if phone is already used
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
         if (!phoneCheckSnap.empty) throw new Error("This phone number is already registered.");
 
+        // 2. Validate Invitation Code
         let inviterUid = null;
-        if (values.invitationCode) {
-            const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
-            const inviterSnap = await getDocs(inviterQuery);
-            if (!inviterSnap.empty) inviterUid = inviterSnap.docs[0].id;
+        const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
+        const inviterSnap = await getDocs(inviterQuery);
+        
+        if (inviterSnap.empty) {
+            throw new Error("Invalid invitation code. Please check and try again.");
         }
+        inviterUid = inviterSnap.docs[0].id;
 
+        // 3. Create Auth Account
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
 
+        // 4. Generate Random 8-digit UID
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
+        // 5. Save to Firestore
         await setDoc(doc(firestore, 'users', user.uid), {
             uid: user.uid,
             email: email,
             numericId: numericId,
             phoneNumber: values.phone,
-            displayName: values.fullName,
+            displayName: `User${values.phone.slice(-4)}`,
             photoURL: defaultAvatarUrl,
             inviterUid: inviterUid,
             balance: 0,
@@ -93,7 +106,7 @@ export function RegisterForm() {
         });
 
         toast({ title: "Welcome!", description: "Registration successful." });
-        router.push("/home");
+        router.push("/login");
     } catch (error: any) {
       console.error("Registration failed:", error);
       toast({ variant: "destructive", title: "Registration Failed", description: error.message });
@@ -107,24 +120,6 @@ export function RegisterForm() {
       <form onSubmit={form.handleSubmit(onRegisterSubmit)} className="space-y-3">
         <FormField
           control={form.control}
-          name="fullName"
-          render={({ field }) => (
-            <FormItem className="space-y-1">
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                  <User className="h-3.5 w-3.5" />
-                </div>
-                <FormControl>
-                  <Input placeholder="Full Name" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" {...field} />
-                </FormControl>
-              </div>
-              <FormMessage className="text-[10px] pl-2" />
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
           name="phone"
           render={({ field }) => (
             <FormItem className="space-y-1">
@@ -135,6 +130,29 @@ export function RegisterForm() {
                 </div>
                 <FormControl>
                   <Input type="tel" placeholder="Mobile Number" className="pl-20 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
+                </FormControl>
+              </div>
+              <FormMessage className="text-[10px] pl-2" />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="invitationCode"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                  <Zap className="h-3.5 w-3.5" />
+                </div>
+                <FormControl>
+                  <Input 
+                    placeholder="Invitation Code" 
+                    className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px] font-bold tracking-widest disabled:opacity-70 disabled:cursor-not-allowed" 
+                    {...field} 
+                    disabled={!!invitationCodeFromUrl}
+                  />
                 </FormControl>
               </div>
               <FormMessage className="text-[10px] pl-2" />
@@ -183,8 +201,8 @@ export function RegisterForm() {
 
         <div className="flex items-center space-x-2 py-2">
           <Checkbox id="agreement" onCheckedChange={(checked) => form.setValue("agreement", checked === true)} checked={form.watch("agreement")} />
-          <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium">
-            I agree to the <Link href="/privacy" className="text-primary font-bold">Privacy Policy</Link>
+          <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium leading-none cursor-pointer">
+            I agree to the <Link href="/privacy" className="text-primary font-bold hover:underline">Privacy Policy</Link>
           </label>
         </div>
 

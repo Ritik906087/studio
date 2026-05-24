@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 import translations from './translations.json';
 
-type Language = 'en' | 'hi' | 'ur';
+type Language = 'en' | 'hi';
 
 interface LanguageContextType {
   language: Language;
@@ -19,7 +19,7 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
   const value = {
     language,
     setLanguage,
-    translations: translations[language],
+    translations: (translations as any)[language],
   };
 
   return (
