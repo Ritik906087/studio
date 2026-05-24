@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -8,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { Clipboard, Send, ChevronLeft, Users, Zap, CheckCircle2, Info } from 'lucide-react';
+import { Clipboard, Send, ChevronLeft, Users, Zap, CheckCircle2, Info, Gift } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
@@ -35,7 +34,7 @@ export default function InvitePage() {
     if (!profile?.numericId) return null;
     const code = profile.numericId;
     const url = `${window.location.origin}/register?ref=${code}`;
-    return { url, text: `Join me on LG Pay and earn rewards! Use my code: ${code}\n\n${url}`, code };
+    return { url, text: `Join me on Flex Pay and earn rewards! Use my code: ${code}\n\n${url}`, code };
   }
 
   const handleCopyLink = () => {
@@ -63,6 +62,7 @@ export default function InvitePage() {
         </header>
 
         <main className="p-4 space-y-4">
+          {/* PERSONAL CODE CARD */}
           <div className="bg-slate-900 rounded-[28px] p-6 text-white overflow-hidden relative">
               <div className="absolute top-0 right-0 p-6 opacity-10"><Zap className="h-24 w-24" /></div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Personal Code</p>
@@ -78,6 +78,7 @@ export default function InvitePage() {
               </div>
           </div>
 
+          {/* COMMISSION CARDS */}
           <div className="grid grid-cols-2 gap-3">
               <Card className="border-none bg-blue-50/50 rounded-[20px] p-4">
                   <div className="h-8 w-8 bg-blue-100 rounded-xl flex items-center justify-center mb-3"><Users className="h-4 w-4 text-blue-600" /></div>
@@ -91,6 +92,15 @@ export default function InvitePage() {
               </Card>
           </div>
 
+          {/* NEWBIE BONUS NOTICE */}
+          <div className="bg-orange-50 border border-orange-100 rounded-[24px] p-5 relative overflow-hidden">
+              <div className="absolute -top-1 -right-1 opacity-10 rotate-12"><Gift className="h-12 w-12 text-orange-600" /></div>
+              <p className="text-[11px] font-black text-orange-800 leading-relaxed uppercase">
+                If your invited user completes all Newbie Reward tasks, you will receive an instant ₹100 bonus. Detailed reports are available in the My Family section.
+              </p>
+          </div>
+
+          {/* HOW IT WORKS DIAGRAM */}
           <div className="bg-blue-50/50 rounded-[24px] p-5 border border-blue-100 space-y-3">
              <div className="flex items-center gap-2 mb-1">
                 <Info className="h-4 w-4 text-blue-600" />
@@ -117,6 +127,7 @@ export default function InvitePage() {
              <p className="text-[9px] text-slate-400 font-medium italic mt-2">Example: If you invite A, you get 1%. If A invites B, you get 0.8% from B's orders too.</p>
           </div>
 
+          {/* STEPS */}
           <div className="bg-slate-50 rounded-[24px] p-5 space-y-4 border border-slate-100">
               <div className="flex items-start gap-3">
                   <div className="h-5 w-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black shrink-0">1</div>
