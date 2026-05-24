@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -21,7 +20,7 @@ export function AnnouncementPopup() {
     // Show popup once per session on home screen
     const hasSeen = sessionStorage.getItem('flex-announcement-seen');
     if (!hasSeen) {
-      // Faster trigger for better user experience
+      // Trigger after short delay for better UX
       const timer = setTimeout(() => setIsOpen(true), 500);
       return () => clearTimeout(timer);
     }
@@ -44,7 +43,7 @@ export function AnnouncementPopup() {
   const steps = [
     {
       title: "Flex Pay Security Tips",
-      icon: <ShieldCheck className="h-5 w-5 text-slate-800" />,
+      icon: <ShieldCheck className="h-5 w-5 text-white" />,
       content: (
         <div className="space-y-4 text-[11px] leading-relaxed">
           <div className="space-y-2">
@@ -78,7 +77,7 @@ export function AnnouncementPopup() {
     },
     {
       title: "Mission Rewards",
-      icon: <Gift className="h-5 w-5 text-slate-800" />,
+      icon: <Gift className="h-5 w-5 text-white" />,
       content: (
         <div className="space-y-5 text-[11px] leading-relaxed">
           <div className="bg-blue-600 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden">
@@ -114,7 +113,7 @@ export function AnnouncementPopup() {
     },
     {
       title: "Trading Earnings",
-      icon: <TrendingUp className="h-5 w-5 text-slate-800" />,
+      icon: <TrendingUp className="h-5 w-5 text-white" />,
       content: (
         <div className="space-y-4 text-[11px] leading-relaxed">
           <div className="p-4 bg-slate-900 rounded-2xl text-white space-y-3">
@@ -155,10 +154,10 @@ export function AnnouncementPopup() {
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-[340px] w-[90%] rounded-[28px] p-0 overflow-hidden border-none shadow-2xl animate-in zoom-in-95 duration-300">
         <DialogHeader className="p-0">
-          <div className="bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-300 p-5 pt-7 text-center relative">
+          <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 p-5 pt-7 text-center relative">
             <button 
                 onClick={handleClose}
-                className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/5 flex items-center justify-center text-slate-800 active:scale-90 transition-transform"
+                className="absolute top-3 right-3 h-8 w-8 rounded-full bg-white/10 flex items-center justify-center text-white/80 active:scale-90 transition-transform"
             >
                 <X className="h-4 w-4" />
             </button>
@@ -166,14 +165,14 @@ export function AnnouncementPopup() {
                 <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner border border-white/30">
                     {steps[currentStep].icon}
                 </div>
-                <DialogTitle className="text-lg font-black text-slate-900 tracking-tight uppercase">
+                <DialogTitle className="text-lg font-black text-white tracking-tight uppercase">
                     {steps[currentStep].title}
                 </DialogTitle>
                 <div className="flex gap-1.5 mt-1">
                     {steps.map((_, i) => (
                         <div key={i} className={cn(
                             "h-1.5 rounded-full transition-all duration-300",
-                            currentStep === i ? "w-6 bg-slate-900" : "w-1.5 bg-slate-900/20"
+                            currentStep === i ? "w-6 bg-white" : "w-1.5 bg-white/30"
                         )} />
                     ))}
                 </div>
