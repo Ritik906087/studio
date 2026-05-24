@@ -7,8 +7,8 @@ import { useRouter } from 'next/navigation';
 import { 
   LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
-  Edit3, Eye, Wallet, ArrowRight, Check, RefreshCw,
-  ExternalLink, Ban, BadgeCheck
+  Edit3, Eye, Wallet, Check, RefreshCw,
+  ExternalLink, Ban, BadgeCheck, AlertTriangle
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -23,6 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { Loader } from '@/components/ui/loader';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
@@ -47,6 +48,7 @@ export default function AdminDashboardPage() {
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [editingPayment, setEditingPayment] = useState<string | null>(null);
+    const [indexError, setIndexError] = useState<string | null>(null);
 
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
@@ -81,7 +83,13 @@ export default function AdminDashboardPage() {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        const buyOrdersQuery = query(collectionGroup(firestore, 'orders'), where('status', '==', 'pending_confirmation'), limit(50));
+        // Collection Group query requires a manual index in Firebase Console
+        const buyOrdersQuery = query(
+            collectionGroup(firestore, 'orders'), 
+            where('status', '==', 'pending_confirmation'), 
+            limit(50)
+        );
+
         const unsubBuy = onSnapshot(buyOrdersQuery, (snap) => {
             const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => {
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
@@ -89,6 +97,12 @@ export default function AdminDashboardPage() {
                 return timeB - timeA;
             });
             setPendingBuyOrders(sorted);
+            setIndexError(null);
+        }, (error: any) => {
+            if (error.code === 'failed-precondition') {
+                setIndexError(error.message);
+            }
+            console.error("Buy Orders Listener Error:", error);
         });
         
         const unsubPM = onSnapshot(collection(firestore, 'paymentMethods'), (snap) => {
@@ -366,6 +380,26 @@ export default function AdminDashboardPage() {
                         </TabsContent>
 
                         <TabsContent value="confirm">
+                             {indexError && (
+                                <Alert variant="destructive" className="mb-6 rounded-2xl bg-red-50 border-red-100">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertTitle className="font-black uppercase text-xs">Database Index Required</AlertTitle>
+                                    <AlertDescription className="text-xs font-medium leading-relaxed">
+                                        P2P Confirmation system requires a global index. 
+                                        <a 
+                                            href={`https://console.firebase.google.com/v1/r/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'studio-7114417830-300d7'}/firestore/indexes?create_exemption=Clpwcm9qZWN0cy9zdHVkaW8tNzExNDQxNzgzMC0zMDBkNy9kYXRhYmFzZXMvKGRlZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvb3JkZXJzL2ZpZWxkcy9zdGF0dXMQAhoKCgZzdGF0dXMQAQ`} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="ml-1 font-black underline decoration-2 underline-offset-2"
+                                        >
+                                            CLICK HERE TO CREATE INDEX
+                                        </a>
+                                        <br />
+                                        Wait 5-10 minutes after clicking before this tab starts working.
+                                    </AlertDescription>
+                                </Alert>
+                             )}
+
                              <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
                                 <CardHeader className="p-6 border-b"><CardTitle className="text-sm font-black uppercase">Pending Buy Proofs</CardTitle></CardHeader>
                                 <div className="overflow-x-auto">
@@ -411,20 +445,29 @@ export default function AdminDashboardPage() {
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
                                                         <div className="flex justify-end gap-2">
-                                                            <Button size="sm" onClick={() => handleApproveBuy(o)} className="bg-green-600 hover:bg-green-700 h-9 px-4 text-[9px] font-black rounded-xl shadow-lg shadow-green-100">
-                                                                <BadgeCheck className="h-3 w-3 mr-1" /> APPROVE
-                                                            </Button>
-                                                            <Button size="sm" variant="outline" onClick={() => handleRejectBuy(o)} className="h-9 px-4 text-[9px] font-black rounded-xl border-red-50 text-red-500 hover:bg-red-50">
-                                                                <Ban className="h-3 w-3 mr-1" /> REJECT
-                                                            </Button>
+                                                            <button 
+                                                                onClick={() => handleApproveBuy(o)} 
+                                                                className="bg-green-600 hover:bg-green-700 h-9 px-4 text-[9px] font-black rounded-xl shadow-lg shadow-green-100 text-white flex items-center gap-1"
+                                                            >
+                                                                <BadgeCheck className="h-3 w-3" /> APPROVE
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleRejectBuy(o)} 
+                                                                className="h-9 px-4 text-[9px] font-black rounded-xl border border-red-100 text-red-500 hover:bg-red-50 flex items-center gap-1"
+                                                            >
+                                                                <Ban className="h-3 w-3" /> REJECT
+                                                            </button>
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>
                                     </Table>
-                                    {pendingBuyOrders.length === 0 && (
+                                    {pendingBuyOrders.length === 0 && !indexError && (
                                         <div className="p-20 text-center text-slate-300 font-black text-[10px] uppercase tracking-widest">All Proofs Cleared</div>
+                                    )}
+                                    {indexError && (
+                                        <div className="p-20 text-center text-red-300 font-black text-[10px] uppercase tracking-widest">Awaiting Database Index...</div>
                                     )}
                                 </div>
                             </Card>
