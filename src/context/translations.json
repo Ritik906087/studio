@@ -1,3 +1,4 @@
+
 {
   "en": {
     "accountLogin": "Account Login",
@@ -63,7 +64,7 @@
     "totalBalance": "Total Balance",
     "hold": "hold",
     "rewards": "Rewards",
-    "team": "Team",
+    "team": "Family",
     "collection": "Payment Method",
     "paymentPassword": "Change Password",
     "transaction": "Transaction",
@@ -156,7 +157,7 @@
     "totalBalance": "कुल शेष",
     "hold": "होल्ड",
     "rewards": "इनाम",
-    "team": "टीम",
+    "team": "परिवार",
     "collection": "भुगतान विधि",
     "paymentPassword": "पासवर्ड बदलें",
     "transaction": "लेन-देन",

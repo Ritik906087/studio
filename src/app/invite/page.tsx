@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { Clipboard, Send, ChevronLeft, Users, Zap, CheckCircle2 } from 'lucide-react';
+import { Clipboard, Send, ChevronLeft, Users, Zap, CheckCircle2, Info } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
@@ -72,22 +73,48 @@ export default function InvitePage() {
                   </Button>
               </div>
               <div className="mt-4 flex gap-2">
-                  <div className="px-2 py-0.5 rounded-full bg-white/10 border border-white/5 text-[8px] font-black uppercase">Lv.1 (+2%)</div>
-                  <div className="px-2 py-0.5 rounded-full bg-white/10 border border-white/5 text-[8px] font-black uppercase">Lv.2 (+1%)</div>
+                  <div className="px-2 py-0.5 rounded-full bg-white/10 border border-white/5 text-[8px] font-black uppercase">Lv.1 (+1%)</div>
+                  <div className="px-2 py-0.5 rounded-full bg-white/10 border border-white/5 text-[8px] font-black uppercase">Lv.2 (+0.8%)</div>
               </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
               <Card className="border-none bg-blue-50/50 rounded-[20px] p-4">
                   <div className="h-8 w-8 bg-blue-100 rounded-xl flex items-center justify-center mb-3"><Users className="h-4 w-4 text-blue-600" /></div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Level 1</p>
-                  <p className="text-[11px] font-bold text-slate-700 leading-tight mt-1">Direct friends recharge bonus</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Level 1 (Direct)</p>
+                  <p className="text-[11px] font-bold text-slate-700 leading-tight mt-1">Earn 1% bonus on every order of A</p>
               </Card>
               <Card className="border-none bg-teal-50/50 rounded-[20px] p-4">
                   <div className="h-8 w-8 bg-teal-100 rounded-xl flex items-center justify-center mb-3"><CheckCircle2 className="h-4 w-4 text-teal-600" /></div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Level 2</p>
-                  <p className="text-[11px] font-bold text-slate-700 leading-tight mt-1">Indirect network team bonus</p>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Level 2 (Indirect)</p>
+                  <p className="text-[11px] font-bold text-slate-700 leading-tight mt-1">Earn 0.8% bonus on every order of B</p>
               </Card>
+          </div>
+
+          <div className="bg-blue-50/50 rounded-[24px] p-5 border border-blue-100 space-y-3">
+             <div className="flex items-center gap-2 mb-1">
+                <Info className="h-4 w-4 text-blue-600" />
+                <h3 className="font-black text-[11px] text-blue-800 uppercase tracking-widest">How it works</h3>
+             </div>
+             <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                    <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">You</div>
+                    <div className="flex-1 h-0.5 bg-slate-200 relative">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-[8px] font-black text-blue-600">Invited A</div>
+                    </div>
+                    <div className="h-6 w-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-black">A</div>
+                    <div className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black">1%</div>
+                </div>
+                <div className="flex items-center gap-3 ml-6">
+                    <div className="h-6 w-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-black">A</div>
+                    <div className="flex-1 h-0.5 bg-slate-200 relative">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-[8px] font-black text-teal-600">Invited B</div>
+                    </div>
+                    <div className="h-6 w-6 rounded-full bg-slate-400 text-white flex items-center justify-center text-[10px] font-black">B</div>
+                    <div className="bg-teal-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black">0.8%</div>
+                </div>
+             </div>
+             <p className="text-[9px] text-slate-400 font-medium italic mt-2">Example: If you invite A, you get 1%. If A invites B, you get 0.8% from B's orders too.</p>
           </div>
 
           <div className="bg-slate-50 rounded-[24px] p-5 space-y-4 border border-slate-100">
@@ -110,7 +137,7 @@ export default function InvitePage() {
                   {loading ? <Loader size="xs" /> : "START INVITING"}
               </Button>
               <Button asChild variant="ghost" className="w-full h-10 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  <Link href="/my/team">Audit Team Registry</Link>
+                  <Link href="/my/team">Audit Family Registry</Link>
               </Button>
           </div>
         </main>

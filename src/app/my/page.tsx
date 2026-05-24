@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -132,7 +133,7 @@ export default function MyPage() {
           </Link>
           <Link href="/my/team" className="bg-white p-3 rounded-[16px] shadow-sm flex items-center gap-2 active:scale-95 transition-transform border border-blue-50">
             <div className="h-8 w-8 bg-blue-50 rounded-lg flex items-center justify-center shrink-0"><Users className="h-4 w-4 text-blue-500" /></div>
-            <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight">My Team</p>
+            <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight">My Family</p>
           </Link>
         </div>
 

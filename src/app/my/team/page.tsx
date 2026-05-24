@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -131,7 +132,7 @@ export default function TeamPage() {
         <Button asChild variant="ghost" size="icon" className="h-8 w-8 -ml-2">
           <Link href="/my"><ChevronLeft className="h-5 w-5" /></Link>
         </Button>
-        <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Affiliate Map</h1>
+        <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Affiliate Family Map</h1>
       </header>
 
       <main className="flex-grow flex flex-col">
@@ -139,7 +140,7 @@ export default function TeamPage() {
             <div className="grid grid-cols-2 gap-y-4">
                 <MiniStat title="Net Bonus" value={loading ? '...' : `₹${selfIncome.toFixed(2)}`} color="text-teal-400" />
                 <MiniStat title="Daily Intake" value="₹0.00" color="text-white" />
-                <MiniStat title="Registry Size" value={loading ? '...' : (l1Agents.length + l2Agents.length)} color="text-blue-400" />
+                <MiniStat title="Family Registry" value={loading ? '...' : (l1Agents.length + l2Agents.length)} color="text-blue-400" />
                 <MiniStat title="New Members" value="0" color="text-white" />
             </div>
             <div className="mt-4 pt-4 border-t border-white/5 flex items-center gap-2">
