@@ -93,7 +93,7 @@ export default function BuyPage() {
         const buyOrderRef = doc(firestore, 'users', user.uid, 'orders', rawOrderId);
 
         if (type === 'usdt') {
-            if (!usdtAddress) throw new Error("USDT Payment Server is offline.");
+            if (!usdtAddress) throw new Error("USDT System Server is offline.");
             if (!usdtValue || usdtValue < MIN_USDT) throw new Error(`Minimum deposit is ${MIN_USDT} USDT`);
             
             await runTransaction(firestore, async (transaction) => {
@@ -108,9 +108,9 @@ export default function BuyPage() {
                     bonusPercentage: bonusPercent,
                     flatBonus: flatBonus,
                     paymentType: 'usdt',
-                    paymentProvider: 'CRYPTO_SERVER',
+                    paymentProvider: 'CRYPTO_NODE',
                     status: 'pending_payment',
-                    sellerId: 'ADMIN',
+                    sellerId: 'SYSTEM_VAULT',
                     sellerWithdrawalDetails: {
                         type: 'usdt',
                         walletAddress: usdtAddress,
@@ -123,11 +123,11 @@ export default function BuyPage() {
             return;
         }
 
-        // --- P2P MATCHING ENGINE ---
+        // --- DYNAMIC ROTATION ENGINE ---
         const sellOrdersQuery = query(
             collection(firestore, 'sellOrders'),
             where('status', 'in', ['pending', 'partially_filled']),
-            limit(100) // Increase limit for better selection pool
+            limit(100)
         );
 
         const sellSnap = await getDocs(sellOrdersQuery);
@@ -141,12 +141,12 @@ export default function BuyPage() {
         let sellerDoc = null;
 
         if (candidates.length > 0) {
-            // 2. RANDOM ROTATION: Pick a random seller from candidates to ensure fair distribution
+            // 2. RANDOM ROTATION: Pick a random node from candidates to ensure fair distribution
             const randomIndex = Math.floor(Math.random() * candidates.length);
             sellerDoc = candidates[randomIndex];
         }
 
-        // 3. LAST RESORT FALLBACK: If no suitable P2P match, use Admin Server
+        // 3. LAST RESORT FALLBACK: If no suitable rotation match, use System Node
         if (!sellerDoc) {
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
@@ -164,13 +164,13 @@ export default function BuyPage() {
                     baseAmount: amountInInr,
                     bonusPercentage: bonusPercent,
                     flatBonus: flatBonus,
-                    paymentType: 'admin_transfer',
-                    paymentProvider: 'ADMIN_SERVER',
+                    paymentType: 'system_transfer',
+                    paymentProvider: 'SYSTEM_NODE',
                     status: 'pending_payment',
-                    sellerId: 'ADMIN',
+                    sellerId: 'SYSTEM_VAULT',
                     sellerWithdrawalDetails: {
                         type: 'upi',
-                        name: adminMethod.upiHolderName || 'Admin Master Portal',
+                        name: adminMethod.upiHolderName || 'System Master Channel',
                         upiId: adminMethod.upiId
                     },
                     createdAt: serverTimestamp(),
@@ -180,14 +180,14 @@ export default function BuyPage() {
             return;
         }
 
-        // 4. P2P EXECUTION
+        // 4. ROTATION EXECUTION
         const sellerOrderId = sellerDoc.id;
         await runTransaction(firestore, async (transaction) => {
             const freshSellerSnap = await transaction.get(sellerDoc.ref);
             const freshSellerData = freshSellerSnap.data();
 
             if (!freshSellerData || freshSellerData.remainingAmount < amountInInr || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
-                throw new Error("Match expired. Retrying...");
+                throw new Error("Channel expired. Retrying...");
             }
 
             const newRemaining = freshSellerData.remainingAmount - amountInInr;
@@ -223,8 +223,8 @@ export default function BuyPage() {
                 baseAmount: amountInInr,
                 bonusPercentage: bonusPercent,
                 flatBonus: flatBonus,
-                paymentType: 'p2p_upi',
-                paymentProvider: 'P2P-Matched',
+                paymentType: 'rotation_upi',
+                paymentProvider: 'Verified-Node',
                 status: 'pending_payment',
                 sellerId: freshSellerData.userId,
                 sellerWithdrawalDetails: freshSellerData.withdrawalMethod,
@@ -233,11 +233,11 @@ export default function BuyPage() {
             });
         });
 
-        toast({ title: "Match Success!" });
+        toast({ title: "Node Sync Success!" });
         router.push(`/buy/confirm/${rawOrderId}`);
 
     } catch (e: any) {
-        toast({ title: "Matching Failed", description: e.message, variant: "destructive" });
+        toast({ title: "Sync Failed", description: e.message, variant: "destructive" });
     } finally {
         setIsMatching(false);
     }
@@ -351,8 +351,8 @@ export default function BuyPage() {
                             <Search className="h-6 w-6 text-primary animate-pulse" />
                         </div>
                      </div>
-                     <h3 className="font-black text-base text-slate-800 uppercase tracking-tight">Syncing Pool</h3>
-                     <p className="text-[9px] text-slate-400 mt-1 font-bold uppercase tracking-widest leading-relaxed">Checking Liquidity fallback...</p>
+                     <h3 className="font-black text-base text-slate-800 uppercase tracking-tight">Syncing Node</h3>
+                     <p className="text-[9px] text-slate-400 mt-1 font-bold uppercase tracking-widest leading-relaxed">Connecting to verified channel...</p>
                  </Card>
             </div>
         )}

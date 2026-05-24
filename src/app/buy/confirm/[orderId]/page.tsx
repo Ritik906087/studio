@@ -87,8 +87,8 @@ function PaymentDetailsContent() {
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
                 
-                // If it's a P2P order, we need to release the seller's locked liquidity
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
+                // If it's a rotation order, we need to release the seller's locked liquidity
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'SYSTEM_VAULT') {
                     const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     const sellerUserOrderRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
 
@@ -97,15 +97,11 @@ function PaymentDetailsContent() {
                         const sellerData = sellerSnap.data();
                         const newRemaining = (sellerData.remainingAmount || 0) + (order.baseAmount || 0);
                         
-                        // Status Restoration Logic:
-                        // If fully filled (processing), but now we cancelled one match, it becomes partially_filled
                         let newStatus = 'partially_filled';
-                        // If it's back to its original amount, set to pending
                         if (newRemaining >= sellerData.amount) {
                             newStatus = 'pending';
                         }
 
-                        // Remove this order from matched list
                         const updatedMatches = (sellerData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderId);
 
                         transaction.update(sellerOrderRef, {
@@ -142,7 +138,6 @@ function PaymentDetailsContent() {
     useEffect(() => {
         if (!order) return;
         
-        // If order already moved out of pending_payment, redirect
         if (order.status !== 'pending_payment') {
             if (['cancelled', 'failed'].includes(order.status)) {
                 router.replace('/home');
@@ -152,9 +147,8 @@ function PaymentDetailsContent() {
             return;
         }
 
-        // Timer Logic (30 Minutes)
         const createdAt = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
-        const duration = 30 * 60 * 1000; // 30 mins for all P2P
+        const duration = 30 * 60 * 1000;
         const expiryTime = new Date(createdAt.getTime() + duration);
 
         const interval = setInterval(() => {
@@ -175,7 +169,7 @@ function PaymentDetailsContent() {
 
     const handleConfirm = async () => {
         if (!utr || utr.length < 10) {
-            toast({ variant: 'destructive', title: 'Invalid UTR/Hash', description: 'Please enter a valid reference number.' });
+            toast({ variant: 'destructive', title: 'Invalid Ref', description: 'Please enter a valid reference number.' });
             return;
         }
         
@@ -197,7 +191,7 @@ function PaymentDetailsContent() {
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
                 
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
+                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'SYSTEM_VAULT') {
                     const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     const sellerUserOrderRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
 
@@ -213,14 +207,14 @@ function PaymentDetailsContent() {
                 }
 
                 transaction.update(buyerOrderRef, {
-                    status: 'pending_confirmation', // Moves to "In Review"
+                    status: 'pending_confirmation',
                     utr: utr,
                     ...(downloadUrl && { screenshotURL: downloadUrl }),
                     submittedAt: serverTimestamp()
                 });
             });
 
-            toast({ title: 'Payment Submitted', description: 'Order is now in review.' });
+            toast({ title: 'Payment Submitted', description: 'Process is now in review.' });
             router.push(`/order/${orderId}`);
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Submission Failed', description: e.message });
@@ -238,12 +232,12 @@ function PaymentDetailsContent() {
             return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(details.walletAddress)}&size=250x250&qzone=2`;
         }
         if (!details?.upiId || !order?.baseAmount) return "";
-        const upiUrl = `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Seller')}&am=${order.baseAmount}&tn=${order.orderId}`;
+        const upiUrl = `upi://pay?pa=${details.upiId}&pn=${encodeURIComponent(details?.name || 'Authorized Channel')}&am=${order.baseAmount}&tn=${order.orderId}`;
         return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiUrl)}&size=250x250&qzone=2`;
     }, [details, order]);
 
     if (loading) return <div className="p-8 flex justify-center"><Loader size="md" /></div>;
-    if (!order) return <div className="p-8 text-center">Order session not found.</div>;
+    if (!order) return <div className="p-8 text-center">Session not found.</div>;
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
@@ -252,10 +246,10 @@ function PaymentDetailsContent() {
                     <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
                 <div className="flex flex-col items-center">
-                    <h1 className="text-sm font-black uppercase tracking-tight text-slate-800">Complete Payment</h1>
+                    <h1 className="text-sm font-black uppercase tracking-tight text-slate-800">Complete Transfer</h1>
                     <div className="flex items-center gap-1.5 text-blue-600">
                         <Clock className="h-3 w-3" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">30 Min Window</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Secure Window</span>
                     </div>
                 </div>
                 <div className="flex flex-col items-end">
@@ -267,7 +261,7 @@ function PaymentDetailsContent() {
             <main className="p-3 space-y-4 pb-24 overflow-y-auto no-scrollbar">
                 <Card className="border-none shadow-sm rounded-2xl bg-white">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Transaction Details</CardTitle>
+                        <CardTitle className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Asset Details</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         <div className="flex justify-between items-center">
@@ -277,10 +271,10 @@ function PaymentDetailsContent() {
                             </span>
                         </div>
                         <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-slate-400 font-bold uppercase">Order Token</span>
+                            <span className="text-slate-400 font-bold uppercase">Token ID</span>
                             <div className="flex items-center gap-1">
                                 <span className="font-mono font-black text-slate-800">{order.orderId}</span>
-                                <Copy className="h-3 w-3 text-slate-300 cursor-pointer" onClick={() => { navigator.clipboard.writeText(order.orderId); toast({ title: 'Token Copied' }); }} />
+                                <Copy className="h-3 w-3 text-slate-300 cursor-pointer" onClick={() => { navigator.clipboard.writeText(order.orderId); toast({ title: 'ID Copied' }); }} />
                             </div>
                         </div>
                     </CardContent>
@@ -288,8 +282,8 @@ function PaymentDetailsContent() {
 
                 <Card className="border-none shadow-sm rounded-2xl bg-white overflow-hidden">
                     <CardHeader className="bg-slate-50 p-3 border-b flex flex-row items-center justify-between">
-                        <CardTitle className="text-[11px] font-black uppercase text-slate-500">Matched Recipient</CardTitle>
-                        <div className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[8px] font-black uppercase">P2P Secure</div>
+                        <CardTitle className="text-[11px] font-black uppercase text-slate-500">Destination Account</CardTitle>
+                        <div className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded text-[8px] font-black uppercase">Network Secure</div>
                     </CardHeader>
                     <CardContent className="p-4 space-y-4">
                         <div className="flex flex-col items-center py-4 space-y-3">
@@ -298,7 +292,7 @@ function PaymentDetailsContent() {
                                     src={qrCodeUrl}
                                     width={180}
                                     height={180}
-                                    alt="Payment QR"
+                                    alt="QR"
                                     className="rounded-xl border-4 border-white shadow-lg"
                                     unoptimized
                                 />
@@ -307,22 +301,22 @@ function PaymentDetailsContent() {
                                     <Loader2 className="animate-spin text-slate-300" />
                                 </div>
                              )}
-                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Scan using any UPI App</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Scan using any compatible App</p>
                         </div>
                         <div className="space-y-3 border-t border-dashed pt-4">
                             <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-400 font-medium">Account Name</span>
-                                <span className="font-black text-slate-800 uppercase tracking-tight">{details?.accountHolderName || details?.name || 'Authorized Seller'}</span>
+                                <span className="text-slate-400 font-medium">Record Name</span>
+                                <span className="font-black text-slate-800 uppercase tracking-tight">{details?.accountHolderName || details?.name || 'Verified Recipient'}</span>
                             </div>
                             <div className="flex flex-col gap-1 text-xs">
-                                <span className="text-slate-400 font-medium">UPI / VPA ID</span>
+                                <span className="text-slate-400 font-medium">Payment ID</span>
                                 <div className="flex items-center gap-2 mt-1 bg-slate-50 p-3 rounded-xl border border-dashed group active:bg-blue-50 transition-colors">
                                     <span className="font-mono font-black text-primary break-all flex-1 text-[11px]">
                                         {order.paymentType === 'usdt' ? details?.walletAddress : details?.upiId}
                                     </span>
                                     <Copy className="h-4 w-4 text-slate-400 cursor-pointer shrink-0" onClick={() => { 
                                         const val = order.paymentType === 'usdt' ? details?.walletAddress : details?.upiId;
-                                        if(val) { navigator.clipboard.writeText(val); toast({ title: 'VPA Copied' }); } 
+                                        if(val) { navigator.clipboard.writeText(val); toast({ title: 'ID Copied' }); } 
                                     }} />
                                 </div>
                             </div>
@@ -334,12 +328,12 @@ function PaymentDetailsContent() {
                     <CardContent className="p-4 space-y-4">
                         <div className="space-y-2">
                             <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                                Enter 12-Digit UTR / Transaction Hash
+                                Enter Transaction Reference / Hash
                             </Label>
                             <div className="relative group">
                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary"><Hash className="h-4 w-4" /></div>
                                 <Input 
-                                    placeholder="Enter UTR here..." 
+                                    placeholder="Enter reference here..." 
                                     value={utr} 
                                     onChange={(e) => setUtr(e.target.value.replace(/\s/g, '').toUpperCase())}
                                     className="h-12 rounded-xl bg-slate-50 border-none pl-11 font-mono font-black text-sm ring-1 ring-slate-100 focus-visible:ring-primary/40"
@@ -359,12 +353,12 @@ function PaymentDetailsContent() {
                                     {screenshotFile ? (
                                         <div className="flex items-center gap-2 text-teal-600">
                                             <CheckCircle2 className="h-4 w-4" />
-                                            Evidence Attached ✓
+                                            Proof Attached ✓
                                         </div>
                                     ) : (
                                         <div className="flex items-center gap-2">
                                             <Upload className="h-4 w-4" />
-                                            Upload Screenshot
+                                            Upload Proof Screenshot
                                         </div>
                                     )}
                                 </Button>
@@ -376,7 +370,7 @@ function PaymentDetailsContent() {
                 <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl flex gap-3">
                     <AlertCircle className="h-4 w-4 text-orange-600 shrink-0 mt-0.5" />
                     <p className="text-[9px] text-orange-800 font-black leading-tight uppercase tracking-tight">
-                        DO NOT SUBMIT FAKE PROOFS. INCORRECT UTR OR SCREENSHOTS WILL LEAD TO INSTANT PERMANENT BAN OF YOUR ACCOUNT.
+                        DO NOT SUBMIT FAKE PROOFS. INCORRECT REFERENCE CODES WILL LEAD TO INSTANT ACCOUNT RESTRICTION.
                     </p>
                 </div>
             </main>
@@ -406,8 +400,8 @@ function PaymentDetailsContent() {
                         <div className="h-16 w-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4">
                             <XCircle className="h-8 w-8 text-red-500" />
                         </div>
-                        <DialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight">Stop Matching?</DialogTitle>
-                        <DialogDescription className="text-[10px] font-bold text-red-400 uppercase mt-1 tracking-widest">The matched seller will be released</DialogDescription>
+                        <DialogTitle className="text-xl font-black text-slate-800 uppercase tracking-tight">Stop Process?</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold text-red-400 uppercase mt-1 tracking-widest">The matched channel will be released</DialogDescription>
                     </div>
                     <div className="p-6 space-y-6">
                         <div className="space-y-3">

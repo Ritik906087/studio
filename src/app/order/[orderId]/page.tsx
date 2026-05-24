@@ -39,7 +39,7 @@ const statusMapping: Record<string, { label: string, desc: string, icon: any, co
     },
     pending_confirmation: { 
         label: "In Review", 
-        desc: "Admin is verifying your payment proof", 
+        desc: "System is verifying your payment proof", 
         icon: FileClock, 
         color: "text-blue-500", 
         bgColor: "bg-blue-50" 
@@ -60,7 +60,7 @@ const statusMapping: Record<string, { label: string, desc: string, icon: any, co
     },
     failed: { 
         label: "Rejected", 
-        desc: "Invalid proof or security issue", 
+        desc: "Invalid proof or security issue identified", 
         icon: AlertTriangle, 
         color: "text-red-600", 
         bgColor: "bg-red-100" 
@@ -147,11 +147,11 @@ function OrderStatusContent() {
                             isDone={order.status !== 'cancelled'} 
                         />
                         <TimelineItem 
-                            title="In Review (Verification)" 
+                            title="In Review (Processing)" 
                             isDone={['pending_confirmation', 'completed', 'failed'].includes(order.status)} 
                         />
                         <TimelineItem 
-                            title={order.status === 'completed' ? "Approved & Credited" : order.status === 'failed' ? "Rejected" : "Order Completed"} 
+                            title={order.status === 'completed' ? "Approved & Credited" : order.status === 'failed' ? "Rejected" : "Process Finished"} 
                             isDone={['completed', 'failed'].includes(order.status)} 
                             isLast={true} 
                         />
@@ -162,7 +162,7 @@ function OrderStatusContent() {
                     <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 items-center">
                          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
                          <div>
-                            <p className="text-[10px] font-black uppercase text-red-800">Rejection Reason</p>
+                            <p className="text-[10px] font-black uppercase text-red-800">Review Note</p>
                             <p className="text-xs font-bold text-red-600">{order.rejectionReason}</p>
                          </div>
                     </div>
@@ -170,7 +170,7 @@ function OrderStatusContent() {
 
                 <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex gap-3">
                      <Info className="h-5 w-5 text-blue-500 shrink-0" />
-                     <p className="text-[9px] text-blue-700 font-bold leading-relaxed uppercase tracking-tight">Verification usually takes 5-15 minutes. Our system rotates liquidity between verified partners for maximum speed.</p>
+                     <p className="text-[9px] text-blue-700 font-bold leading-relaxed uppercase tracking-tight">Security check usually takes 5-15 minutes. Our system rotates liquidity between verified channels for maximum speed.</p>
                 </div>
             </main>
             

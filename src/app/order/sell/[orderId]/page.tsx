@@ -54,7 +54,7 @@ const statusMapping: Record<string, { label: string, color: string, bgColor: str
         icon: Hourglass
     },
     pending_confirmation: { 
-        label: "In Review (Review)", 
+        label: "System Review", 
         color: "text-blue-500", 
         bgColor: "bg-blue-50",
         icon: FileClock
@@ -91,7 +91,7 @@ const MatchedOrderCard = ({ order }: { order: MatchedBuyOrder }) => {
              <div className={cn("p-1 rounded-lg", config.bgColor)}>
                 <Icon className={cn("h-3 w-3", config.color)} />
              </div>
-             <span className="font-black text-[10px] uppercase tracking-tight text-slate-800">Matched Buyer Match</span>
+             <span className="font-black text-[10px] uppercase tracking-tight text-slate-800">Rotation Match</span>
           </div>
           <span className={cn("font-black text-[9px] uppercase px-2 py-0.5 rounded-md", config.style || config.bgColor + " " + config.color)}>{config.label}</span>
         </div>
@@ -102,14 +102,14 @@ const MatchedOrderCard = ({ order }: { order: MatchedBuyOrder }) => {
                 <p className="font-black text-slate-800 text-sm">₹{order.amount.toFixed(2)}</p>
             </div>
             <div>
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">UTR/Hash</p>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Reference Hash</p>
                 <p className="font-mono text-[9px] font-black text-primary truncate uppercase">{order.utr || 'Awaiting Pay'}</p>
             </div>
         </div>
 
         {order.status === 'pending_confirmation' && (
             <div className="bg-blue-50 p-2 rounded-xl text-center">
-                 <p className="text-[9px] font-bold text-blue-600 uppercase tracking-tight">Admin is currently reviewing the screenshot</p>
+                 <p className="text-[9px] font-bold text-blue-600 uppercase tracking-tight">System is currently reviewing the confirmation proof</p>
             </div>
         )}
       </CardContent>
@@ -233,7 +233,7 @@ function SellOrderStatusContent() {
                             <AlertDialogHeader>
                                 <AlertDialogTitle>Release Idle Assets?</AlertDialogTitle>
                                 <AlertDialogDescription className="text-xs">
-                                    ₹{sellOrder.remainingAmount.toFixed(2)} will be returned to your main balance. Already matched buyers have 30 minutes to pay.
+                                    ₹{sellOrder.remainingAmount.toFixed(2)} will be returned to your main balance. Already matched channels have 30 minutes to pay.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -253,14 +253,14 @@ function SellOrderStatusContent() {
                     ) : (
                         <Card className="border-none shadow-sm rounded-2xl bg-white p-12 text-center opacity-30">
                             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                            <p className="text-[10px] font-black uppercase mt-4">Scanning P2P Pool...</p>
+                            <p className="text-[10px] font-black uppercase mt-4">Scanning Liquidity Pool...</p>
                         </Card>
                     )}
                 </div>
 
                 <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex gap-3">
                      <AlertCircle className="h-5 w-5 text-primary shrink-0" />
-                     <p className="text-[10px] text-slate-500 font-medium leading-relaxed">Admin reviews all matched proofs. Once approved, the corresponding hold balance is permanently released. Buyers have a strict 30-min timer to pay.</p>
+                     <p className="text-[10px] text-slate-500 font-medium leading-relaxed">System reviews all matched proofs. Once approved, the corresponding hold balance is permanently released. Channels have a strict 30-min timer to pay.</p>
                 </div>
             </main>
         </div>
