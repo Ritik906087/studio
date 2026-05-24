@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
@@ -9,7 +9,7 @@ import {
   LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
-  ExternalLink, Ban, BadgeCheck, AlertTriangle, HelpCircle
+  ExternalLink, Ban, BadgeCheck, AlertTriangle, HelpCircle, Search, ImageIcon
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -25,6 +25,13 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { Loader } from '@/components/ui/loader';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
@@ -34,6 +41,8 @@ const providerLogos: Record<string, string> = {
   MobiKwik: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png",
   Freecharge: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(3).png",
   Airtel: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(2).png",
+  Binance: "https://cdn-icons-png.flaticon.com/128/6682/6682016.png",
+  TrustWallet: "https://cdn-icons-png.flaticon.com/128/11488/11488057.png"
 };
 
 export default function AdminDashboardPage() {
@@ -42,12 +51,20 @@ export default function AdminDashboardPage() {
     const { toast } = useToast();
     
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    
+    // Data States
     const [allUsers, setAllUsers] = useState<any[]>([]);
     const [usersLoading, setUsersLoading] = useState(false);
     const [sellOrders, setSellOrders] = useState<any[]>([]);
     const [pendingBuyOrders, setPendingBuyOrders] = useState<any[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    
+    // Search States
+    const [userSearch, setUserSearch] = useState('');
+    const [sellSearch, setSellSearch] = useState('');
+    const [confirmSearch, setConfirmSearch] = useState('');
+
     const [editingPayment, setEditingPayment] = useState<string | null>(null);
     const [indexError, setIndexError] = useState<string | null>(null);
 
@@ -65,7 +82,7 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         setUsersLoading(true);
         try {
-            const q = query(collection(firestore, 'users'), orderBy('createdAt', 'desc'), limit(100));
+            const q = query(collection(firestore, 'users'), orderBy('createdAt', 'desc'), limit(200));
             const snap = await getDocs(q);
             setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         } catch (e) {
@@ -80,15 +97,14 @@ export default function AdminDashboardPage() {
         
         fetchUsers();
 
-        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), where('status', 'in', ['pending', 'partially_filled']), limit(50)), (snap) => {
+        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), where('status', 'in', ['pending', 'partially_filled', 'processing']), limit(100)), (snap) => {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        // Collection Group query requires a manual index in Firebase Console
         const buyOrdersQuery = query(
             collectionGroup(firestore, 'orders'), 
             where('status', '==', 'pending_confirmation'), 
-            limit(50)
+            limit(100)
         );
 
         const unsubBuy = onSnapshot(buyOrdersQuery, (snap) => {
@@ -100,10 +116,7 @@ export default function AdminDashboardPage() {
             setPendingBuyOrders(sorted);
             setIndexError(null);
         }, (error: any) => {
-            if (error.code === 'failed-precondition') {
-                setIndexError(error.message);
-            }
-            console.error("Buy Orders Listener Error:", error);
+            if (error.code === 'failed-precondition') setIndexError(error.message);
         });
         
         const unsubPM = onSnapshot(collection(firestore, 'paymentMethods'), (snap) => {
@@ -112,6 +125,31 @@ export default function AdminDashboardPage() {
 
         return () => { unsubSell(); unsubBuy(); unsubPM(); };
     }, [firestore, fetchUsers]);
+
+    // Computed Filtered Lists
+    const filteredUsers = useMemo(() => {
+        return allUsers.filter(u => 
+            u.numericId?.includes(userSearch) || 
+            u.phoneNumber?.includes(userSearch) || 
+            u.displayName?.toLowerCase().includes(userSearch.toLowerCase())
+        );
+    }, [allUsers, userSearch]);
+
+    const filteredSellOrders = useMemo(() => {
+        return sellOrders.filter(o => 
+            o.userNumericId?.includes(sellSearch) || 
+            o.userPhoneNumber?.includes(sellSearch) ||
+            o.orderId?.includes(sellSearch)
+        );
+    }, [sellOrders, sellSearch]);
+
+    const filteredConfirmOrders = useMemo(() => {
+        return pendingBuyOrders.filter(o => 
+            o.userNumericId?.includes(confirmSearch) || 
+            o.utr?.includes(confirmSearch) ||
+            o.orderId?.includes(confirmSearch)
+        );
+    }, [pendingBuyOrders, confirmSearch]);
 
     const handleLogout = () => {
         localStorage.removeItem('flex_admin_session');
@@ -122,7 +160,7 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         try {
             await setDoc(doc(firestore, 'paymentMethods', type), { ...data, type }, { merge: true });
-            toast({ title: "Server Updated", description: "Payment link refreshed." });
+            toast({ title: "Server Updated" });
             setEditingPayment(null);
         } catch (e: any) { toast({ variant: 'destructive', title: "Update Failed" }); }
     };
@@ -137,13 +175,9 @@ export default function AdminDashboardPage() {
                 const buyerSnap = await transaction.get(buyerRef);
                 const currentBuyerBalance = buyerSnap.data()?.balance || 0;
                 
-                // 1. Credit Buyer Balance (Total = Base + Bonus)
                 transaction.update(buyerRef, { balance: currentBuyerBalance + order.amount });
-                
-                // 2. Mark Order as Completed
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp() });
                 
-                // 3. Deduct from Seller's Hold Balance if it's a P2P match
                 if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
                     const sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     const sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
@@ -174,11 +208,8 @@ export default function AdminDashboardPage() {
                     }
                 }
             });
-            toast({ title: "Order Approved", description: `Assets credited to ${order.userNumericId || 'Buyer'}` });
-        } catch (e: any) { 
-            console.error(e);
-            toast({ variant: "destructive", title: "Approval Failed", description: e.message }); 
-        }
+            toast({ title: "Order Approved", description: `Assets credited to ${order.userNumericId}` });
+        } catch (e: any) { toast({ variant: "destructive", title: "Approval Failed", description: e.message }); }
     };
 
     const handleRejectBuy = async (order: any) => {
@@ -210,8 +241,8 @@ export default function AdminDashboardPage() {
                     }
                 }
             });
-            toast({ title: "Order Rejected", description: "Liquidity returned to pool." });
-        } catch (e: any) { toast({ variant: "destructive", title: "Rejection Failed", description: e.message }); }
+            toast({ title: "Order Rejected" });
+        } catch (e: any) { toast({ variant: "destructive", title: "Rejection Failed" }); }
     };
 
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
@@ -276,25 +307,20 @@ export default function AdminDashboardPage() {
                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Pool</p>
                                     <div className="text-3xl font-black text-primary mt-2">₹{totalBalance.toLocaleString()}</div>
                                 </Card>
-                                <Card className="border-none shadow-sm rounded-3xl p-6 bg-white">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Buy</p>
-                                    <div className="text-3xl font-black text-green-600 mt-2">₹0</div>
-                                </Card>
-                                <Card className="border-none shadow-sm rounded-3xl p-6 bg-white">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Sell</p>
-                                    <div className="text-3xl font-black text-red-600 mt-2">₹0</div>
-                                </Card>
                             </div>
                         </TabsContent>
 
-                        <TabsContent value="users">
+                        <TabsContent value="users" className="space-y-4">
+                            <div className="relative max-w-md">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input 
+                                    placeholder="Search UID or Mobile..." 
+                                    className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
+                                    value={userSearch}
+                                    onChange={e => setUserSearch(e.target.value)}
+                                />
+                            </div>
                             <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                <CardHeader className="p-6 border-b flex flex-row items-center justify-between">
-                                    <CardTitle className="text-sm font-black uppercase">Registry (Last 100)</CardTitle>
-                                    <Button onClick={fetchUsers} disabled={usersLoading} variant="ghost" size="sm" className="h-8 rounded-lg font-black text-[10px]">
-                                        <RefreshCw className={cn("h-3 w-3 mr-2", usersLoading && "animate-spin")} /> REFRESH
-                                    </Button>
-                                </CardHeader>
                                 <div className="overflow-x-auto">
                                     {usersLoading ? (
                                         <div className="p-20 text-center"><Loader size="sm" /></div>
@@ -309,16 +335,13 @@ export default function AdminDashboardPage() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {allUsers.map(u => (
+                                                {filteredUsers.map(u => (
                                                     <TableRow key={u.id} className="border-slate-50">
                                                         <TableCell className="font-mono text-xs font-black text-blue-600 pl-6">{u.numericId}</TableCell>
                                                         <TableCell>
-                                                            <div className="flex items-center gap-3">
-                                                                <Avatar className="h-8 w-8"><AvatarImage src={u.photoURL} /><AvatarFallback>U</AvatarFallback></Avatar>
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-bold text-xs">{u.displayName}</span>
-                                                                    <span className="text-[9px] text-slate-400">+91 {u.phoneNumber}</span>
-                                                                </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="font-bold text-xs">{u.displayName}</span>
+                                                                <span className="text-[9px] text-slate-400">+91 {u.phoneNumber}</span>
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="font-black text-xs text-slate-700">₹{u.balance?.toFixed(2)}</TableCell>
@@ -336,9 +359,17 @@ export default function AdminDashboardPage() {
                             </Card>
                         </TabsContent>
 
-                        <TabsContent value="withdrawal">
+                        <TabsContent value="withdrawal" className="space-y-4">
+                            <div className="relative max-w-md">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input 
+                                    placeholder="Search Seller UID/Mobile..." 
+                                    className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
+                                    value={sellSearch}
+                                    onChange={e => setSellSearch(e.target.value)}
+                                />
+                            </div>
                             <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                <CardHeader className="p-6 border-b"><CardTitle className="text-sm font-black uppercase">Sell Orders (Withdrawals)</CardTitle></CardHeader>
                                 <div className="overflow-x-auto">
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
@@ -350,7 +381,7 @@ export default function AdminDashboardPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {sellOrders.map(o => (
+                                            {filteredSellOrders.map(o => (
                                                 <TableRow key={o.id}>
                                                     <TableCell className="pl-6">
                                                         <p className="font-black text-[11px] text-blue-600">{o.userNumericId}</p>
@@ -358,14 +389,7 @@ export default function AdminDashboardPage() {
                                                     </TableCell>
                                                     <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
                                                     <TableCell>
-                                                        <div className="flex items-center gap-2">
-                                                            {o.withdrawalMethod?.name && providerLogos[o.withdrawalMethod.name] && (
-                                                                <div className="h-6 w-6 rounded-lg bg-slate-50 p-1 flex items-center justify-center">
-                                                                    <Image src={providerLogos[o.withdrawalMethod.name]} alt="" width={14} height={14} />
-                                                                </div>
-                                                            )}
-                                                            <span className="font-mono text-[9px] font-black">{o.withdrawalMethod?.upiId}</span>
-                                                        </div>
+                                                        <span className="font-mono text-[9px] font-black">{o.withdrawalMethod?.upiId}</span>
                                                     </TableCell>
                                                     <TableCell>
                                                         <Badge className="bg-blue-50 text-blue-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
@@ -378,106 +402,103 @@ export default function AdminDashboardPage() {
                             </Card>
                         </TabsContent>
 
-                        <TabsContent value="confirm">
-                             {indexError && (
-                                <div className="space-y-4 mb-6">
-                                    <Alert variant="destructive" className="rounded-2xl bg-red-50 border-red-100 p-6">
-                                        <AlertTriangle className="h-6 w-6 mb-2" />
-                                        <AlertTitle className="font-black uppercase text-base">Action Required: Firestore Index Missing</AlertTitle>
-                                        <AlertDescription className="text-sm font-medium leading-relaxed space-y-4">
-                                            <p>Bhai, P2P Confirmation system ko enable karne ke liye aapko Firestore mein ek **Index** banana hoga. Ye index sabhi users ke pending orders ko dhoondne mein help karta hai.</p>
-                                            
-                                            <div className="bg-white/50 p-4 rounded-xl space-y-2">
-                                                <p className="font-black text-xs uppercase">Process to fix:</p>
-                                                <ol className="list-decimal list-inside space-y-1 text-xs">
-                                                    <li>Niche diye gaye link par click karein.</li>
-                                                    <li>Firebase Console khulega, waha **"Create Index"** par click karein.</li>
-                                                    <li>Wait karein (5-10 minute). Jab status "Enabled" ho jaye, ye page refresh karein.</li>
-                                                </ol>
-                                            </div>
+                        <TabsContent value="confirm" className="space-y-4">
+                             <div className="relative max-w-md">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input 
+                                    placeholder="Search Buyer UID or UTR..." 
+                                    className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
+                                    value={confirmSearch}
+                                    onChange={e => setConfirmSearch(e.target.value)}
+                                />
+                            </div>
 
-                                            <Button asChild className="w-full bg-red-600 hover:bg-red-700 h-12 rounded-xl mt-4 font-black uppercase shadow-lg shadow-red-200">
-                                                <a 
-                                                    href={`https://console.firebase.google.com/v1/r/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'studio-7114417830-300d7'}/firestore/indexes?create_exemption=Clpwcm9qZWN0cy9zdHVkaW8tNzExNDQxNzgzMC0zMDBkNy9kYXRhYmFzZXMvKGRlZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvb3JkZXJzL2ZpZWxkcy9zdGF0dXMQAhoKCgZzdGF0dXMQAQ`} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                >
-                                                    CLICK HERE TO CREATE INDEX <ExternalLink className="ml-2 h-4 w-4" />
-                                                </a>
-                                            </Button>
-                                        </AlertDescription>
-                                    </Alert>
-                                    
-                                    <Card className="border-none shadow-sm rounded-3xl bg-blue-50 p-6 border border-blue-100">
-                                        <div className="flex gap-4">
-                                            <HelpCircle className="h-6 w-6 text-blue-600 shrink-0" />
-                                            <div>
-                                                <h4 className="font-black text-blue-900 uppercase text-xs">Kyun chahiye Index?</h4>
-                                                <p className="text-[11px] text-blue-700 font-medium mt-1 leading-relaxed">
-                                                    Firestore by default nested collections (users/{'{uid}'}/orders) ko group mein query nahi kar sakta. Index banane se admin panel sabhi users ke orders ek saath scan kar payega verification ke liye.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </Card>
-                                </div>
-                             )}
+                             {indexError && <Alert variant="destructive"><AlertTitle>Index Missing</AlertTitle></Alert>}
 
                              <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                <CardHeader className="p-6 border-b"><CardTitle className="text-sm font-black uppercase">Pending Buy Proofs</CardTitle></CardHeader>
                                 <div className="overflow-x-auto">
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
                                             <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase pl-6">Buyer UID / Amount</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">UTR / Proof</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase pl-6">Buyer & Amount</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">Payment App</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">UTR & Proof</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Recipient (Seller)</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase text-right pr-6">Action</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase text-right pr-6">Decision</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {pendingBuyOrders.map(o => (
-                                                <TableRow key={o.id}>
-                                                    <TableCell className="pl-6">
+                                            {filteredConfirmOrders.map(o => (
+                                                <TableRow key={o.id} className="group hover:bg-slate-50/50">
+                                                    <TableCell className="pl-6 py-5">
                                                         <div className="flex flex-col">
-                                                            <span className="font-black text-blue-600 text-xs">{o.userNumericId || 'UID N/A'}</span>
-                                                            <span className="font-black text-slate-800 text-base">₹{o.amount.toFixed(2)}</span>
-                                                            <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tighter">ID: {o.orderId}</span>
+                                                            <span className="font-black text-blue-600 text-[11px] uppercase tracking-wider">UID: {o.userNumericId || 'N/A'}</span>
+                                                            <span className="font-black text-slate-900 text-lg tabular-nums">₹{o.amount.toFixed(2)}</span>
+                                                            <span className="text-[8px] text-slate-400 font-bold uppercase">ID: {o.orderId}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="font-mono text-xs font-black text-primary">{o.utr}</span>
-                                                            {o.screenshotURL ? (
-                                                                <a href={o.screenshotURL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[9px] text-blue-600 font-black hover:underline uppercase">
-                                                                    VIEW IMAGE <ExternalLink className="h-2 w-2" />
-                                                                </a>
-                                                            ) : <span className="text-[9px] text-slate-300 italic uppercase">No Image</span>}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-black text-slate-400 uppercase">UID: {o.sellerId}</span>
-                                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                                                <div className="h-5 w-5 bg-slate-50 rounded flex items-center justify-center">
-                                                                    <Wallet className="h-2.5 w-2.5 text-slate-400" />
+                                                        <div className="flex items-center gap-2">
+                                                            {o.paymentProvider && providerLogos[o.paymentProvider] ? (
+                                                                <div className="h-8 w-8 rounded-lg bg-white border shadow-sm p-1 flex items-center justify-center">
+                                                                    <Image src={providerLogos[o.paymentProvider]} alt="" width={20} height={20} className="object-contain" />
                                                                 </div>
-                                                                <span className="font-mono text-[9px] font-black text-slate-600">{o.sellerWithdrawalDetails?.upiId || 'ADMIN'}</span>
+                                                            ) : (
+                                                                <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center"><Wallet className="h-4 w-4 text-slate-400" /></div>
+                                                            )}
+                                                            <span className="text-[10px] font-black text-slate-600 uppercase">{o.paymentProvider || 'UPI'}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-col gap-2">
+                                                            <span className="font-mono text-[11px] font-black text-primary border-b border-primary/20 pb-0.5 w-fit">{o.utr}</span>
+                                                            <Dialog>
+                                                                <DialogTrigger asChild>
+                                                                    <button className="flex items-center gap-1.5 text-[9px] text-blue-600 font-black uppercase hover:bg-blue-50 w-fit px-2 py-1 rounded-md transition-colors">
+                                                                        <ImageIcon className="h-3 w-3" /> VIEW PROOF
+                                                                    </button>
+                                                                </DialogTrigger>
+                                                                <DialogContent className="max-w-2xl bg-white rounded-[32px] p-0 overflow-hidden border-none">
+                                                                    <DialogHeader className="p-6 bg-slate-50 border-b">
+                                                                        <DialogTitle className="text-sm font-black uppercase flex items-center gap-2">
+                                                                            <ShieldCheck className="h-4 w-4 text-blue-600" /> Payment Evidence: UID {o.userNumericId}
+                                                                        </DialogTitle>
+                                                                    </DialogHeader>
+                                                                    <div className="p-8 bg-white flex justify-center items-center">
+                                                                        {o.screenshotURL ? (
+                                                                            <div className="relative w-full aspect-[3/4] max-h-[60vh]">
+                                                                                 <Image src={o.screenshotURL} alt="Proof" fill className="object-contain rounded-xl" unoptimized />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="h-64 w-full bg-slate-100 rounded-2xl flex flex-col items-center justify-center text-slate-300">
+                                                                                <ImageIcon className="h-12 w-12 mb-2" />
+                                                                                <p className="font-black text-[10px] uppercase">No Screenshot Provided</p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="p-4 bg-slate-50 border-t flex justify-between items-center px-8">
+                                                                        <p className="font-mono text-xs font-black text-slate-400">UTR: {o.utr}</p>
+                                                                        <p className="font-black text-slate-800">₹{o.amount.toFixed(2)}</p>
+                                                                    </div>
+                                                                </DialogContent>
+                                                            </Dialog>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[9px] font-black text-slate-400 uppercase">Seller: {o.sellerId === 'ADMIN' ? 'MASTER' : o.sellerId}</span>
+                                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                                <span className="font-mono text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{o.sellerWithdrawalDetails?.upiId || 'SYSTEM'}</span>
                                                             </div>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
                                                         <div className="flex justify-end gap-2">
-                                                            <button 
-                                                                onClick={() => handleApproveBuy(o)} 
-                                                                className="bg-green-600 hover:bg-green-700 h-9 px-4 text-[9px] font-black rounded-xl shadow-lg shadow-green-100 text-white flex items-center gap-1"
-                                                            >
-                                                                <BadgeCheck className="h-3 w-3" /> APPROVE
+                                                            <button onClick={() => handleApproveBuy(o)} className="bg-green-600 hover:bg-green-700 h-9 px-4 text-[9px] font-black rounded-xl shadow-lg shadow-green-100 text-white">
+                                                                APPROVE
                                                             </button>
-                                                            <button 
-                                                                onClick={() => handleRejectBuy(o)} 
-                                                                className="h-9 px-4 text-[9px] font-black rounded-xl border border-red-100 text-red-500 hover:bg-red-50 flex items-center gap-1"
-                                                            >
-                                                                <Ban className="h-3 w-3" /> REJECT
+                                                            <button onClick={() => handleRejectBuy(o)} className="bg-red-500 hover:bg-red-600 h-9 px-4 text-[9px] font-black rounded-xl text-white">
+                                                                REJECT
                                                             </button>
                                                         </div>
                                                     </TableCell>
@@ -485,11 +506,8 @@ export default function AdminDashboardPage() {
                                             ))}
                                         </TableBody>
                                     </Table>
-                                    {pendingBuyOrders.length === 0 && !indexError && (
-                                        <div className="p-20 text-center text-slate-300 font-black text-[10px] uppercase tracking-widest">All Proofs Cleared</div>
-                                    )}
-                                    {indexError && (
-                                        <div className="p-20 text-center text-red-300 font-black text-[10px] uppercase tracking-widest">Awaiting Database Index...</div>
+                                    {filteredConfirmOrders.length === 0 && (
+                                        <div className="p-20 text-center text-slate-300 font-black text-[10px] uppercase tracking-widest">Zero Matches Found</div>
                                     )}
                                 </div>
                             </Card>
@@ -502,7 +520,6 @@ export default function AdminDashboardPage() {
                                     <TabsTrigger value="upi" className="rounded-xl px-6 font-black text-[10px] uppercase">Master UPI</TabsTrigger>
                                     <TabsTrigger value="usdt" className="rounded-xl px-6 font-black text-[10px] uppercase">Crypto USDT</TabsTrigger>
                                 </TabsList>
-
                                 {['bank', 'upi', 'usdt'].map(type => {
                                     const method = paymentMethods.find(m => m.type === type) || { type };
                                     const isEditing = editingPayment === type;
@@ -511,44 +528,23 @@ export default function AdminDashboardPage() {
                                             <Card className="border-none shadow-sm rounded-3xl bg-white max-w-xl overflow-hidden">
                                                 <CardHeader className="bg-slate-50 p-4 border-b flex flex-row justify-between items-center">
                                                     <CardTitle className="text-[10px] font-black uppercase text-slate-500">{type} Master Connection</CardTitle>
-                                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingPayment(isEditing ? null : type)}>
-                                                        <Edit3 className="h-4 w-4" />
-                                                    </Button>
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingPayment(isEditing ? null : type)}><Edit3 className="h-4 w-4" /></Button>
                                                 </CardHeader>
-                                                <CardContent className="p-8 space-y-4">
+                                                <CardContent className="p-8">
                                                     {isEditing ? (
                                                         <div className="space-y-4">
-                                                            {type === 'bank' && (
-                                                                <>
-                                                                    <Input placeholder="Bank Name" defaultValue={method.bankName} onChange={e => method.bankName = e.target.value} />
-                                                                    <Input placeholder="Holder Name" defaultValue={method.accountHolderName} onChange={e => method.accountHolderName = e.target.value} />
-                                                                    <Input placeholder="Account Number" defaultValue={method.accountNumber} onChange={e => method.accountNumber = e.target.value} />
-                                                                    <Input placeholder="IFSC Code" defaultValue={method.ifscCode} onChange={e => method.ifscCode = e.target.value} />
-                                                                </>
-                                                            )}
-                                                            {type === 'upi' && (
-                                                                <>
-                                                                    <Input placeholder="Master UPI ID" defaultValue={method.upiId} onChange={e => method.upiId = e.target.value} />
-                                                                    <Input placeholder="Holder Name" defaultValue={method.upiHolderName} onChange={e => method.upiHolderName = e.target.value} />
-                                                                </>
-                                                            )}
-                                                            {type === 'usdt' && (
-                                                                <Input placeholder="TRC20 Wallet" defaultValue={method.usdtWalletAddress} onChange={e => method.usdtWalletAddress = e.target.value} />
-                                                            )}
+                                                            {type === 'bank' && <><Input placeholder="Bank Name" defaultValue={method.bankName} onChange={e => method.bankName = e.target.value} /><Input placeholder="Holder Name" defaultValue={method.accountHolderName} onChange={e => method.accountHolderName = e.target.value} /><Input placeholder="Account Number" defaultValue={method.accountNumber} onChange={e => method.accountNumber = e.target.value} /><Input placeholder="IFSC Code" defaultValue={method.ifscCode} onChange={e => method.ifscCode = e.target.value} /></>}
+                                                            {type === 'upi' && <><Input placeholder="Master UPI ID" defaultValue={method.upiId} onChange={e => method.upiId = e.target.value} /><Input placeholder="Holder Name" defaultValue={method.upiHolderName} onChange={e => method.upiHolderName = e.target.value} /></>}
+                                                            {type === 'usdt' && <Input placeholder="TRC20 Wallet" defaultValue={method.usdtWalletAddress} onChange={e => method.usdtWalletAddress = e.target.value} />}
                                                             <div className="pt-4 flex gap-3">
-                                                                <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px]" onClick={() => editingPayment && setEditingPayment(null)}>CANCEL</Button>
-                                                                <Button className="flex-1 bg-blue-600 rounded-xl font-black text-[10px]" onClick={() => handleUpdateAdminPayment(type, method)}>SAVE CONNECTION</Button>
+                                                                <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px]" onClick={() => setEditingPayment(null)}>CANCEL</Button>
+                                                                <Button className="flex-1 bg-blue-600 rounded-xl font-black text-[10px]" onClick={() => handleUpdateAdminPayment(type, method)}>SAVE</Button>
                                                             </div>
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-6">
-                                                            <div className="h-16 w-16 rounded-3xl bg-blue-50 flex items-center justify-center border">
-                                                                <Check className="h-8 w-8 text-primary" />
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xl font-black text-slate-800 tracking-tight">{method.upiId || method.accountNumber || method.usdtWalletAddress || "Not Linked"}</p>
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{method.bankName || method.upiHolderName || "Master Channel Offline"}</p>
-                                                            </div>
+                                                            <div className="h-16 w-16 rounded-3xl bg-blue-50 flex items-center justify-center border"><Check className="h-8 w-8 text-primary" /></div>
+                                                            <div><p className="text-xl font-black text-slate-800">{method.upiId || method.accountNumber || method.usdtWalletAddress || "Not Linked"}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{method.bankName || method.upiHolderName || "Offline"}</p></div>
                                                         </div>
                                                     )}
                                                 </CardContent>
@@ -558,7 +554,6 @@ export default function AdminDashboardPage() {
                                 })}
                             </Tabs>
                         </TabsContent>
-
                     </Tabs>
                 </main>
             </div>
