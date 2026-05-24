@@ -50,7 +50,7 @@ export default function HomePage() {
         const todayMs = today.getTime();
 
         try {
-            // 1. Fetch ALL completed Buy Orders for Revenue Calculation
+            // 1. Fetch ALL completed Buy Orders
             const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), where('status', '==', 'completed'));
             const buySnap = await getDocs(buyQ);
             
@@ -60,7 +60,7 @@ export default function HomePage() {
                 .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs);
             
             const buyQuantity = todayBuyDocs.length;
-            const todayBuy = todayBuyDocs.reduce((acc, d) => acc + (d.amount || 0), 0);
+            const todayBuy = todayBuyDocs.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
 
             // 2. Fetch today's completed Sell Orders
             const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), where('status', '==', 'completed'));
@@ -68,25 +68,25 @@ export default function HomePage() {
             const todaySell = sellSnap.docs
                 .map(d => d.data())
                 .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs)
-                .reduce((acc, d) => acc + (d.amount || 0), 0);
+                .reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
 
-            // 3. Calculate TOTAL REVENUE (Profit Only + Rewards)
-            // Profit from Buy Orders = (Total Amount Received - Base Amount Paid)
-            // This captures exactly the 6% + ₹5 bonus per order.
+            // 3. Calculate TOTAL REVENUE (Profit ONLY: Amount Credited - Base Price Paid)
             const totalBuyProfit = buySnap.docs.reduce((acc, d) => {
                 const data = d.data();
-                const totalAmount = data.amount || 0;
-                const baseAmount = data.baseAmount || totalAmount; // Fallback to 0 profit if base missing
-                return acc + (totalAmount - baseAmount);
+                const amountCredited = Number(data.amount) || 0;
+                // Important: baseAmount is what user paid. If missing, assume 0 profit for that specific record.
+                const basePaid = data.baseAmount !== undefined ? Number(data.baseAmount) : amountCredited;
+                const profit = amountCredited - basePaid;
+                return acc + (profit > 0 ? profit : 0);
             }, 0);
 
-            // Fetch all reward-type transactions
+            // 4. Add all other income sources (Team Bonus, Rewards, System Adjustments)
             const incomeQ = query(
               collection(firestore, 'users', user.uid, 'transactions'), 
               where('type', 'in', ['team_bonus', 'daily_task', 'new_user_reward', 'system_adjustment'])
             );
             const incomeSnap = await getDocs(incomeQ);
-            const totalRewards = incomeSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
+            const totalRewards = incomeSnap.docs.reduce((acc, d) => acc + (Number(d.data().amount) || 0), 0);
 
             setStats({ 
                 buyQuantity, 
