@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, CheckCircle2, XCircle, AlertCircle, Hash, Clock, HelpCircle, Upload, Info } from 'lucide-react';
+import { ChevronLeft, CheckCircle2, XCircle, AlertCircle, Hash, Clock, HelpCircle, Upload, Info, QrCode } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc } from '@/firebase';
@@ -14,6 +14,7 @@ import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { uploadToSupabase } from '@/lib/supabase';
 import { Loader } from '@/components/ui/loader';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 type Order = {
     id: string;
@@ -155,6 +156,8 @@ function ConfirmPageContent() {
     if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400">Order Expired</div>;
 
     const details = order.sellerWithdrawalDetails;
+    const upiLink = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Verified Node')}&am=${order.baseAmount}&tr=${order.orderId}&cu=INR`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
 
     return (
         <div className="flex flex-col min-h-screen bg-white font-body">
@@ -193,9 +196,24 @@ function ConfirmPageContent() {
                 {view === 'info' ? (
                     <div className="space-y-6 animate-in fade-in duration-300">
                         <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-                             <p className="text-xs font-black text-blue-700 leading-tight">
-                                PLEASE USE {order.buyerSelectedProvider?.toUpperCase() || 'ANY UPI APP'} TO SEND THE EXACT AMOUNT TO THE DESTINATION BELOW.
+                             <p className="text-xs font-black text-blue-700 leading-tight text-center uppercase">
+                                Scan QR or Copy UPI to Complete Transfer
                              </p>
+                        </div>
+
+                        {/* QR Code Section */}
+                        <div className="flex flex-col items-center justify-center space-y-4">
+                            <div className="relative p-4 bg-white rounded-3xl shadow-xl ring-1 ring-slate-100 border border-slate-50">
+                                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-md">
+                                    Secure QR
+                                </div>
+                                <div className="relative h-48 w-48 overflow-hidden rounded-xl">
+                                    <Image src={qrUrl} alt="UPI QR Code" fill className="object-contain" unoptimized />
+                                </div>
+                            </div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse flex items-center gap-1.5">
+                                <QrCode className="h-3 w-3" /> Scan with MobiKwik / Freecharge
+                            </p>
                         </div>
 
                         <div className="space-y-1 bg-slate-50 p-2 rounded-[24px] border border-slate-100 shadow-inner">
@@ -309,7 +327,7 @@ function ConfirmPageContent() {
 
 export default function ConfirmPage() {
     return (
-        <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader size="md" /></div>}>
+        <Suspense fallback={<div className="flex h-screen items-center justify-center bg-white"><Loader size="md" /></div>}>
             <ConfirmPageContent />
         </Suspense>
     );
