@@ -1,12 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, Loader2, Search, ArrowRight, Wallet, BadgePercent, AlertCircle, TrendingUp, CheckCircle2, Plus } from 'lucide-react';
+import { 
+    ChevronLeft, 
+    Loader2, 
+    Search, 
+    ArrowRight, 
+    Wallet, 
+    CheckCircle2, 
+    ChevronUp, 
+    ChevronDown,
+    Filter
+} from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
@@ -18,13 +28,16 @@ import { cn } from '@/lib/utils';
 import { Loader } from '@/components/ui/loader';
 import Image from 'next/image';
 
-const purchaseOptions = [
-  { id: '100029384756', amount: 100 },
-  { id: '200058372910', amount: 500 },
-  { id: '300094857261', amount: 1000 },
-  { id: '400037281940', amount: 2000 },
-  { id: '500019283746', amount: 5000 },
-  { id: '600057283910', amount: 10000 },
+const INITIAL_PURCHASE_OPTIONS = [
+  { id: '5219596344501253', amount: 158 },
+  { id: '5219596341617670', amount: 170 },
+  { id: '5219511413187590', amount: 200 },
+  { id: '5219511413253125', amount: 500 },
+  { id: '5219511417840646', amount: 1000 },
+  { id: '5219511417840647', amount: 2000 },
+  { id: '5219511417840648', amount: 3000 },
+  { id: '5219511417840649', amount: 5000 },
+  { id: '5219511417840650', amount: 10000 },
 ];
 
 const USDT_RATE = 108; 
@@ -46,6 +59,11 @@ export default function BuyPage() {
   const [usdtAddress, setUsdtAddress] = useState<string | null>(null);
   const [usdtInput, setUsdtInput] = useState<string>('5');
   
+  // Filter States
+  const [minFilter, setMinFilter] = useState('100');
+  const [maxFilter, setMaxFilter] = useState('100000');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
   // Method Selection State
   const [isMethodSheetOpen, setIsMethodSheetOpen] = useState(false);
   const [pendingPurchaseAmount, setPendingPurchaseAmount] = useState<number | null>(null);
@@ -70,15 +88,30 @@ export default function BuyPage() {
 
     const usdtQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'usdt'), limit(1));
     getDocs(usdtQuery).then(snap => {
-        if (!snap.empty) setUsdtAddress(snap.docs[0].data().usdtWalletAddress);
+        if (!snap.empty) {
+            const data = snap.docs[0].data();
+            setUsdtAddress(data.usdtWalletAddress);
+        }
     }).catch(() => {});
   }, [user, firestore]);
+
+  const filteredOptions = useMemo(() => {
+    let result = [...INITIAL_PURCHASE_OPTIONS];
+    const minVal = parseInt(minFilter) || 0;
+    const maxVal = parseInt(maxFilter) || Infinity;
+
+    result = result.filter(opt => opt.amount >= minVal && opt.amount <= maxVal);
+
+    result.sort((a, b) => sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount);
+
+    return result;
+  }, [minFilter, maxFilter, sortOrder]);
 
   const generateRawOrderId = () => {
     return Math.floor(100000000000 + Math.random() * 900000000000).toString();
   };
 
-  const handleCardClick = (amount: number) => {
+  const handleBuyClick = (amount: number) => {
     if (activePaymentOrder) { 
         toast({ 
           title: "Complete Previous Order", 
@@ -104,6 +137,8 @@ export default function BuyPage() {
     try {
         const rawOrderId = generateRawOrderId();
         const displayOrderId = "#" + rawOrderId;
+        
+        // 6% + ₹5 logic
         const bonusPercent = 6;
         const flatBonus = 5;
         const totalAmount = amountInInr + (amountInInr * bonusPercent / 100) + flatBonus;
@@ -264,56 +299,101 @@ export default function BuyPage() {
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
-      <header className="flex items-center gap-3 p-4 bg-white sticky top-0 z-[60] border-b shadow-sm">
+    <div className="flex flex-col min-h-screen bg-white">
+      <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-[60] border-b">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-          <Link href="/home"><ChevronLeft className="h-5 w-5" /></Link>
+          <Link href="/home"><ChevronLeft className="h-6 w-6 text-slate-500" /></Link>
         </Button>
-        <h1 className="text-lg font-black text-slate-800 uppercase tracking-tight">Buy Center</h1>
+        <h1 className="text-lg font-medium text-slate-700">Buy</h1>
+        <div className="w-8"></div>
       </header>
 
-      <main className="p-3 space-y-3">
+      <main className="flex-1 flex flex-col">
         <Tabs defaultValue="upi" className="w-full">
-            <TabsList className="grid grid-cols-2 bg-slate-200/50 p-1 rounded-2xl h-10 mb-3">
-                <TabsTrigger value="upi" className="rounded-xl font-black text-[10px] uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">UPI Portal</TabsTrigger>
-                <TabsTrigger value="usdt" className="rounded-xl font-black text-[10px] uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">USDT (TRC20)</TabsTrigger>
-            </TabsList>
+            <div className="bg-white border-b px-4">
+                <TabsList className="grid grid-cols-2 bg-transparent h-12 w-full p-0">
+                    <TabsTrigger value="upi" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary font-bold text-slate-400">UPI</TabsTrigger>
+                    <TabsTrigger value="usdt" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary font-bold text-slate-400">USDT</TabsTrigger>
+                </TabsList>
+            </div>
 
-            <TabsContent value="upi">
-                <div className="flex flex-col gap-2.5 pb-24">
-                    {purchaseOptions.map((opt) => (
-                        <Card 
-                            key={opt.id} 
-                            className="p-3 border-none shadow-sm rounded-[20px] active:scale-[0.98] transition-all group overflow-hidden relative cursor-pointer flex items-center justify-between bg-white ring-1 ring-slate-100" 
-                            onClick={() => handleCardClick(opt.amount)}
+            <TabsContent value="upi" className="m-0">
+                {/* Filter Bar */}
+                <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 border-b">
+                    <div className="flex items-center gap-2">
+                        <button 
+                            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                            className="p-1 text-primary"
                         >
-                            <div className="flex items-center gap-3 relative z-10">
-                                <div className="h-10 w-10 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
-                                    <Wallet className="h-5 w-5 text-primary" />
+                            {sortOrder === 'asc' ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                        </button>
+                        <div className="flex items-center gap-1.5 ml-2">
+                            <span className="text-[11px] font-bold text-slate-400">Min</span>
+                            <input 
+                                value={minFilter}
+                                onChange={(e) => setMinFilter(e.target.value)}
+                                className="w-12 bg-transparent border-none font-bold text-[13px] focus:ring-0 p-0"
+                            />
+                        </div>
+                        <div className="flex items-center gap-1.5 ml-4">
+                            <span className="text-[11px] font-bold text-slate-400">Max</span>
+                            <input 
+                                value={maxFilter}
+                                onChange={(e) => setMaxFilter(e.target.value)}
+                                className="w-16 bg-transparent border-none font-bold text-[13px] focus:ring-0 p-0"
+                            />
+                        </div>
+                    </div>
+                    <Search className="h-5 w-5 text-orange-400" />
+                </div>
+
+                {/* Buy List */}
+                <div className="divide-y divide-slate-100 pb-24">
+                    {filteredOptions.map((opt) => {
+                        const reward = (opt.amount * 0.06) + 5;
+                        const total = opt.amount + reward;
+                        return (
+                            <div key={opt.id} className="p-4 flex flex-col gap-3 group active:bg-slate-50 transition-colors">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[11px] text-slate-300 font-medium">No:{opt.id}</span>
+                                    <span className="text-[11px] text-slate-400 font-medium">Reward 6.0%+₹5</span>
                                 </div>
-                                <div>
-                                    <p className="text-[8px] font-black text-slate-400 font-mono tracking-tighter mb-0.5">#{opt.id}</p>
-                                    <p className="text-xl font-black text-slate-800 leading-none">₹{opt.amount.toLocaleString()}</p>
-                                    <div className="flex items-center gap-1 mt-1.5">
-                                        <BadgePercent className="h-2.5 w-2.5 text-teal-600" />
-                                        <p className="text-[9px] font-black text-teal-600 uppercase tracking-tighter">Get ₹{opt.amount.toLocaleString()} + 6% + ₹5</p>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex flex-col">
+                                            <span className="text-[11px] text-red-500 font-bold">Price</span>
+                                            <span className="text-base font-bold text-red-500">₹ {opt.amount}</span>
+                                        </div>
+                                        <span className="text-slate-300 mx-1">+</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[11px] text-slate-500 font-bold">Reward</span>
+                                            <span className="text-base font-bold text-slate-800">{reward.toFixed(2)}</span>
+                                        </div>
+                                        <span className="text-slate-300 mx-1">=</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-[11px] text-blue-500 font-bold">FP</span>
+                                            <span className="text-base font-bold text-blue-500">{total.toFixed(2)}</span>
+                                        </div>
                                     </div>
+                                    <Button 
+                                        onClick={() => handleBuyClick(opt.amount)}
+                                        className="bg-blue-500 hover:bg-blue-600 text-white rounded-md h-8 px-5 text-sm font-bold shadow-sm"
+                                    >
+                                        Buy
+                                    </Button>
                                 </div>
                             </div>
-                            <div className="bg-primary text-white p-1.5 rounded-lg shadow-lg shadow-blue-500/10 group-active:translate-x-1 transition-transform">
-                                <ArrowRight className="h-3.5 w-3.5" />
-                            </div>
-                        </Card>
-                    ))}
+                        );
+                    })}
                 </div>
             </TabsContent>
 
-            <TabsContent value="usdt" className="space-y-3 animate-in fade-in duration-300">
-                <Card className="border-none bg-white rounded-[28px] shadow-lg ring-1 ring-slate-100 overflow-hidden">
+            <TabsContent value="usdt" className="p-4 animate-in fade-in duration-300">
+                <Card className="border-none bg-white rounded-2xl shadow-lg ring-1 ring-slate-100 overflow-hidden">
                     <CardContent className="p-5 space-y-5">
                         <div className="space-y-3">
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">USDT Amount</Label>
+                                <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">USDT Amount</Label>
                                 <div className="relative">
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500 font-black">$</div>
                                     <Input 
@@ -321,36 +401,24 @@ export default function BuyPage() {
                                         placeholder="Min 5 USDT"
                                         value={usdtInput}
                                         onChange={(e) => setUsdtInput(e.target.value)}
-                                        className="h-12 pl-8 bg-slate-50 border-none ring-2 ring-slate-100 rounded-xl text-lg font-black focus-visible:ring-primary/20"
+                                        className="h-12 pl-8 bg-slate-50 border-none ring-1 ring-slate-200 rounded-xl text-lg font-black focus-visible:ring-primary/20"
                                     />
                                 </div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Rate: ₹{USDT_RATE}/USDT (TRC20)</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase ml-1">Rate: ₹{USDT_RATE}/USDT</p>
                             </div>
 
-                            <div className="p-3 bg-primary text-white rounded-xl flex items-center justify-between shadow-xl shadow-blue-500/10">
+                            <div className="p-4 bg-primary text-white rounded-xl flex items-center justify-between shadow-lg shadow-blue-500/10">
                                 <div className="space-y-0.5">
-                                    <p className="text-[8px] font-black uppercase opacity-60">You Receive</p>
-                                    <p className="text-xl font-black tracking-tighter">₹{(Number(usdtInput) * USDT_RATE).toLocaleString()}</p>
+                                    <p className="text-[10px] font-black uppercase opacity-60">You Receive</p>
+                                    <p className="text-xl font-black tabular-nums">₹{(Number(usdtInput) * USDT_RATE).toLocaleString()}</p>
                                 </div>
-                                <div className="h-8 w-8 rounded-lg bg-white/10 flex items-center justify-center">
-                                    <TrendingUp className="h-4 w-4 text-white" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex gap-2">
-                            <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
-                            <div className="space-y-0.5">
-                                <p className="text-[9px] text-red-800 font-black leading-tight uppercase tracking-tight">CRITICAL WARNING</p>
-                                <p className="text-[8px] text-red-600 font-bold uppercase leading-relaxed">
-                                    USE TRC20 NETWORK ONLY. DEPOSITS TO WRONG NETWORK OR INCORRECT AMOUNTS WILL BE LOST PERMANENTLY.
-                                </p>
+                                <Wallet className="h-6 w-6 text-white/30" />
                             </div>
                         </div>
 
                         <Button 
                             onClick={() => handleP2PMatch(Number(usdtInput) * USDT_RATE, 'usdt', Number(usdtInput))}
-                            className="w-full h-12 btn-gradient rounded-xl font-black text-xs shadow-teal-500/20"
+                            className="w-full h-12 btn-gradient rounded-xl font-black text-sm shadow-teal-500/20"
                             disabled={isMatching || Number(usdtInput) < MIN_USDT}
                         >
                             {isMatching ? <Loader size="xs" className="mr-2" /> : "DEPOSIT USDT"}
@@ -397,7 +465,9 @@ export default function BuyPage() {
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="h-11 w-11 rounded-xl bg-slate-50 flex items-center justify-center p-2 border border-slate-50">
-                                        <Image src={PROVIDER_LOGOS[m.name]} alt={m.name} width={32} height={32} className="object-contain" />
+                                        {PROVIDER_LOGOS[m.name] && (
+                                            <Image src={PROVIDER_LOGOS[m.name]} alt={m.name} width={32} height={32} className="object-contain" />
+                                        )}
                                     </div>
                                     <div>
                                         <p className="font-black text-slate-800 text-xs uppercase">{m.name}</p>
