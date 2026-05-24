@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -118,7 +117,7 @@ export default function NewbieRewardsPage() {
                     orderId: `MISSION${Date.now()}`
                 });
 
-                // 2. Credit Reward to Inviter if exists
+                // 2. Credit Reward to direct Inviter (L1 Relationship)
                 if (data?.inviterUid) {
                     const inviterRef = doc(firestore, 'users', data.inviterUid);
                     transaction.update(inviterRef, {
@@ -130,7 +129,7 @@ export default function NewbieRewardsPage() {
                         userId: data.inviterUid,
                         amount: INVITER_BONUS_AMOUNT,
                         type: 'team_bonus',
-                        description: `Affiliate Bonus: Member UID ${data.numericId} completed mission`,
+                        description: `Mission Bonus (L1): Member UID ${data.numericId} completed tasks`,
                         createdAt: serverTimestamp(),
                         orderId: `INV_BONUS_${Date.now()}`
                     });
@@ -183,16 +182,16 @@ export default function NewbieRewardsPage() {
                             </div>
                         </div>
 
-                        <div className="text-center py-2">
+                        <div className="text-center py-1">
                             <div className="flex flex-col items-center">
-                                <h2 className="text-4xl font-black tracking-tighter flex items-baseline gap-1 drop-shadow-md">
+                                <h2 className="text-3xl font-black tracking-tighter flex items-baseline gap-1 drop-shadow-md">
                                     {FINAL_REWARD_AMOUNT}<span className="text-xs font-black opacity-60">FP</span>
                                 </h2>
-                                <p className="text-[8px] font-bold uppercase tracking-[0.1em] text-blue-100/60">Unlock Starter Liquidity</p>
+                                <p className="text-[7px] font-bold uppercase tracking-[0.1em] text-blue-100/60">Unlock Starter Liquidity</p>
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between mt-3 pt-2">
+                        <div className="flex items-center justify-between mt-2 pt-1">
                              <div className="space-y-0.5">
                                 <p className="text-[6px] font-black uppercase tracking-widest text-blue-200">Progress</p>
                                 <div className="flex items-center gap-1.5">

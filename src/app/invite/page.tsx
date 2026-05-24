@@ -96,7 +96,7 @@ export default function InvitePage() {
           <div className="bg-orange-50 border border-orange-100 rounded-[24px] p-5 relative overflow-hidden">
               <div className="absolute -top-1 -right-1 opacity-10 rotate-12"><Gift className="h-12 w-12 text-orange-600" /></div>
               <p className="text-[11px] font-black text-orange-800 leading-relaxed uppercase">
-                If your invited user completes all Newbie Reward tasks, you will receive an instant ₹100 bonus. Detailed reports are available in the My Family section.
+                If your <span className="text-orange-900 underline">Level 1 (Direct)</span> invited user completes all Newbie Reward tasks, you will receive an instant ₹100 bonus. Detailed reports are available in the My Family section.
               </p>
           </div>
 
@@ -113,7 +113,7 @@ export default function InvitePage() {
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-[8px] font-black text-blue-600">Invited A</div>
                     </div>
                     <div className="h-6 w-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-black">A</div>
-                    <div className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black">1%</div>
+                    <div className="bg-blue-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black">1% + ₹100</div>
                 </div>
                 <div className="flex items-center gap-3 ml-6">
                     <div className="h-6 w-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-black">A</div>
@@ -124,7 +124,7 @@ export default function InvitePage() {
                     <div className="bg-teal-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black">0.8%</div>
                 </div>
              </div>
-             <p className="text-[9px] text-slate-400 font-medium italic mt-2">Example: If you invite A, you get 1%. If A invites B, you get 0.8% from B's orders too.</p>
+             <p className="text-[9px] text-slate-400 font-medium italic mt-2">Example: If A (L1) completes mission, you get ₹100. If B (L2) completes mission, only A gets ₹100, you get commission from B's trades only.</p>
           </div>
 
           {/* STEPS */}
