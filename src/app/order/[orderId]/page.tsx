@@ -6,7 +6,7 @@ import { useDoc, useUser, useFirestore } from '@/firebase';
 import { doc, Timestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, CheckCircle, FileClock, XCircle, AlertTriangle, User, Copy, Info, Loader2 } from 'lucide-react';
+import { ChevronLeft, CheckCircle, FileClock, XCircle, AlertTriangle, User, Copy, Info, Loader2, Hourglass } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -18,13 +18,53 @@ type Order = {
     orderId: string;
     amount: number;
     baseAmount?: number;
-    status: 'pending_payment' | 'pending_confirmation' | 'in_applied' | 'completed' | 'cancelled' | 'failed';
+    status: 'pending_payment' | 'pending_confirmation' | 'completed' | 'cancelled' | 'failed';
     utr: string;
     screenshotURL: string;
     submittedAt: Timestamp;
     paymentType?: string;
     sellerId?: string;
     sellerWithdrawalDetails?: any;
+    cancellationReason?: string;
+    rejectionReason?: string;
+};
+
+const statusMapping: Record<string, { label: string, desc: string, icon: any, color: string, bgColor: string }> = {
+    pending_payment: { 
+        label: "Waiting For Payment", 
+        desc: "Please complete payment within 30 minutes", 
+        icon: Hourglass, 
+        color: "text-amber-500", 
+        bgColor: "bg-amber-50" 
+    },
+    pending_confirmation: { 
+        label: "In Review", 
+        desc: "Admin is verifying your payment proof", 
+        icon: FileClock, 
+        color: "text-blue-500", 
+        bgColor: "bg-blue-50" 
+    },
+    completed: { 
+        label: "Approved", 
+        desc: "Assets credited to your wallet", 
+        icon: CheckCircle, 
+        color: "text-teal-500", 
+        bgColor: "bg-teal-50" 
+    },
+    cancelled: { 
+        label: "Cancelled", 
+        desc: "Order has been terminated", 
+        icon: XCircle, 
+        color: "text-red-500", 
+        bgColor: "bg-red-50" 
+    },
+    failed: { 
+        label: "Rejected", 
+        desc: "Invalid proof or security issue", 
+        icon: AlertTriangle, 
+        color: "text-red-600", 
+        bgColor: "bg-red-100" 
+    }
 };
 
 const TimelineItem = ({ title, time, isDone, isLast }: { title: string, time?: string, isDone: boolean, isLast?: boolean }) => (
@@ -43,7 +83,6 @@ const TimelineItem = ({ title, time, isDone, isLast }: { title: string, time?: s
 function OrderStatusContent() {
     const params = useParams();
     const router = useRouter();
-    const { toast } = useToast();
     const { user } = useUser();
     const firestore = useFirestore();
     const orderId = params.orderId as string;
@@ -58,9 +97,8 @@ function OrderStatusContent() {
     if (orderLoading) return <div className="p-4 space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-32 w-full" /></div>;
     if (!order) return <div className="p-8 text-center"><p className="font-bold">Order not found.</p><Button asChild variant="link" className="mt-4"><Link href="/home">Back Home</Link></Button></div>;
 
-    const isCompleted = order.status === 'completed';
-    const isFailed = ['cancelled', 'failed'].includes(order.status);
-    const isVerifying = order.status === 'pending_confirmation' || order.status === 'in_applied';
+    const config = statusMapping[order.status] || statusMapping.pending_payment;
+    const Icon = config.icon;
 
     return (
         <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
@@ -68,91 +106,76 @@ function OrderStatusContent() {
                 <Button onClick={() => router.push('/home')} variant="ghost" size="icon" className="h-8 w-8">
                      <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
-                <h1 className="text-lg font-black mx-auto pr-8">Order Status</h1>
+                <h1 className="text-sm font-black mx-auto pr-8 uppercase tracking-widest">Order Receipt</h1>
             </header>
 
             <main className="flex-grow p-4 space-y-4">
                 <Card className="text-center overflow-hidden border-none shadow-sm rounded-[32px] bg-white">
                     <CardContent className="p-8 flex flex-col items-center">
-                        <div className="relative">
-                            {isCompleted ? (
-                                <div className="h-20 w-20 rounded-full bg-teal-50 flex items-center justify-center animate-in zoom-in duration-500">
-                                    <CheckCircle className="h-12 w-12 text-teal-500" />
-                                </div>
-                            ) : isFailed ? (
-                                <div className="h-20 w-20 rounded-full bg-red-50 flex items-center justify-center">
-                                    <XCircle className="h-12 w-12 text-red-500" />
-                                </div>
-                            ) : (
-                                <div className="h-20 w-20 rounded-full bg-blue-50 flex items-center justify-center">
-                                    <FileClock className="h-12 w-12 text-primary animate-pulse" />
-                                </div>
-                            )}
+                        <div className={cn("h-20 w-20 rounded-full flex items-center justify-center mb-4 shadow-inner", config.bgColor)}>
+                            <Icon className={cn("h-10 w-10", config.color)} />
                         </div>
                         
-                        <h2 className="text-2xl font-black text-slate-800 mt-4">
-                            {isCompleted ? 'Order Completed' : isFailed ? 'Order Cancelled' : 'Payment Verifying'}
+                        <h2 className="text-2xl font-black text-slate-800">
+                            {config.label}
                         </h2>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{order.orderId}</p>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                            {isCompleted ? 'Assets credited to your wallet' : isFailed ? 'Liquidity has been returned' : 'Rotating to matched seller verification'}
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1.5">{order.orderId}</p>
+                        <p className={cn("text-[9px] font-bold uppercase tracking-widest mt-2 px-6", config.color)}>
+                            {config.desc}
                         </p>
                     </CardContent>
-                    <div className={cn("p-4 text-center", isCompleted ? "bg-teal-50" : "bg-blue-50")}>
-                        <span className="text-lg font-black text-slate-800 tracking-tighter">₹{(order.baseAmount || order.amount).toFixed(2)}</span>
+                    <div className={cn("p-4 text-center border-t border-dashed", config.bgColor)}>
+                        <span className="text-xs font-black text-slate-400 uppercase mr-2 tracking-widest">Amount:</span>
+                        <span className="text-xl font-black text-slate-900 tracking-tighter tabular-nums">₹{(order.baseAmount || order.amount).toFixed(2)}</span>
                     </div>
                 </Card>
+
+                {order.status === 'pending_payment' && (
+                    <Button asChild className="w-full h-14 btn-gradient rounded-2xl font-black uppercase shadow-lg shadow-blue-500/20">
+                        <Link href={`/buy/confirm/${order.id}`}>Complete Payment Now</Link>
+                    </Button>
+                )}
 
                 <Card className="border-none shadow-sm rounded-2xl bg-white p-6">
                     <div className="flex flex-col">
                         <TimelineItem 
-                            title="Order Created" 
-                            time={order.submittedAt ? order.submittedAt.toDate().toLocaleString() : 'Processing...'} 
+                            title="Order Token Generated" 
                             isDone={true} 
                         />
                         <TimelineItem 
-                            title="Payment Submitted" 
-                            time={order.submittedAt?.toDate().toLocaleTimeString()} 
-                            isDone={!!order.submittedAt} 
+                            title="Waiting for Payment" 
+                            isDone={order.status !== 'cancelled'} 
                         />
                         <TimelineItem 
-                            title="Seller Verifying" 
-                            isDone={isVerifying || isCompleted} 
+                            title="In Review (Verification)" 
+                            isDone={['pending_confirmation', 'completed', 'failed'].includes(order.status)} 
                         />
                         <TimelineItem 
-                            title="Order Completed" 
-                            isDone={isCompleted} 
+                            title={order.status === 'completed' ? "Approved & Credited" : order.status === 'failed' ? "Rejected" : "Order Completed"} 
+                            isDone={['completed', 'failed'].includes(order.status)} 
                             isLast={true} 
                         />
                     </div>
                 </Card>
 
-                {order.sellerWithdrawalDetails && !isFailed && (
-                     <Card className="border-none shadow-sm rounded-2xl bg-white overflow-hidden">
-                        <CardHeader className="bg-slate-50 p-4 border-b">
-                            <CardTitle className="text-xs font-black uppercase text-slate-500 tracking-widest">Matched Seller</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 space-y-2 text-xs">
-                            <div className="flex justify-between">
-                                <span className="text-slate-400 font-medium">Name</span>
-                                <span className="font-bold">{order.sellerWithdrawalDetails.name || 'P2P Partner'}</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-400 font-medium">UTR Submited</span>
-                                <span className="font-mono text-primary font-black">{order.utr}</span>
-                            </div>
-                        </CardContent>
-                    </Card>
+                {order.status === 'failed' && order.rejectionReason && (
+                    <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3 items-center">
+                         <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+                         <div>
+                            <p className="text-[10px] font-black uppercase text-red-800">Rejection Reason</p>
+                            <p className="text-xs font-bold text-red-600">{order.rejectionReason}</p>
+                         </div>
+                    </div>
                 )}
 
-                <div className="bg-yellow-50/50 border border-yellow-100 rounded-2xl p-4 flex gap-3">
-                     <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0" />
-                     <p className="text-[10px] text-yellow-700 font-medium leading-relaxed">If your order is not completed within 30 minutes, please contact live support with your order ID and payment screenshot.</p>
+                <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex gap-3">
+                     <Info className="h-5 w-5 text-blue-500 shrink-0" />
+                     <p className="text-[9px] text-blue-700 font-bold leading-relaxed uppercase tracking-tight">Verification usually takes 5-15 minutes. Our system rotates liquidity between verified partners for maximum speed.</p>
                 </div>
             </main>
             
             <div className="p-4 bg-white border-t sticky bottom-0">
-                <Button asChild className="w-full h-12 btn-gradient rounded-2xl font-black">
+                <Button asChild variant="outline" className="w-full h-12 rounded-2xl font-black text-xs uppercase tracking-widest">
                     <Link href="/home">BACK TO DASHBOARD</Link>
                 </Button>
             </div>

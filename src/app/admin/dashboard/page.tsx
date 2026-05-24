@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -62,7 +61,6 @@ export default function AdminDashboardPage() {
     const [sellOrders, setSellOrders] = useState<any[]>([]);
     const [pendingBuyOrders, setPendingBuyOrders] = useState<any[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
-    const [adminLogs, setAdminLogs] = useState<any[]>([]);
     
     // Search States
     const [userSearch, setUserSearch] = useState('');
@@ -133,35 +131,20 @@ export default function AdminDashboardPage() {
         return () => { unsubSell(); unsubBuy(); unsubPM(); };
     }, [firestore, fetchUsers]);
 
-    // Computed Filtered Lists (Optimization: useMemo)
+    // Search Logic
     const filteredUsers = useMemo(() => {
         const s = userSearch.toLowerCase();
-        return allUsers.filter(u => 
-            u.numericId?.includes(s) || 
-            u.phoneNumber?.includes(s) || 
-            u.displayName?.toLowerCase().includes(s) ||
-            u.paymentMethods?.some((m: any) => m.upiId?.toLowerCase().includes(s))
-        );
+        return allUsers.filter(u => u.numericId?.includes(s) || u.phoneNumber?.includes(s) || u.displayName?.toLowerCase().includes(s));
     }, [allUsers, userSearch]);
 
     const filteredSellOrders = useMemo(() => {
         const s = sellSearch.toLowerCase();
-        return sellOrders.filter(o => 
-            o.userNumericId?.includes(s) || 
-            o.userPhoneNumber?.includes(s) ||
-            o.orderId?.toLowerCase().includes(s) ||
-            o.withdrawalMethod?.upiId?.toLowerCase().includes(s)
-        );
+        return sellOrders.filter(o => o.userNumericId?.includes(s) || o.orderId?.toLowerCase().includes(s));
     }, [sellOrders, sellSearch]);
 
     const filteredConfirmOrders = useMemo(() => {
         const s = confirmSearch.toLowerCase();
-        return pendingBuyOrders.filter(o => 
-            o.userNumericId?.includes(s) || 
-            o.utr?.toLowerCase().includes(s) ||
-            o.orderId?.toLowerCase().includes(s) ||
-            o.amount?.toString().includes(s)
-        );
+        return pendingBuyOrders.filter(o => o.userNumericId?.includes(s) || o.utr?.toLowerCase().includes(s) || o.amount?.toString().includes(s));
     }, [pendingBuyOrders, confirmSearch]);
 
     const handleLogout = () => {
@@ -185,10 +168,10 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         try {
             await setDoc(doc(firestore, 'paymentMethods', type), { ...data, type }, { merge: true });
-            await logAdminAction('UPDATE_PAYMENT_SERVER', { type });
-            toast({ title: "Server Updated" });
+            await logAdminAction('UPDATE_SERVER', { type });
+            toast({ title: "Updated" });
             setEditingPayment(null);
-        } catch (e: any) { toast({ variant: 'destructive', title: "Update Failed" }); }
+        } catch (e: any) { toast({ variant: 'destructive', title: "Failed" }); }
     };
 
     const handleApproveBuy = async (order: any) => {
@@ -201,9 +184,7 @@ export default function AdminDashboardPage() {
                 const buyerSnap = await transaction.get(buyerRef);
                 const currentOrderSnap = await transaction.get(orderRef);
 
-                if (currentOrderSnap.data()?.status === 'completed') {
-                    throw new Error("Already Approved");
-                }
+                if (currentOrderSnap.data()?.status === 'completed') throw new Error("Already Approved");
                 
                 let sellSnap = null;
                 let sellerSnap = null;
@@ -220,7 +201,7 @@ export default function AdminDashboardPage() {
                     sellerSnap = await transaction.get(sellerProfileRef);
                 }
 
-                if (!buyerSnap.exists()) throw new Error("Buyer profile missing");
+                if (!buyerSnap.exists()) throw new Error("Buyer missing");
                 
                 const currentBuyerBalance = buyerSnap.data()?.balance || 0;
                 transaction.update(buyerRef, { balance: currentBuyerBalance + order.amount });
@@ -252,13 +233,13 @@ export default function AdminDashboardPage() {
                 }
             });
             await logAdminAction('APPROVE_ORDER', { orderId: order.orderId, buyer: order.userNumericId });
-            toast({ title: "Order Approved", description: `Assets credited to ${order.userNumericId}` });
+            toast({ title: "Approved" });
         } catch (e: any) { 
-            toast({ variant: "destructive", title: "Approval Failed", description: e.message }); 
+            toast({ variant: "destructive", title: "Failed", description: e.message }); 
         }
     };
 
-    const handleRejectBuy = async (order: any, reason: string = 'Admin Rejected Proof') => {
+    const handleRejectBuy = async (order: any, reason: string = 'Invalid proof submitted') => {
         if (!firestore) return;
         try {
             await runTransaction(firestore, async (transaction) => {
@@ -275,6 +256,7 @@ export default function AdminDashboardPage() {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 transaction.update(orderRef, { status: 'failed', rejectionReason: reason, rejectedBy: adminId, rejectedAt: serverTimestamp() });
                 
+                // Return liquidity to pool
                 if (sellSnap && sellSnap.exists()) {
                     const sellData = sellSnap.data();
                     const currentRemaining = sellData.remainingAmount || 0;
@@ -282,7 +264,7 @@ export default function AdminDashboardPage() {
                     
                     transaction.update(sellOrderRef!, { 
                         remainingAmount: currentRemaining + order.baseAmount,
-                        status: 'partially_filled',
+                        status: 'partially_filled', // Back to matching pool
                         matchedBuyOrders: updatedMatches
                     });
                     
@@ -296,9 +278,9 @@ export default function AdminDashboardPage() {
                 }
             });
             await logAdminAction('REJECT_ORDER', { orderId: order.orderId, reason });
-            toast({ title: "Order Rejected" });
+            toast({ title: "Rejected & Liquidity Returned" });
         } catch (e: any) { 
-            toast({ variant: "destructive", title: "Rejection Failed", description: e.message }); 
+            toast({ variant: "destructive", title: "Failed", description: e.message }); 
         }
     };
 
@@ -368,14 +350,17 @@ export default function AdminDashboardPage() {
                         </TabsContent>
 
                         <TabsContent value="users" className="space-y-4">
-                            <div className="relative max-w-md">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input 
-                                    placeholder="Search UID, Name, or Mobile..." 
-                                    className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
-                                    value={userSearch}
-                                    onChange={e => setUserSearch(e.target.value)}
-                                />
+                            <div className="flex items-center gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <Input 
+                                        placeholder="Search UID, Name, or Mobile..." 
+                                        className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
+                                        value={userSearch}
+                                        onChange={e => setUserSearch(e.target.value)}
+                                    />
+                                </div>
+                                <Button onClick={fetchUsers} size="icon" variant="outline" className="rounded-xl h-11 w-11"><RefreshCw className="h-4 w-4" /></Button>
                             </div>
                             <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
                                 <div className="overflow-x-auto">
@@ -388,7 +373,6 @@ export default function AdminDashboardPage() {
                                                     <TableHead className="font-black text-[10px] uppercase pl-6 py-4">UID</TableHead>
                                                     <TableHead className="font-black text-[10px] uppercase">User Information</TableHead>
                                                     <TableHead className="font-black text-[10px] uppercase">Balance</TableHead>
-                                                    <TableHead className="font-black text-[10px] uppercase">Join Date</TableHead>
                                                     <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
                                                 </TableRow>
                                             </TableHeader>
@@ -403,9 +387,6 @@ export default function AdminDashboardPage() {
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="font-black text-xs text-slate-700">₹{u.balance?.toFixed(2)}</TableCell>
-                                                        <TableCell className="text-[10px] font-medium text-slate-400">
-                                                            {u.createdAt ? new Date(u.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}
-                                                        </TableCell>
                                                         <TableCell className="text-right pr-6">
                                                             <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-lg">
                                                                 <Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link>
@@ -424,7 +405,7 @@ export default function AdminDashboardPage() {
                             <div className="relative max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <Input 
-                                    placeholder="Search UID, UPI, or Request ID..." 
+                                    placeholder="Search Seller UID..." 
                                     className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
                                     value={sellSearch}
                                     onChange={e => setSellSearch(e.target.value)}
@@ -437,14 +418,14 @@ export default function AdminDashboardPage() {
                                             <TableRow>
                                                 <TableHead className="text-[10px] font-black uppercase pl-6">UID & ID</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Amount</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">UPI ID / Method</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">UPI ID</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Type</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase text-right pr-6">Status</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {filteredSellOrders.map(o => {
-                                                const isP2P = (o.matchedBuyOrders || []).length > 0;
+                                                const isP2P = true; // All sell orders in this app are P2P matching
                                                 return (
                                                     <TableRow key={o.id} className="hover:bg-slate-50/50">
                                                         <TableCell className="pl-6 py-4">
@@ -454,20 +435,12 @@ export default function AdminDashboardPage() {
                                                         <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
                                                         <TableCell>
                                                             <p className="font-mono text-[10px] font-black text-slate-700">{o.withdrawalMethod?.upiId || 'Direct'}</p>
-                                                            <p className="text-[8px] font-bold text-slate-400 uppercase">{o.withdrawalMethod?.name || 'Bank'}</p>
                                                         </TableCell>
                                                         <TableCell>
-                                                            {isP2P ? (
-                                                                <Badge className="bg-orange-50 text-orange-600 border-none text-[8px] font-black uppercase">P2P Matched</Badge>
-                                                            ) : (
-                                                                <Badge className="bg-blue-50 text-blue-600 border-none text-[8px] font-black uppercase">Direct Withdrawal</Badge>
-                                                            )}
+                                                            <Badge className="bg-orange-50 text-orange-600 border-none text-[8px] font-black uppercase">P2P Matched</Badge>
                                                         </TableCell>
                                                         <TableCell className="text-right pr-6">
-                                                            <div className="flex flex-col items-end gap-1">
-                                                                <Badge className="bg-slate-100 text-slate-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
-                                                                {isP2P && <span className="text-[7px] font-black text-slate-400 uppercase italic">Locked for Buyer Approval</span>}
-                                                            </div>
+                                                            <Badge className="bg-slate-100 text-slate-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
                                                         </TableCell>
                                                     </TableRow>
                                                 );
@@ -482,7 +455,7 @@ export default function AdminDashboardPage() {
                              <div className="relative max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <Input 
-                                    placeholder="Search UID, UTR, or Amount..." 
+                                    placeholder="Search Buyer UID or UTR..." 
                                     className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
                                     value={confirmSearch}
                                     onChange={e => setConfirmSearch(e.target.value)}
@@ -495,7 +468,7 @@ export default function AdminDashboardPage() {
                                     <AlertTitle className="font-black text-xs uppercase">Firestore Index Required</AlertTitle>
                                     <AlertDescription className="text-[10px] font-medium mt-1">
                                         P2P matching needs a collection-group index. 
-                                        <a href={`https://console.firebase.google.com/v1/r/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'studio-7114417830-300d7'}/firestore/indexes?create_exemption=Clpwcm9qZWN0cy9zdHVkaW8tNzExNDQxNzgzMC0zMDBkNy9kYXRhYmFzZXMvKGRlZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvb3JkZXJzL2ZpZWxkcy9zdGF0dXMQAhoKCgZzdGF0dXMQAQ`} target="_blank" className="ml-1 underline font-black text-blue-600">Click here to enable</a>.
+                                        <a href={`https://console.firebase.google.com/v1/r/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}/firestore/indexes`} target="_blank" className="ml-1 underline font-black text-blue-600">Click here to enable</a>.
                                     </AlertDescription>
                                 </Alert>
                              )}
@@ -508,7 +481,6 @@ export default function AdminDashboardPage() {
                                                 <TableHead className="text-[10px] font-black uppercase pl-6 py-4">Buyer UID & Amount</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">App</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">UTR Code</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Matched Seller</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase text-right pr-6">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -536,77 +508,40 @@ export default function AdminDashboardPage() {
                                                     <TableCell>
                                                         <span className="font-mono text-[11px] font-black text-primary">{o.utr}</span>
                                                     </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-black text-slate-400 uppercase">Seller: {o.sellerId === 'ADMIN' ? 'MASTER' : o.sellerId}</span>
-                                                            <span className="font-mono text-[10px] font-black text-slate-600">{o.sellerWithdrawalDetails?.upiId || 'SYSTEM'}</span>
-                                                        </div>
-                                                    </TableCell>
                                                     <TableCell className="text-right pr-6">
                                                         <Dialog>
                                                             <DialogTrigger asChild>
-                                                                <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black rounded-xl">VIEW DETAIL</Button>
+                                                                <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black rounded-xl">VIEW REVIEW</Button>
                                                             </DialogTrigger>
                                                             <DialogContent className="max-w-3xl bg-white rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
                                                                 <div className="grid grid-cols-1 md:grid-cols-2">
-                                                                    {/* Left: Image */}
                                                                     <div className="bg-slate-900 p-6 flex flex-col items-center justify-center min-h-[300px]">
-                                                                        <div className="mb-4 flex items-center gap-2 text-white/60">
-                                                                            <ImageIcon className="h-4 w-4" />
-                                                                            <span className="text-[10px] font-black uppercase tracking-widest">Payment Evidence</span>
-                                                                        </div>
                                                                         {o.screenshotURL ? (
                                                                             <div className="relative w-full aspect-[3/4] max-h-[500px] shadow-2xl rounded-2xl overflow-hidden ring-4 ring-white/10">
                                                                                  <Image src={o.screenshotURL} alt="Proof" fill className="object-contain" unoptimized />
                                                                             </div>
                                                                         ) : (
-                                                                            <div className="text-white/20 text-center">
-                                                                                <Hash className="h-12 w-12 mx-auto mb-2" />
-                                                                                <p className="text-xs font-black uppercase">No Image Uploaded</p>
-                                                                            </div>
+                                                                            <div className="text-white/20 text-center uppercase font-black text-xs">No Screenshot</div>
                                                                         )}
                                                                     </div>
-                                                                    {/* Right: Info */}
                                                                     <div className="p-8 space-y-6">
                                                                         <DialogHeader>
-                                                                            <DialogTitle className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-                                                                                <BadgeCheck className="h-6 w-6 text-blue-600" /> Confirm Assets
-                                                                            </DialogTitle>
-                                                                            <DialogDescription className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Order Verification Engine</DialogDescription>
+                                                                            <DialogTitle className="text-2xl font-black tracking-tight text-slate-900">Review Assets</DialogTitle>
+                                                                            <DialogDescription className="text-[10px] font-black uppercase text-slate-400 tracking-widest">P2P Verification Engine</DialogDescription>
                                                                         </DialogHeader>
 
                                                                         <div className="space-y-4">
                                                                             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                                                                <p className="text-[9px] font-black text-slate-400 uppercase mb-3 tracking-widest">Buyer Context</p>
+                                                                                <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Buyer Context</p>
                                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                                    <div>
-                                                                                        <p className="text-[8px] font-bold text-slate-400 uppercase">UID</p>
-                                                                                        <p className="text-sm font-black text-blue-600">{o.userNumericId}</p>
-                                                                                    </div>
-                                                                                    <div>
-                                                                                        <p className="text-[8px] font-bold text-slate-400 uppercase">Amount</p>
-                                                                                        <p className="text-sm font-black text-slate-900">₹{o.amount.toFixed(2)}</p>
-                                                                                    </div>
-                                                                                </div>
-                                                                            </div>
-
-                                                                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
-                                                                                <p className="text-[9px] font-black text-blue-400 uppercase mb-3 tracking-widest">Matched Seller</p>
-                                                                                <div className="flex items-center gap-3">
-                                                                                    <div className="h-10 w-10 rounded-xl bg-white border shadow-sm flex items-center justify-center font-black text-blue-600 text-xs">P2P</div>
-                                                                                    <div>
-                                                                                        <p className="text-[10px] font-black text-slate-800 uppercase">{o.sellerWithdrawalDetails?.name || 'Partner'}</p>
-                                                                                        <p className="text-[11px] font-mono font-black text-blue-600">{o.sellerWithdrawalDetails?.upiId}</p>
-                                                                                    </div>
+                                                                                    <div><p className="text-[8px] font-bold text-slate-400 uppercase">UID</p><p className="text-sm font-black text-blue-600">{o.userNumericId}</p></div>
+                                                                                    <div><p className="text-[8px] font-bold text-slate-400 uppercase">Amount</p><p className="text-sm font-black text-slate-900">₹{o.amount.toFixed(2)}</p></div>
                                                                                 </div>
                                                                             </div>
 
                                                                             <div className="space-y-1">
                                                                                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">UTR Reference</p>
-                                                                                <div className="bg-slate-100 p-3 rounded-xl font-mono text-xs font-black text-slate-700 flex justify-between items-center">
-                                                                                    {o.utr}
-                                                                                    <History className="h-3 w-3 text-slate-400" />
-                                                                                </div>
+                                                                                <div className="bg-slate-100 p-3 rounded-xl font-mono text-xs font-black text-slate-700">{o.utr}</div>
                                                                             </div>
                                                                         </div>
 
@@ -614,7 +549,7 @@ export default function AdminDashboardPage() {
                                                                             <Button 
                                                                                 onClick={() => handleRejectBuy(o)} 
                                                                                 variant="outline" 
-                                                                                className="h-12 rounded-2xl font-black text-[11px] uppercase border-red-100 text-red-500 hover:bg-red-50"
+                                                                                className="h-12 rounded-2xl font-black text-[11px] uppercase text-red-500 hover:bg-red-50"
                                                                             >REJECT</Button>
                                                                             <Button 
                                                                                 onClick={() => handleApproveBuy(o)} 
@@ -630,9 +565,7 @@ export default function AdminDashboardPage() {
                                             ))}
                                         </TableBody>
                                     </Table>
-                                    {filteredConfirmOrders.length === 0 && (
-                                        <div className="p-20 text-center text-slate-300 font-black text-[10px] uppercase tracking-widest">Zero Matches Found</div>
-                                    )}
+                                    {filteredConfirmOrders.length === 0 && <div className="p-20 text-center text-slate-300 font-black text-[10px] uppercase tracking-widest">No review requests</div>}
                                 </div>
                             </Card>
                         </TabsContent>
@@ -642,9 +575,8 @@ export default function AdminDashboardPage() {
                                 <TabsList className="bg-white p-1 rounded-2xl border-none shadow-sm inline-flex mb-4">
                                     <TabsTrigger value="bank" className="rounded-xl px-6 font-black text-[10px] uppercase">Bank Link</TabsTrigger>
                                     <TabsTrigger value="upi" className="rounded-xl px-6 font-black text-[10px] uppercase">Master UPI</TabsTrigger>
-                                    <TabsTrigger value="usdt" className="rounded-xl px-6 font-black text-[10px] uppercase">Crypto USDT</TabsTrigger>
                                 </TabsList>
-                                {['bank', 'upi', 'usdt'].map(type => {
+                                {['bank', 'upi'].map(type => {
                                     const method = paymentMethods.find(m => m.type === type) || { type };
                                     const isEditing = editingPayment === type;
                                     return (
@@ -659,7 +591,6 @@ export default function AdminDashboardPage() {
                                                         <div className="space-y-4">
                                                             {type === 'bank' && <><Input placeholder="Bank Name" defaultValue={method.bankName} onChange={e => method.bankName = e.target.value} /><Input placeholder="Holder Name" defaultValue={method.accountHolderName} onChange={e => method.accountHolderName = e.target.value} /><Input placeholder="Account Number" defaultValue={method.accountNumber} onChange={e => method.accountNumber = e.target.value} /><Input placeholder="IFSC Code" defaultValue={method.ifscCode} onChange={e => method.ifscCode = e.target.value} /></>}
                                                             {type === 'upi' && <><Input placeholder="Master UPI ID" defaultValue={method.upiId} onChange={e => method.upiId = e.target.value} /><Input placeholder="Holder Name" defaultValue={method.upiHolderName} onChange={e => method.upiHolderName = e.target.value} /></>}
-                                                            {type === 'usdt' && <Input placeholder="TRC20 Wallet" defaultValue={method.usdtWalletAddress} onChange={e => method.usdtWalletAddress = e.target.value} />}
                                                             <div className="pt-4 flex gap-3">
                                                                 <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px]" onClick={() => setEditingPayment(null)}>CANCEL</Button>
                                                                 <Button className="flex-1 bg-blue-600 rounded-xl font-black text-[10px]" onClick={() => handleUpdateAdminPayment(type, method)}>SAVE</Button>
@@ -668,7 +599,7 @@ export default function AdminDashboardPage() {
                                                     ) : (
                                                         <div className="flex items-center gap-6">
                                                             <div className="h-16 w-16 rounded-3xl bg-blue-50 flex items-center justify-center border"><Check className="h-8 w-8 text-primary" /></div>
-                                                            <div><p className="text-xl font-black text-slate-800">{method.upiId || method.accountNumber || method.usdtWalletAddress || "Not Linked"}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{method.bankName || method.upiHolderName || "Offline"}</p></div>
+                                                            <div><p className="text-xl font-black text-slate-800">{method.upiId || method.accountNumber || "Not Linked"}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{method.bankName || method.upiHolderName || "Offline"}</p></div>
                                                         </div>
                                                     )}
                                                 </CardContent>
