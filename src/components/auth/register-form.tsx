@@ -136,29 +136,6 @@ export function RegisterForm() {
             </FormItem>
           )}
         />
-
-        <FormField
-          control={form.control}
-          name="invitationCode"
-          render={({ field }) => (
-            <FormItem className="space-y-1">
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                  <Zap className="h-3.5 w-3.5" />
-                </div>
-                <FormControl>
-                  <Input 
-                    placeholder="Invitation Code" 
-                    className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px] font-bold tracking-widest disabled:opacity-70 disabled:cursor-not-allowed" 
-                    {...field} 
-                    disabled={!!invitationCodeFromUrl}
-                  />
-                </FormControl>
-              </div>
-              <FormMessage className="text-[10px] pl-2" />
-            </FormItem>
-          )}
-        />
         
         <FormField
           control={form.control}
@@ -192,6 +169,29 @@ export function RegisterForm() {
                 </div>
                 <FormControl>
                   <Input type={showPassword ? "text" : "password"} placeholder="Confirm Password" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" {...field} />
+                </FormControl>
+              </div>
+              <FormMessage className="text-[10px] pl-2" />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="invitationCode"
+          render={({ field }) => (
+            <FormItem className="space-y-1">
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                  <Zap className="h-3.5 w-3.5" />
+                </div>
+                <FormControl>
+                  <Input 
+                    placeholder="Invitation Code" 
+                    className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px] font-bold tracking-widest disabled:opacity-70 disabled:cursor-not-allowed" 
+                    {...field} 
+                    disabled={!!invitationCodeFromUrl}
+                  />
                 </FormControl>
               </div>
               <FormMessage className="text-[10px] pl-2" />
