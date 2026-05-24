@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,18 +28,6 @@ import { cn } from '@/lib/utils';
 import { Loader } from '@/components/ui/loader';
 import Image from 'next/image';
 
-const INITIAL_PURCHASE_OPTIONS = [
-  { id: '5219596344501253', amount: 158 },
-  { id: '5219596341617670', amount: 170 },
-  { id: '5219511413187590', amount: 200 },
-  { id: '5219511413253125', amount: 500 },
-  { id: '5219511417840646', amount: 1000 },
-  { id: '5219511417840647', amount: 2000 },
-  { id: '5219511417840648', amount: 3000 },
-  { id: '5219511417840649', amount: 5000 },
-  { id: '5219511417840650', amount: 10000 },
-];
-
 const USDT_RATE = 108; 
 const MIN_USDT = 5;
 
@@ -59,15 +47,59 @@ export default function BuyPage() {
   const [usdtAddress, setUsdtAddress] = useState<string | null>(null);
   const [usdtInput, setUsdtInput] = useState<string>('5');
   
+  // Dynamic Orders State
+  const [dynamicOrders, setDynamicOrders] = useState<any[]>([]);
+  
   // Filter States
   const [minFilter, setMinFilter] = useState('100');
-  const [maxFilter, setMaxFilter] = useState('100000');
+  const [maxFilter, setMaxFilter] = useState('15000');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Method Selection State
   const [isMethodSheetOpen, setIsMethodSheetOpen] = useState(false);
   const [pendingPurchaseAmount, setPendingPurchaseAmount] = useState<number | null>(null);
   const [selectedBuyerMethod, setSelectedBuyerMethod] = useState<any>(null);
+
+  // Helper to generate a batch of random orders
+  const generateRandomBatch = useCallback(() => {
+    const count = Math.floor(Math.random() * 10) + 15; // 15-25 orders
+    const newOrders = [];
+    for (let i = 0; i < count; i++) {
+        // Generate values mostly in multiples of 50 or 100 to look realistic
+        let base = Math.floor(Math.random() * 149) + 1; // 1-150
+        let amount = base * 100;
+        
+        // Add some "odd" amounts occasionally
+        if (Math.random() > 0.8) {
+            amount += (Math.floor(Math.random() * 90) + 5);
+        }
+
+        if (amount >= 100 && amount <= 15000) {
+            newOrders.push({
+                id: Math.random().toString(36).substr(2, 9),
+                amount: amount
+            });
+        }
+    }
+    setDynamicOrders(newOrders);
+  }, []);
+
+  // Effect to generate and cycle orders every 40-50 seconds
+  useEffect(() => {
+    generateRandomBatch();
+    
+    let timer: NodeJS.Timeout;
+    const startCycle = () => {
+        const delay = (Math.floor(Math.random() * 10) + 40) * 1000; // 40-50 seconds
+        timer = setTimeout(() => {
+            generateRandomBatch();
+            startCycle();
+        }, delay);
+    };
+
+    startCycle();
+    return () => clearTimeout(timer);
+  }, [generateRandomBatch]);
 
   useEffect(() => {
     if (!user || !firestore) return;
@@ -96,7 +128,7 @@ export default function BuyPage() {
   }, [user, firestore]);
 
   const filteredOptions = useMemo(() => {
-    let result = [...INITIAL_PURCHASE_OPTIONS];
+    let result = [...dynamicOrders];
     const minVal = parseInt(minFilter) || 0;
     const maxVal = parseInt(maxFilter) || Infinity;
 
@@ -105,7 +137,7 @@ export default function BuyPage() {
     result.sort((a, b) => sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount);
 
     return result;
-  }, [minFilter, maxFilter, sortOrder]);
+  }, [dynamicOrders, minFilter, maxFilter, sortOrder]);
 
   const generateRawOrderId = () => {
     return Math.floor(100000000000 + Math.random() * 900000000000).toString();
@@ -347,37 +379,40 @@ export default function BuyPage() {
                     <Search className="h-5 w-5 text-orange-400" />
                 </div>
 
-                {/* Buy List */}
+                {/* Dynamic Buy List */}
                 <div className="divide-y divide-slate-100 pb-24">
                     {filteredOptions.map((opt) => {
                         const reward = (opt.amount * 0.06) + 5;
                         const total = opt.amount + reward;
                         return (
-                            <div key={opt.id} className="p-4 flex flex-col gap-3 group active:bg-slate-50 transition-colors">
+                            <div key={opt.id} className="p-4 flex flex-col gap-3 group active:bg-slate-50 transition-colors animate-in fade-in duration-500">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-[11px] text-slate-300 font-medium">No:{opt.id}</span>
-                                    <span className="text-[11px] text-slate-400 font-medium">Reward 6.0%+₹5</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Active Node</span>
+                                    </div>
+                                    <span className="text-[11px] text-blue-500 font-black uppercase tracking-tight">Reward 6.0%+₹5</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <div className="flex flex-col">
-                                            <span className="text-[11px] text-red-500 font-bold">Price</span>
-                                            <span className="text-base font-bold text-red-500">₹ {opt.amount}</span>
+                                            <span className="text-[11px] text-red-500 font-bold uppercase">Price</span>
+                                            <span className="text-base font-bold text-red-500">₹ {opt.amount.toLocaleString()}</span>
                                         </div>
-                                        <span className="text-slate-300 mx-1">+</span>
+                                        <span className="text-slate-300 mx-1 font-light text-xl">+</span>
                                         <div className="flex flex-col">
-                                            <span className="text-[11px] text-slate-500 font-bold">Reward</span>
-                                            <span className="text-base font-bold text-slate-800">{reward.toFixed(2)}</span>
+                                            <span className="text-[11px] text-slate-500 font-bold uppercase">Reward</span>
+                                            <span className="text-base font-bold text-slate-800">{reward.toFixed(1)}</span>
                                         </div>
-                                        <span className="text-slate-300 mx-1">=</span>
+                                        <span className="text-slate-300 mx-1 font-light text-xl">=</span>
                                         <div className="flex flex-col">
-                                            <span className="text-[11px] text-blue-500 font-bold">FP</span>
-                                            <span className="text-base font-bold text-blue-500">{total.toFixed(2)}</span>
+                                            <span className="text-[11px] text-blue-600 font-black uppercase tracking-tighter">Total FP</span>
+                                            <span className="text-base font-black text-blue-600 tabular-nums">{total.toFixed(2)}</span>
                                         </div>
                                     </div>
                                     <Button 
                                         onClick={() => handleBuyClick(opt.amount)}
-                                        className="bg-blue-500 hover:bg-blue-600 text-white rounded-md h-8 px-5 text-sm font-bold shadow-sm"
+                                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-md h-9 px-6 text-sm font-black uppercase shadow-sm active:scale-95 transition-all"
                                     >
                                         Buy
                                     </Button>
