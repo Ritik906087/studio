@@ -36,8 +36,9 @@ export default function HomePage() {
   });
 
   const formatValue = (val: number) => {
+    if (val >= 1000000) return (val / 1000000).toFixed(2) + 'M';
     if (val >= 1000) return (val / 1000).toFixed(1) + 'K';
-    return val.toFixed(1);
+    return val.toFixed(2);
   };
 
   useEffect(() => {
@@ -49,20 +50,19 @@ export default function HomePage() {
         const todayMs = today.getTime();
 
         try {
-            // Fetch completed Buy Orders
+            // 1. Fetch ALL completed Buy Orders for Revenue Calculation
             const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), where('status', '==', 'completed'));
             const buySnap = await getDocs(buyQ);
             
+            // Filter today's orders for quantity and amount stats
             const todayBuyDocs = buySnap.docs
                 .map(d => d.data())
                 .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs);
             
             const buyQuantity = todayBuyDocs.length;
-            
-            // todayBuy: Sum of 'amount' (includes bonus)
             const todayBuy = todayBuyDocs.reduce((acc, d) => acc + (d.amount || 0), 0);
 
-            // todaySell: Fetch completed Sell Orders
+            // 2. Fetch today's completed Sell Orders
             const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), where('status', '==', 'completed'));
             const sellSnap = await getDocs(sellQ);
             const todaySell = sellSnap.docs
@@ -70,29 +70,32 @@ export default function HomePage() {
                 .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs)
                 .reduce((acc, d) => acc + (d.amount || 0), 0);
 
-            // totalIncome Calculation:
-            // 1. Profit from Buy Orders (amount - baseAmount)
-            const buyProfit = buySnap.docs.reduce((acc, d) => {
+            // 3. Calculate TOTAL REVENUE (Profit Only + Rewards)
+            // Profit from Buy Orders = (Total Amount Received - Base Amount Paid)
+            // This captures exactly the 6% + ₹5 bonus per order.
+            const totalBuyProfit = buySnap.docs.reduce((acc, d) => {
                 const data = d.data();
-                return acc + ((data.amount || 0) - (data.baseAmount || data.amount || 0));
+                const totalAmount = data.amount || 0;
+                const baseAmount = data.baseAmount || totalAmount; // Fallback to 0 profit if base missing
+                return acc + (totalAmount - baseAmount);
             }, 0);
 
-            // 2. Rewards (Team Bonus, Daily Tasks, New User Rewards, System Adjustments)
+            // Fetch all reward-type transactions
             const incomeQ = query(
               collection(firestore, 'users', user.uid, 'transactions'), 
               where('type', 'in', ['team_bonus', 'daily_task', 'new_user_reward', 'system_adjustment'])
             );
             const incomeSnap = await getDocs(incomeQ);
-            const rewardsTotal = incomeSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
+            const totalRewards = incomeSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
 
             setStats({ 
                 buyQuantity, 
                 todayBuy, 
                 todaySell, 
-                totalIncome: buyProfit + rewardsTotal 
+                totalIncome: totalBuyProfit + totalRewards 
             });
         } catch (e) {
-            console.warn("Stats calculation fell back due to index restriction.");
+            console.error("Home stats calculation failed:", e);
         }
     }
 
