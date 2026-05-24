@@ -49,17 +49,20 @@ export default function HomePage() {
         const todayMs = today.getTime();
 
         try {
-            // Fetch completed Buy Orders (Client-side filtering for date to avoid index requirement)
+            // Fetch completed Buy Orders
             const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), where('status', '==', 'completed'));
             const buySnap = await getDocs(buyQ);
+            
             const todayBuyDocs = buySnap.docs
                 .map(d => d.data())
                 .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs);
             
             const buyQuantity = todayBuyDocs.length;
-            const todayBuy = todayBuyDocs.reduce((acc, d) => acc + (d.baseAmount || 0), 0);
+            
+            // todayBuy: Sum of 'amount' (includes bonus)
+            const todayBuy = todayBuyDocs.reduce((acc, d) => acc + (d.amount || 0), 0);
 
-            // Fetch completed Sell Orders
+            // todaySell: Fetch completed Sell Orders
             const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), where('status', '==', 'completed'));
             const sellSnap = await getDocs(sellQ);
             const todaySell = sellSnap.docs
@@ -67,12 +70,27 @@ export default function HomePage() {
                 .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs)
                 .reduce((acc, d) => acc + (d.amount || 0), 0);
 
-            // Total Income (Rewards + Bonuses)
-            const incomeQ = query(collection(firestore, 'users', user.uid, 'transactions'), where('type', 'in', ['team_bonus', 'daily_task', 'new_user_reward']));
-            const incomeSnap = await getDocs(incomeQ);
-            const totalIncome = incomeSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
+            // totalIncome Calculation:
+            // 1. Profit from Buy Orders (amount - baseAmount)
+            const buyProfit = buySnap.docs.reduce((acc, d) => {
+                const data = d.data();
+                return acc + ((data.amount || 0) - (data.baseAmount || data.amount || 0));
+            }, 0);
 
-            setStats({ buyQuantity, todayBuy, todaySell, totalIncome });
+            // 2. Rewards (Team Bonus, Daily Tasks, New User Rewards, System Adjustments)
+            const incomeQ = query(
+              collection(firestore, 'users', user.uid, 'transactions'), 
+              where('type', 'in', ['team_bonus', 'daily_task', 'new_user_reward', 'system_adjustment'])
+            );
+            const incomeSnap = await getDocs(incomeQ);
+            const rewardsTotal = incomeSnap.docs.reduce((acc, d) => acc + (d.data().amount || 0), 0);
+
+            setStats({ 
+                buyQuantity, 
+                todayBuy, 
+                todaySell, 
+                totalIncome: buyProfit + rewardsTotal 
+            });
         } catch (e) {
             console.warn("Stats calculation fell back due to index restriction.");
         }
@@ -107,7 +125,7 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        {/* PROMO BANNERS CAROUSEL - ASPECT RATIO 1536:664 */}
+        {/* PROMO BANNERS CAROUSEL */}
         <div className="w-full">
             <Carousel className="w-full" plugins={[plugin.current]}>
                 <CarouselContent>
@@ -131,13 +149,11 @@ export default function HomePage() {
             </Carousel>
         </div>
 
-        {/* UNIFIED OPERATIONS CENTER */}
+        {/* OPERATIONS CENTER */}
         <Card className="border-none bg-white rounded-[28px] shadow-lg shadow-blue-500/5 overflow-hidden ring-1 ring-slate-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
             <CardContent className="p-0">
-                {/* 1. Dashboard Grid (2x2 Stats) */}
                 <div className="p-6 pb-4">
                     <div className="grid grid-cols-2 gap-y-6">
-                        {/* Buy Quantity */}
                         <div className="space-y-1">
                             <div className="flex items-center gap-2 text-slate-400">
                                 <ShoppingBag className="h-4 w-4" />
@@ -145,7 +161,6 @@ export default function HomePage() {
                             </div>
                             <p className="text-2xl font-black text-slate-900 tabular-nums">{stats.buyQuantity}</p>
                         </div>
-                        {/* Buy Amount */}
                         <div className="space-y-1">
                             <div className="flex items-center gap-2 text-slate-400">
                                 <DollarSign className="h-4 w-4 text-yellow-500" />
@@ -153,7 +168,6 @@ export default function HomePage() {
                             </div>
                             <p className="text-2xl font-black text-yellow-500 tabular-nums">{formatValue(stats.todayBuy)}</p>
                         </div>
-                        {/* Sell Today */}
                         <div className="space-y-1">
                             <div className="flex items-center gap-2 text-slate-400">
                                 <Repeat className="h-4 w-4" />
@@ -161,7 +175,6 @@ export default function HomePage() {
                             </div>
                             <p className="text-2xl font-black text-slate-900 tabular-nums">{formatValue(stats.todaySell)}</p>
                         </div>
-                        {/* Total Revenue */}
                         <div className="space-y-1">
                             <div className="flex items-center gap-2 text-slate-400">
                                 <TrendingUp className="h-4 w-4 text-green-600" />
@@ -172,7 +185,6 @@ export default function HomePage() {
                     </div>
                 </div>
 
-                {/* 2. Action Buttons */}
                 <div className="p-4 pt-0 grid grid-cols-2 gap-3 pb-6">
                     <Button asChild className="h-14 btn-gradient rounded-[18px] flex flex-col items-center justify-center gap-1 shadow-blue-500/20 active:scale-95 transition-all">
                         <Link href="/buy">
