@@ -145,7 +145,7 @@ function ConfirmPageContent() {
                 });
             });
 
-            // Instant Telegram Notification
+            // Instant Telegram Notification to Admin Group
             await sendOrderSubmissionToTelegram({
                 orderId: order.orderId,
                 uid: profile.numericId,

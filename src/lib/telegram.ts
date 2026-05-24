@@ -7,11 +7,11 @@ const FETCH_TIMEOUT = 25000;
 const RETRY_COUNT = 3;
 const RETRY_DELAY = 2000;
 
-// User provided bot credentials for instant alerts
-const ORDER_BOT_TOKEN = '8762196679:AAF5hgLZoUQZbjrqk-ONmrAh07nFzdPF9k0';
-const ORDER_GROUP_ID = '-1002925101550';
+// Accessing credentials from environment variables for security
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const GROUP_ID = process.env.TELEGRAM_GROUP_ID;
 
-async function fetchWithRetry(url: string, options: RequestInit, retries: number, botName: string, chatId: string): Promise<Response> {
+async function fetchWithRetry(url: string, options: RequestInit, retries: number, botName: string): Promise<Response> {
     for (let i = 0; i < retries; i++) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
@@ -34,10 +34,13 @@ async function fetchWithRetry(url: string, options: RequestInit, retries: number
     throw new Error(`Failed to send message to Telegram after ${retries} attempts.`);
 }
 
-async function sendTelegramMessage(botToken: string, chatId: string, message: string, botName: string) {
-    if (!botToken || !chatId) return;
+async function sendTelegramMessage(message: string, botName: string) {
+    if (!BOT_TOKEN || !GROUP_ID) {
+        console.error(`[TelegramBot] [${botName}] Error: Credentials missing in .env`);
+        return;
+    }
 
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
     try {
         await fetchWithRetry(
             url,
@@ -45,14 +48,13 @@ async function sendTelegramMessage(botToken: string, chatId: string, message: st
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    chat_id: chatId,
+                    chat_id: GROUP_ID,
                     text: message,
                     parse_mode: 'Markdown',
                 }),
             },
             RETRY_COUNT,
-            botName,
-            chatId
+            botName
         );
     } catch (error: any) {
         console.error(`[TelegramBot] [${botName}] Error: ${error.message}`);
@@ -60,7 +62,8 @@ async function sendTelegramMessage(botToken: string, chatId: string, message: st
 }
 
 /**
- * Sends order submission details to the dedicated Telegram group.
+ * Sends buy order submission details to the configured Telegram group.
+ * This is triggered ONLY when a user successfully submits their payment proof.
  */
 export async function sendOrderSubmissionToTelegram(details: {
     orderId: string;
@@ -78,30 +81,27 @@ export async function sendOrderSubmissionToTelegram(details: {
 *Amount:* ₹${details.amount.toFixed(2)}
 *UTR:* \`${details.utr}\`
 
-*Status:* Pending Confirmation
+*Status:* Pending System Audit
     `;
 
-    await sendTelegramMessage(ORDER_BOT_TOKEN, ORDER_GROUP_ID, message, 'OrderAlert');
+    await sendTelegramMessage(message, 'OrderAlert');
 }
 
 /**
- * Existing function for chat requests.
+ * Sends notification for human agent chat requests.
  */
 export async function sendNewChatRequestToTelegram(details: {
     userNumericId?: string;
     enteredIdentifier: string;
 }) {
-    const botToken = process.env.TELEGRAM_SUPPORT_BOT_TOKEN || ORDER_BOT_TOKEN;
-    const groupChatId = process.env.TELEGRAM_SUPPORT_CHAT_ID_GROUP || ORDER_GROUP_ID;
-
     const message = `
 💬 *New Live Chat Request!*
 
 *User UID:* \`${details.userNumericId || 'N/A'}\`
 *Identifier:* \`${details.enteredIdentifier}\`
 
-Check admin panel to respond.
+A user is waiting for support in the admin panel.
     `;
 
-    await sendTelegramMessage(botToken, groupChatId, message, 'Support');
+    await sendTelegramMessage(message, 'SupportAlert');
 }
