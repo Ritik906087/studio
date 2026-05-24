@@ -18,10 +18,11 @@ export function AnnouncementPopup() {
   const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    // Show popup once per session
+    // Show popup once per session on home screen
     const hasSeen = sessionStorage.getItem('flex-announcement-seen');
     if (!hasSeen) {
-      const timer = setTimeout(() => setIsOpen(true), 1500);
+      // Faster trigger for better user experience
+      const timer = setTimeout(() => setIsOpen(true), 500);
       return () => clearTimeout(timer);
     }
   }, []);

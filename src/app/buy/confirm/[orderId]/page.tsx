@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
@@ -15,6 +16,7 @@ import { uploadToSupabase } from '@/lib/supabase';
 import { Loader } from '@/components/ui/loader';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { sendOrderSubmissionToTelegram } from '@/lib/telegram';
 
 type Order = {
     id: string;
@@ -60,7 +62,7 @@ function ConfirmPageContent() {
     const router = useRouter();
     const params = useParams();
     const { toast } = useToast();
-    const { user } = useUser();
+    const { user, profile } = useUser();
     const firestore = useFirestore();
 
     const orderId = params.orderId as string;
@@ -110,7 +112,7 @@ function ConfirmPageContent() {
             toast({ variant: 'destructive', title: 'Screenshot Required', description: 'Please upload payment proof.' });
             return;
         }
-        if (!user || !firestore || !order) return;
+        if (!user || !profile || !firestore || !order) return;
 
         setIsSubmitting(true);
         try {
@@ -143,6 +145,15 @@ function ConfirmPageContent() {
                 });
             });
 
+            // Instant Telegram Notification
+            await sendOrderSubmissionToTelegram({
+                orderId: order.orderId,
+                uid: profile.numericId,
+                mobile: profile.phoneNumber,
+                amount: order.baseAmount || order.amount,
+                utr: utr
+            });
+
             toast({ title: 'Submitted Successfully', description: 'Redirecting to status page...' });
             router.push(`/order/${orderId}`);
         } catch (e: any) {
@@ -161,7 +172,6 @@ function ConfirmPageContent() {
 
     return (
         <div className="flex flex-col min-h-screen bg-white font-body">
-            {/* Header */}
             <header className="flex items-center justify-between p-4 border-b bg-white sticky top-0 z-50">
                 <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
                     <ChevronLeft className="h-6 w-6 text-slate-800" />
@@ -170,14 +180,12 @@ function ConfirmPageContent() {
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
 
-            {/* Timer Banner */}
             <div className="bg-red-50 px-4 py-3 flex items-center gap-3 text-red-500 border-b border-red-100">
                 <Clock className="h-5 w-5" />
                 <span className="font-mono font-black text-base">{formatTime(timeLeft)}</span>
                 <span className="text-[10px] font-black uppercase tracking-tight ml-1">Time Remaining to Pay</span>
             </div>
 
-            {/* Steps */}
             <div className="px-6 py-6">
                 <div className="flex items-center justify-between relative px-2 mb-2">
                     <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-slate-100 -translate-y-1/2 z-0" />
@@ -201,7 +209,6 @@ function ConfirmPageContent() {
                              </p>
                         </div>
 
-                        {/* QR Code Section */}
                         <div className="flex flex-col items-center justify-center space-y-4">
                             <div className="relative p-4 bg-white rounded-3xl shadow-xl ring-1 ring-slate-100 border border-slate-50">
                                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-md">
@@ -236,7 +243,6 @@ function ConfirmPageContent() {
                     </div>
                 ) : (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                        {/* WARNING SECTION */}
                         <div className="p-5 bg-red-600 text-white rounded-[24px] shadow-lg shadow-red-200">
                             <div className="flex items-center gap-3 mb-2">
                                 <AlertCircle className="h-6 w-6" />
@@ -297,7 +303,6 @@ function ConfirmPageContent() {
                 )}
             </main>
 
-            {/* Sticky Footer */}
             <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-xl border-t grid grid-cols-2 gap-3 z-50">
                 <Button 
                     variant="outline" 
