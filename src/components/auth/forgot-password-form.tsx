@@ -13,14 +13,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { KeyRound, Phone, ShieldCheck, Smartphone, Eye, EyeOff, Hash, CheckCircle2 } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { KeyRound, Smartphone, Eye, EyeOff, Hash, CheckCircle2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import { useLanguage } from "@/context/language-context";
 import { Loader } from "@/components/ui/loader";
 import { useRouter } from "next/navigation";
-import { getAuth, signInWithPhoneNumber, RecaptchaVerifier, ConfirmationResult, updatePassword } from "firebase/auth";
+import { getAuth, signInWithPhoneNumber, RecaptchaVerifier, type ConfirmationResult, updatePassword } from "firebase/auth";
 
 type Step = "phone" | "reset";
 
