@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, CheckCircle2, XCircle, AlertCircle, Hash, Clock, HelpCircle, Upload } from 'lucide-react';
+import { ChevronLeft, CheckCircle2, XCircle, AlertCircle, Hash, Clock, HelpCircle, Upload, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc } from '@/firebase';
