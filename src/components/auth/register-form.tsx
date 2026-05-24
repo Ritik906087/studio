@@ -62,12 +62,10 @@ export function RegisterForm() {
     try {
         const email = `91${values.phone}@lgpay.app`;
         
-        // 1. Check if phone already registered
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
         if (!phoneCheckSnap.empty) throw new Error("This phone number is already registered.");
 
-        // 2. Handle invitation code
         let inviterUid = null;
         if (values.invitationCode) {
             const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
@@ -75,11 +73,9 @@ export function RegisterForm() {
             if (!inviterSnap.empty) inviterUid = inviterSnap.docs[0].id;
         }
 
-        // 3. Create Firebase Auth User
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
 
-        // 4. Create Profile
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
         await setDoc(doc(firestore, 'users', user.uid), {
@@ -188,7 +184,7 @@ export function RegisterForm() {
         <div className="flex items-center space-x-2 py-2">
           <Checkbox id="agreement" onCheckedChange={(checked) => form.setValue("agreement", checked === true)} checked={form.watch("agreement")} />
           <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium">
-            I agree to the <Link href="/terms" className="text-primary font-bold">Terms & Conditions</Link>
+            I agree to the <Link href="/privacy" className="text-primary font-bold">Privacy Policy</Link>
           </label>
         </div>
 

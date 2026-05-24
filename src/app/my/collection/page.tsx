@@ -48,40 +48,40 @@ export default function CollectionPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F8FAFC]">
-      <header className="sticky top-0 z-50 bg-white border-b px-4 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-white border-b px-4 py-3 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-2">
                 <Button asChild variant="ghost" size="icon" className="h-8 w-8 -ml-2">
                     <Link href="/my"><ChevronLeft className="h-5 w-5" /></Link>
                 </Button>
-                <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Withdrawal Hub</h1>
+                <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Account</h1>
             </div>
             <Link href="/my/collection/add">
                 <Button size="icon" className="h-8 w-8 rounded-lg btn-gradient"><Plus className="h-4 w-4" /></Button>
             </Link>
       </header>
 
-      <main className="p-3 space-y-3">
+      <main className="p-2 space-y-2">
         {loading ? (
             <div className="flex justify-center pt-20"><Loader size="sm" /></div>
         ) : methods.length > 0 ? (
             methods.map((m, i) => {
                 const cfg = providerConfig[m.name] || { logo: "", brandColor: "#cbd5e1" };
                 return (
-                    <div key={i} className="bg-white rounded-[20px] p-4 border border-slate-100 shadow-sm relative overflow-hidden flex items-center justify-between group">
+                    <div key={i} className="bg-white rounded-xl p-3 border border-slate-100 shadow-sm relative overflow-hidden flex items-center justify-between group active:scale-[0.98] transition-transform">
                          <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: cfg.brandColor }} />
-                         <div className="flex items-center gap-3">
-                             <div className="h-10 w-10 bg-slate-50 rounded-xl flex items-center justify-center p-1.5 border border-slate-100">
-                                 {cfg.logo ? <Image src={cfg.logo} alt="" width={28} height={28} /> : <Wallet className="h-4 w-4" />}
+                         <div className="flex items-center gap-2.5">
+                             <div className="h-9 w-9 bg-slate-50 rounded-lg flex items-center justify-center p-1.5 border border-slate-100 shrink-0">
+                                 {cfg.logo ? <Image src={cfg.logo} alt="" width={24} height={24} /> : <Wallet className="h-4 w-4" />}
                              </div>
-                             <div>
-                                 <p className="font-black text-slate-800 text-[13px] leading-none">{m.name}</p>
-                                 <p className="text-[10px] font-mono font-bold text-slate-400 mt-1 truncate max-w-[150px]">{m.upiId}</p>
+                             <div className="min-w-0">
+                                 <p className="font-black text-slate-800 text-[12px] leading-tight truncate">{m.name}</p>
+                                 <p className="text-[9px] font-mono font-bold text-slate-400 mt-0.5 truncate max-w-[120px]">{m.upiId}</p>
                              </div>
                          </div>
-                         <div className="flex items-center gap-3">
-                             <div className="flex flex-col items-end gap-1">
-                                <BadgeCheck className="h-3.5 w-3.5 text-blue-500" />
-                                <span className="text-[8px] font-black text-slate-300 uppercase">Active</span>
+                         <div className="flex items-center gap-2">
+                             <div className="flex flex-col items-end shrink-0">
+                                <BadgeCheck className="h-3 w-3 text-blue-500" />
+                                <span className="text-[7px] font-black text-slate-300 uppercase">Linked</span>
                              </div>
                              <Button variant="ghost" size="icon" onClick={() => handleDelete(i)} className="h-8 w-8 rounded-lg text-slate-300 hover:text-red-500">
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -91,17 +91,17 @@ export default function CollectionPage() {
                 )
             })
         ) : (
-             <div className="text-center py-32 opacity-20 px-10">
-                <Wallet className="h-12 w-12 mx-auto mb-3" />
-                <p className="text-[10px] font-black uppercase tracking-widest">No Linked Accounts</p>
-                <Button asChild className="mt-6 h-9 px-6 rounded-lg btn-gradient text-[10px] font-black uppercase tracking-widest">
+             <div className="text-center py-24 opacity-20 px-8">
+                <Wallet className="h-10 w-10 mx-auto mb-3" />
+                <p className="text-[9px] font-black uppercase tracking-widest">No Linked Accounts</p>
+                <Button asChild className="mt-4 h-8 px-5 rounded-lg btn-gradient text-[9px] font-black uppercase tracking-widest">
                     <Link href="/my/collection/add">Connect Now</Link>
                 </Button>
             </div>
         )}
-        <div className="pt-6 text-center opacity-30">
-            <ShieldCheck className="h-6 w-6 mx-auto mb-1" />
-            <p className="text-[8px] font-black uppercase tracking-widest">Encrypted by Flex Shield 4.0</p>
+        <div className="pt-4 text-center opacity-30">
+            <ShieldCheck className="h-5 w-5 mx-auto mb-1" />
+            <p className="text-[7px] font-black uppercase tracking-widest">Secured by Flex Pay Network</p>
         </div>
       </main>
     </div>

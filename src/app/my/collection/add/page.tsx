@@ -109,7 +109,6 @@ export default function AddCollectionPage() {
 
         const data = result.data;
 
-        // Simple validation: check if chosen provider's keyword exists in TPAP or Message
         const matchedTpap = selectedProvider.tpapKeywords.some(keyword => 
             data.tpap.toUpperCase().includes(keyword) || data.message.toUpperCase().includes(keyword)
         );
@@ -153,13 +152,11 @@ export default function AddCollectionPage() {
 
         if (isDuplicate) throw new Error("This UPI ID is already linked.");
         
-        // Save full metadata for Admin Audit
         const methodData = {
             type: 'upi',
             name: selectedProvider.name,
             upiId: verificationData.vpa,
             verifiedName: finalName,
-            // Admin only technical fields
             pspBank: verificationData.pspBank,
             tpap: verificationData.tpap,
             externalUserId: verificationData.userId,
@@ -182,89 +179,83 @@ export default function AddCollectionPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F5F7FB]">
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b px-4 py-6">
-        <div className="flex items-center gap-4">
-            <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-slate-100">
-                <Link href="/my/collection"><ChevronLeft className="h-6 w-6 text-slate-800" /></Link>
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b px-4 py-4">
+        <div className="flex items-center gap-3">
+            <Button asChild variant="ghost" size="icon" className="h-9 w-9 rounded-full bg-slate-100">
+                <Link href="/my/collection"><ChevronLeft className="h-5 w-5 text-slate-800" /></Link>
             </Button>
             <div className="flex flex-col">
-                <h1 className="text-xl font-black text-slate-900 tracking-tight">Link Payment</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select your UPI provider</p>
+                <h1 className="text-base font-black text-slate-900 tracking-tight uppercase">Link Account</h1>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Secure UPI Verification</p>
             </div>
         </div>
       </header>
 
-      <main className="p-4 space-y-4 pb-32">
-        <div className="space-y-4">
+      <main className="p-3 space-y-3 pb-32">
+        <div className="grid grid-cols-1 gap-2">
             {PROVIDERS.map((provider, index) => (
                 <motion.div
                     key={provider.id}
-                    initial={{ opacity: 0, y: 15 }}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                 >
                     <div 
                         className={cn(
-                            "relative overflow-hidden rounded-[28px] border bg-white shadow-sm cursor-pointer active:scale-[0.98] transition-all",
-                            "hover:shadow-md hover:border-slate-200"
+                            "relative overflow-hidden rounded-2xl border bg-white shadow-sm cursor-pointer active:scale-[0.98] transition-all",
+                            "hover:shadow-md"
                         )}
                         onClick={() => handleProviderClick(provider)}
                     >
-                        <div className="p-4 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="h-14 w-14 rounded-2xl bg-white border border-slate-50 flex items-center justify-center p-2 shadow-sm">
-                                    {provider.logo && (
-                                      <Image src={provider.logo} alt={provider.name} width={42} height={42} className="object-contain" />
-                                    )}
+                        <div className="p-3 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center p-1.5 border border-slate-50">
+                                    <Image src={provider.logo} alt={provider.name} width={28} height={28} className="object-contain" />
                                 </div>
                                 <div>
-                                    <h3 className="font-black text-slate-800">{provider.name}</h3>
-                                    <div className="flex gap-1 mt-1">
-                                        {provider.handles.slice(0, 2).map(h => (
-                                            <span key={h} className="text-[8px] font-black bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full border uppercase">{h}</span>
+                                    <h3 className="font-black text-slate-800 text-xs">{provider.name}</h3>
+                                    <div className="flex gap-1 mt-0.5">
+                                        {provider.handles.slice(0, 1).map(h => (
+                                            <span key={h} className="text-[7px] font-black bg-slate-50 text-slate-400 px-1.5 py-0.5 rounded-full border uppercase tracking-tighter">{h}</span>
                                         ))}
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300">
-                                    <ChevronRight className="h-5 w-5" />
-                                </div>
-                            </div>
+                            <ChevronRight className="h-4 w-4 text-slate-300" />
                         </div>
                     </div>
                 </motion.div>
             ))}
         </div>
 
-        <div className="p-10 text-center opacity-40 grayscale pointer-events-none">
-            <ShieldCheck className="h-10 w-10 mx-auto mb-2" />
-            <p className="text-[9px] font-bold uppercase tracking-[0.3em]">Flex Shield 4.0 Encrypted</p>
+        <div className="p-12 text-center opacity-30 grayscale pointer-events-none">
+            <ShieldCheck className="h-8 w-8 mx-auto mb-2" />
+            <p className="text-[8px] font-black uppercase tracking-[0.2em]">Flex Shield Encrypted</p>
         </div>
       </main>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-[40px] px-6 pb-10 pt-8 border-none shadow-2xl h-[85vh] overflow-y-auto no-scrollbar bg-[#F5F7FB]">
-          <SheetHeader className="text-left mb-6">
-            <div className="flex items-center gap-4 mb-2">
-                <div className="h-12 w-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-sm">
+        <SheetContent side="bottom" className="rounded-t-[32px] px-5 pb-8 pt-6 border-none shadow-2xl h-[80vh] overflow-y-auto no-scrollbar bg-[#F5F7FB]">
+          <SheetHeader className="text-left mb-5">
+            <div className="flex items-center gap-3 mb-1">
+                <div className="h-10 w-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-sm">
                     {selectedProvider?.logo && (
-                      <Image src={selectedProvider.logo} alt="logo" width={32} height={32} className="object-contain" />
+                      <Image src={selectedProvider.logo} alt="logo" width={24} height={24} className="object-contain" />
                     )}
                 </div>
-                <SheetTitle className="text-2xl font-black tracking-tight">Link {selectedProvider?.name}</SheetTitle>
+                <SheetTitle className="text-xl font-black tracking-tight uppercase">Link {selectedProvider?.name}</SheetTitle>
             </div>
           </SheetHeader>
 
-          <div className="space-y-6">
-            <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Enter UPI ID</Label>
+          <div className="space-y-5">
+            <div className="space-y-1.5">
+                <Label className="text-[9px] font-black uppercase text-slate-400 ml-1 tracking-widest">Enter VPA / UPI ID</Label>
                 <div className="relative">
                     <Input 
-                        placeholder="example@handle" 
+                        placeholder="username@handle" 
                         value={upiId}
                         onChange={(e) => { setUpiId(e.target.value.toLowerCase()); setVerificationData(null); }}
-                        className="h-14 rounded-2xl bg-white border-none ring-2 ring-slate-100 focus-visible:ring-primary/20 text-lg font-black"
+                        className="h-12 rounded-xl bg-white border-none ring-1 ring-slate-100 focus-visible:ring-primary/40 text-base font-black"
                         disabled={isVerifying}
                     />
                     <AnimatePresence>
@@ -272,10 +263,10 @@ export default function AddCollectionPage() {
                             <motion.div 
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-green-50 text-green-600 px-3 py-1 rounded-full border border-green-100"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-green-50 text-green-600 px-2 py-0.5 rounded-lg border border-green-100"
                             >
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                <span className="text-[10px] font-black uppercase">UPI Verified</span>
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span className="text-[8px] font-black uppercase">Verified</span>
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -284,60 +275,44 @@ export default function AddCollectionPage() {
 
             {verificationData && (
                 <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="space-y-3"
+                    className="space-y-2.5"
                 >
-                    <div className="p-5 bg-white rounded-3xl border border-slate-100 shadow-sm space-y-4">
-                        <div className="flex items-center justify-between border-b pb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center">
-                                    <CheckCircle2 className="h-6 w-6 text-green-500" />
-                                </div>
-                                <span className="font-black text-xs text-slate-800 uppercase tracking-tight">Identity Confirmed</span>
-                            </div>
-                        </div>
-                        
-                        <div className="space-y-1.5">
-                            <Label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Bank Account Name</Label>
+                    <div className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                        <div className="space-y-1">
+                            <Label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Account Holder Name</Label>
                             <Input 
-                                placeholder="Enter Full Bank Name" 
+                                placeholder="Bank Record Name" 
                                 value={manualName}
                                 onChange={(e) => setManualName(e.target.value.toUpperCase())}
-                                className="h-12 bg-slate-50 border-none ring-1 ring-slate-100 rounded-xl text-slate-800 font-black"
+                                className="h-10 bg-slate-50 border-none ring-1 ring-slate-100 rounded-lg text-slate-800 font-black text-xs"
                             />
-                            <p className="text-[8px] text-slate-400 font-bold ml-1 uppercase">Ensure name matches bank records exactly</p>
+                            <p className="text-[7px] text-slate-400 font-bold ml-1 uppercase">Matches bank database check</p>
                         </div>
-                    </div>
-                    
-                    <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex gap-2 items-center">
-                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-                        <p className="text-[9px] text-blue-700 font-bold uppercase leading-relaxed">
-                            Flex Shield 4.0 Encrypted Link
-                        </p>
                     </div>
                 </motion.div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 pt-4">
-                <Button variant="outline" className="h-14 rounded-2xl font-black text-slate-400 uppercase tracking-widest" onClick={() => setIsSheetOpen(false)} disabled={isSaving}>
+            <div className="grid grid-cols-2 gap-3 pt-2">
+                <Button variant="outline" className="h-12 rounded-xl font-black text-slate-400 uppercase text-[10px] tracking-widest" onClick={() => setIsSheetOpen(false)} disabled={isSaving}>
                     Cancel
                 </Button>
                 {verificationData ? (
                     <Button 
                         onClick={handleSave} 
-                        className="h-14 btn-gradient rounded-2xl font-black uppercase tracking-widest shadow-blue-500/20"
+                        className="h-12 btn-gradient rounded-xl font-black uppercase text-[10px] tracking-widest shadow-blue-500/20"
                         disabled={isSaving}
                     >
-                        {isSaving ? <Loader size="xs" /> : "Link Now"}
+                        {isSaving ? <Loader size="xs" /> : "Link Account"}
                     </Button>
                 ) : (
                     <Button 
                         onClick={handleVerify} 
-                        className="h-14 btn-gradient rounded-2xl font-black uppercase tracking-widest shadow-blue-500/20"
+                        className="h-12 btn-gradient rounded-xl font-black uppercase text-[10px] tracking-widest shadow-blue-500/20"
                         disabled={isVerifying || !upiId}
                     >
-                        {isVerifying ? <Loader size="xs" className="mr-2" /> : "Verify UPI"}
+                        {isVerifying ? <Loader size="xs" className="mr-2" /> : "Verify ID"}
                     </Button>
                 )}
             </div>

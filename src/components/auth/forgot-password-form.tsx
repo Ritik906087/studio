@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,14 +13,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { KeyRound, Phone, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { KeyRound, Phone, ShieldCheck, Smartphone, Eye, EyeOff, Hash, CheckCircle2 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/context/language-context";
 import { Loader } from "@/components/ui/loader";
-import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { getAuth, signInWithPhoneNumber, RecaptchaVerifier, ConfirmationResult, updatePassword } from "firebase/auth";
 
 type Step = "phone" | "reset";
 
@@ -29,28 +28,35 @@ export function ForgotPasswordForm() {
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [countdown, setCountdown] = useState(0);
+
   const { toast } = useToast();
   const { translations } = useLanguage();
   const router = useRouter();
-  
+  const auth = getAuth();
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
   const phoneSchema = z.object({
-    phone: z
-      .string()
-      .min(10, { message: translations.phoneRequired }),
+    phone: z.string().length(10, { message: translations.phoneRequired }).regex(/^[6-9]\d{9}$/, { message: translations.phoneInvalid }),
   });
 
-  const resetSchema = z
-    .object({
-      otp: z.string().length(6, { message: translations.otpRequired }),
-      password: z
-        .string()
-        .min(6, { message: translations.passwordMin }),
-      confirmPassword: z.string(),
-    })
-    .refine((data) => data.password === data.confirmPassword, {
-      message: translations.passwordsDontMatch,
-      path: ["confirmPassword"],
-    });
+  const resetSchema = z.object({
+    otp: z.string().length(6, { message: translations.otpRequired }),
+    newPassword: z.string().min(6, { message: translations.passwordMin }),
+    confirmPassword: z.string(),
+  }).refine((data) => data.newPassword === data.confirmPassword, {
+    message: translations.passwordsDontMatch,
+    path: ["confirmPassword"],
+  });
 
   const phoneForm = useForm<z.infer<typeof phoneSchema>>({
     resolver: zodResolver(phoneSchema),
@@ -59,29 +65,36 @@ export function ForgotPasswordForm() {
 
   const resetForm = useForm<z.infer<typeof resetSchema>>({
     resolver: zodResolver(resetSchema),
-    defaultValues: {
-      otp: "",
-      password: "",
-      confirmPassword: "",
-    },
+    defaultValues: { otp: "", newPassword: "", confirmPassword: "" },
   });
+
+  const setupRecaptcha = () => {
+    if (!(window as any).recaptchaVerifier) {
+      (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'invisible'
+      });
+    }
+    return (window as any).recaptchaVerifier;
+  }
 
   async function onPhoneSubmit(values: z.infer<typeof phoneSchema>) {
     setIsLoading(true);
     try {
+      const verifier = setupRecaptcha();
       const fullPhoneNumber = `+91${values.phone}`;
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: fullPhoneNumber,
-      });
-
-      if (error) throw error;
+      const result = await signInWithPhoneNumber(auth, fullPhoneNumber, verifier);
+      
+      setConfirmationResult(result);
       setPhone(values.phone);
       setStep("reset");
+      setCountdown(59);
+      
       toast({
         title: translations.otpSent,
-        description: translations.otpSentReset.replace('{phone}', values.phone),
+        description: `OTP sent to ${fullPhoneNumber}`,
       });
     } catch (error: any) {
+      console.error(error);
       toast({ variant: 'destructive', title: 'Error', description: error.message });
     } finally {
       setIsLoading(false);
@@ -89,158 +102,127 @@ export function ForgotPasswordForm() {
   }
 
   async function onResetSubmit(values: z.infer<typeof resetSchema>) {
+    if (!confirmationResult) return;
     setIsLoading(true);
     try {
-      const fullPhoneNumber = `+91${phone}`;
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({ phone: fullPhoneNumber, token: values.otp, type: 'sms' });
-      if (verifyError) throw verifyError;
-      if (!data.session) throw new Error("Invalid OTP or session expired.");
-      
-      const { error: updateError } = await supabase.auth.updateUser({ password: values.password });
-      if (updateError) throw updateError;
-      
-      toast({
-        title: translations.passwordResetSuccess,
-        description: translations.passwordResetMessage,
-      });
-      router.push('/login');
+      // 1. Confirm OTP
+      const userCredential = await confirmationResult.confirm(values.otp);
+      const user = userCredential.user;
 
-    } catch (error: any) {
-      let errorMessage = error.message;
-      if (errorMessage.includes("Token has expired or is invalid")) {
-        errorMessage = "Invalid or expired OTP. Please try again.";
+      if (user) {
+        // 2. Update Password
+        await updatePassword(user, values.newPassword);
+        toast({
+          title: "Password Updated",
+          description: "Your login password has been changed successfully.",
+        });
+        router.push('/login');
       }
-      toast({ variant: 'destructive', title: 'Error', description: errorMessage });
+    } catch (error: any) {
+      console.error(error);
+      toast({ variant: 'destructive', title: 'Error', description: error.message || "Invalid OTP" });
     } finally {
       setIsLoading(false);
     }
   }
 
   return (
-    <div className="relative overflow-hidden h-[330px]">
-      <div
-        className={cn(
-          "w-full transition-all duration-500 absolute top-0",
-          step === "phone" ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-full"
-        )}
-      >
-        <Form {...phoneForm}>
-          <form
-            onSubmit={phoneForm.handleSubmit(onPhoneSubmit)}
-            className="space-y-6"
-          >
-            <FormField
-              control={phoneForm.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{translations.phoneNumber}</FormLabel>
-                   <div className="relative flex items-center">
-                     <Phone className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <FormControl>
-                      <Input
-                        type="tel"
-                        placeholder={translations.enterPhoneNumber}
-                        className="pl-10 text-sm"
-                        {...field}
-                      />
-                    </FormControl>
+    <div className="relative min-h-[350px]">
+      <div id="recaptcha-container"></div>
+      
+      {step === "phone" ? (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+           <Form {...phoneForm}>
+            <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-6">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Mobile Identity</Label>
+                <div className="relative flex items-center group">
+                  <div className="absolute left-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-slate-400 group-focus-within:text-primary transition-colors pr-2.5 border-r">
+                    <Smartphone className="h-4 w-4" />
+                    <span className="font-bold">+91</span>
                   </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" className="w-full btn-gradient rounded-full font-semibold" disabled={isLoading}>
-              {isLoading && <Loader size="xs" className="mr-2" />}
-              {isLoading ? translations.sending : translations.sendResetCode}
-            </Button>
-          </form>
-        </Form>
-      </div>
+                  <FormControl>
+                    <Input 
+                        type="tel" 
+                        placeholder="ENTER REGISTERED NUMBER" 
+                        className="pl-20 h-14 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/40 rounded-2xl text-base font-black tracking-tight" 
+                        maxLength={10} 
+                        {...phoneForm.register("phone")} 
+                    />
+                  </FormControl>
+                </div>
+                <FormMessage className="text-[10px] pl-2 text-red-500" />
+              </div>
+              <Button type="submit" className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase tracking-widest shadow-teal-500/20" disabled={isLoading}>
+                {isLoading ? <Loader size="xs" className="mr-2" /> : "SEND OTP CODE"}
+              </Button>
+            </form>
+          </Form>
+        </div>
+      ) : (
+        <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+           <Form {...resetForm}>
+            <form onSubmit={resetForm.handleSubmit(onResetSubmit)} className="space-y-4">
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Verification Code</Label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><Hash className="h-4 w-4" /></div>
+                  <FormControl>
+                    <Input 
+                        placeholder="6-DIGIT OTP" 
+                        className="pl-11 h-12 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/40 rounded-xl text-base font-black tracking-[0.5em]" 
+                        maxLength={6}
+                        {...resetForm.register("otp")} 
+                    />
+                  </FormControl>
+                </div>
+              </div>
 
-      <div
-        className={cn(
-          "w-full transition-all duration-500 absolute top-0",
-          step === "reset" ? "opacity-100 translate-x-0" : "opacity-0 translate-x-full"
-        )}
-      >
-        <Form {...resetForm}>
-          <form
-            onSubmit={resetForm.handleSubmit(onResetSubmit)}
-            className="space-y-4"
-          >
-            <p className="text-center text-sm text-muted-foreground">
-              {translations.enterOtpAndNewPassword.replace('{phone}', phone)}
-            </p>
-            <FormField
-              control={resetForm.control}
-              name="otp"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{translations.verificationCode}</FormLabel>
-                  <div className="relative">
-                    <ShieldCheck className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <FormControl>
-                      <Input
-                        placeholder={translations.enterVerificationCode}
-                        className="pl-10 text-sm"
-                        {...field}
-                      />
-                    </FormControl>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={resetForm.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{translations.newPassword}</FormLabel>
-                  <div className="relative">
-                    <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder={translations.createNewPassword}
-                        className="pl-10 text-sm"
-                        {...field}
-                      />
-                    </FormControl>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={resetForm.control}
-              name="confirmPassword"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{translations.confirmPassword}</FormLabel>
-                  <div className="relative">
-                    <KeyRound className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <FormControl>
-                      <Input
-                        type="password"
-                        placeholder={translations.confirmNewPassword}
-                        className="pl-10 text-sm"
-                        {...field}
-                      />
-                    </FormControl>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" className="w-full btn-gradient rounded-full font-semibold" disabled={isLoading}>
-              {isLoading && <Loader size="xs" className="mr-2" />}
-              {isLoading ? translations.resetting : translations.resetPassword}
-            </Button>
-          </form>
-        </Form>
-      </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">New Access Key</Label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><KeyRound className="h-4 w-4" /></div>
+                  <FormControl>
+                    <Input 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder="NEW PASSWORD" 
+                        className="px-11 h-12 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/40 rounded-xl text-sm font-black" 
+                        {...resetForm.register("newPassword")} 
+                    />
+                  </FormControl>
+                  <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" onClick={() => setShowPassword(!showPassword)}>
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Repeat Access Key</Label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><CheckCircle2 className="h-4 w-4" /></div>
+                  <FormControl>
+                    <Input 
+                        type="password" 
+                        placeholder="CONFIRM PASSWORD" 
+                        className="pl-11 h-12 bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/40 rounded-xl text-sm font-black" 
+                        {...resetForm.register("confirmPassword")} 
+                    />
+                  </FormControl>
+                </div>
+                <FormMessage className="text-[10px] pl-2 text-red-500" />
+              </div>
+
+              <Button type="submit" className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase tracking-widest shadow-teal-500/20" disabled={isLoading}>
+                {isLoading ? <Loader size="xs" className="mr-2" /> : "RESET PASSWORD"}
+              </Button>
+              
+              <p className="text-center text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                Didn't receive? {countdown > 0 ? `Resend in ${countdown}s` : <span className="text-primary underline cursor-pointer" onClick={() => setStep("phone")}>Resend Code</span>}
+              </p>
+            </form>
+          </Form>
+        </div>
+      )}
     </div>
   );
 }
