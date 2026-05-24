@@ -10,6 +10,7 @@ import { Loader } from '@/components/ui/loader';
 import { useLanguage } from '@/context/language-context';
 import { motion } from 'framer-motion';
 import { IntelligenceTracker } from '@/components/intelligence-tracker';
+import { AnnouncementPopup } from '@/components/announcement-popup';
 
 export default function HomeLayout({
   children,
@@ -48,6 +49,7 @@ export default function HomeLayout({
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-0 overflow-hidden font-body">
       <IntelligenceTracker />
+      <AnnouncementPopup />
       
       <div className="relative flex h-screen w-full flex-col bg-[#F5F7FB] md:h-[844px] md:max-w-[390px] md:rounded-[3rem] md:shadow-2xl md:my-4 overflow-hidden border border-white/50 ring-1 ring-black/5">
         <main className={cn(
