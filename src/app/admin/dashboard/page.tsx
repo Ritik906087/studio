@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -8,7 +9,7 @@ import {
   LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
-  ExternalLink, Ban, BadgeCheck, AlertTriangle
+  ExternalLink, Ban, BadgeCheck, AlertTriangle, HelpCircle
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -155,7 +156,6 @@ export default function AdminDashboardPage() {
                         const updatedMatches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => 
                             m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
                         );
-                        // Check if ALL matches are completed and remaining is 0
                         const allCompleted = updatedMatches.every((m: any) => m.status === 'completed') && sellSnap.data().remainingAmount === 0;
                         
                         transaction.update(sellOrderRef, { 
@@ -177,7 +177,7 @@ export default function AdminDashboardPage() {
             toast({ title: "Order Approved", description: `Assets credited to ${order.userNumericId || 'Buyer'}` });
         } catch (e: any) { 
             console.error(e);
-            toast({ variant: 'destructive', title: "Approval Failed", description: e.message }); 
+            toast({ variant: "destructive", title: "Approval Failed", description: e.message }); 
         }
     };
 
@@ -188,7 +188,6 @@ export default function AdminDashboardPage() {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 transaction.update(orderRef, { status: 'failed', rejectionReason: 'Admin Rejected Proof' });
                 
-                // If P2P, release liquidity back to seller's matching pool
                 if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN') {
                     const sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     const sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
@@ -212,7 +211,7 @@ export default function AdminDashboardPage() {
                 }
             });
             toast({ title: "Order Rejected", description: "Liquidity returned to pool." });
-        } catch (e: any) { toast({ variant: 'destructive', title: "Rejection Failed", description: e.message }); }
+        } catch (e: any) { toast({ variant: "destructive", title: "Rejection Failed", description: e.message }); }
     };
 
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
@@ -381,23 +380,46 @@ export default function AdminDashboardPage() {
 
                         <TabsContent value="confirm">
                              {indexError && (
-                                <Alert variant="destructive" className="mb-6 rounded-2xl bg-red-50 border-red-100">
-                                    <AlertTriangle className="h-4 w-4" />
-                                    <AlertTitle className="font-black uppercase text-xs">Database Index Required</AlertTitle>
-                                    <AlertDescription className="text-xs font-medium leading-relaxed">
-                                        P2P Confirmation system requires a global index. 
-                                        <a 
-                                            href={`https://console.firebase.google.com/v1/r/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'studio-7114417830-300d7'}/firestore/indexes?create_exemption=Clpwcm9qZWN0cy9zdHVkaW8tNzExNDQxNzgzMC0zMDBkNy9kYXRhYmFzZXMvKGRlZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvb3JkZXJzL2ZpZWxkcy9zdGF0dXMQAhoKCgZzdGF0dXMQAQ`} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer"
-                                            className="ml-1 font-black underline decoration-2 underline-offset-2"
-                                        >
-                                            CLICK HERE TO CREATE INDEX
-                                        </a>
-                                        <br />
-                                        Wait 5-10 minutes after clicking before this tab starts working.
-                                    </AlertDescription>
-                                </Alert>
+                                <div className="space-y-4 mb-6">
+                                    <Alert variant="destructive" className="rounded-2xl bg-red-50 border-red-100 p-6">
+                                        <AlertTriangle className="h-6 w-6 mb-2" />
+                                        <AlertTitle className="font-black uppercase text-base">Action Required: Firestore Index Missing</AlertTitle>
+                                        <AlertDescription className="text-sm font-medium leading-relaxed space-y-4">
+                                            <p>Bhai, P2P Confirmation system ko enable karne ke liye aapko Firestore mein ek **Index** banana hoga. Ye index sabhi users ke pending orders ko dhoondne mein help karta hai.</p>
+                                            
+                                            <div className="bg-white/50 p-4 rounded-xl space-y-2">
+                                                <p className="font-black text-xs uppercase">Process to fix:</p>
+                                                <ol className="list-decimal list-inside space-y-1 text-xs">
+                                                    <li>Niche diye gaye link par click karein.</li>
+                                                    <li>Firebase Console khulega, waha **"Create Index"** par click karein.</li>
+                                                    <li>Wait karein (5-10 minute). Jab status "Enabled" ho jaye, ye page refresh karein.</li>
+                                                </ol>
+                                            </div>
+
+                                            <Button asChild className="w-full bg-red-600 hover:bg-red-700 h-12 rounded-xl mt-4 font-black uppercase shadow-lg shadow-red-200">
+                                                <a 
+                                                    href={`https://console.firebase.google.com/v1/r/project/${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'studio-7114417830-300d7'}/firestore/indexes?create_exemption=Clpwcm9qZWN0cy9zdHVkaW8tNzExNDQxNzgzMC0zMDBkNy9kYXRhYmFzZXMvKGRlZmF1bHQpL2NvbGxlY3Rpb25Hcm91cHMvb3JkZXJzL2ZpZWxkcy9zdGF0dXMQAhoKCgZzdGF0dXMQAQ`} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                >
+                                                    CLICK HERE TO CREATE INDEX <ExternalLink className="ml-2 h-4 w-4" />
+                                                </a>
+                                            </Button>
+                                        </AlertDescription>
+                                    </Alert>
+                                    
+                                    <Card className="border-none shadow-sm rounded-3xl bg-blue-50 p-6 border border-blue-100">
+                                        <div className="flex gap-4">
+                                            <HelpCircle className="h-6 w-6 text-blue-600 shrink-0" />
+                                            <div>
+                                                <h4 className="font-black text-blue-900 uppercase text-xs">Kyun chahiye Index?</h4>
+                                                <p className="text-[11px] text-blue-700 font-medium mt-1 leading-relaxed">
+                                                    Firestore by default nested collections (users/{'{uid}'}/orders) ko group mein query nahi kar sakta. Index banane se admin panel sabhi users ke orders ek saath scan kar payega verification ke liye.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                </div>
                              )}
 
                              <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
