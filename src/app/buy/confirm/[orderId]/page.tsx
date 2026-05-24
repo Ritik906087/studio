@@ -263,9 +263,9 @@ function PaymentDetailsContent() {
 
     return (
         <div className="flex flex-col min-h-screen bg-white">
-            {/* Header matching screenshot */}
+            {/* Header */}
             <header className="flex items-center justify-between p-3 border-b bg-white sticky top-0 z-50">
-                <Button onClick={() => setIsCancelDialogOpen(true)} variant="ghost" size="icon" className="h-8 w-8 -ml-1">
+                <Button onClick={() => view === 'prove' ? setView('info') : setIsCancelDialogOpen(true)} variant="ghost" size="icon" className="h-8 w-8 -ml-1">
                     <ChevronLeft className="h-6 w-6 text-slate-600" />
                 </Button>
                 <h1 className="text-base font-bold text-slate-700">Buy FP details</h1>
@@ -286,7 +286,7 @@ function PaymentDetailsContent() {
             <div className="px-4 pt-6 pb-2">
                 <div className="flex items-center justify-between relative px-2 mb-2">
                     <div className="absolute top-1/2 left-0 right-0 h-[1.5px] bg-slate-100 -translate-y-1/2 z-0" />
-                    <div className={cn("relative z-10 h-3.5 w-3.5 rounded-full border-2", view === 'info' ? "bg-blue-500 border-blue-500" : "bg-blue-500 border-blue-500")} />
+                    <div className={cn("relative z-10 h-3.5 w-3.5 rounded-full border-2", (view === 'info' || view === 'prove') ? "bg-blue-500 border-blue-500" : "bg-white border-slate-200")} />
                     <div className={cn("relative z-10 h-3.5 w-3.5 rounded-full border-2", view === 'prove' ? "bg-blue-500 border-blue-500" : "bg-white border-slate-200")} />
                     <div className="relative z-10 h-3.5 w-3.5 rounded-full border-2 bg-white border-slate-200" />
                 </div>
@@ -325,14 +325,12 @@ function PaymentDetailsContent() {
                             </p>
                         </div>
 
-                        {/* Support Floating-ish */}
                         <div className="flex justify-center pt-4">
                              <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100 shadow-sm text-blue-500 active:scale-95 transition-transform">
                                 <HelpCircle className="h-5 w-5" />
                              </div>
                         </div>
 
-                        {/* Cancel My Order */}
                         <div className="text-center pt-4">
                              <p className="text-xs font-medium text-slate-400">
                                 Unable to complete payment? <button onClick={() => setIsCancelDialogOpen(true)} className="text-red-600 font-bold hover:underline">Cancel</button> my order.
@@ -341,52 +339,72 @@ function PaymentDetailsContent() {
                     </div>
                 ) : (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                        <Card className="border-none shadow-sm rounded-2xl bg-slate-50">
-                            <CardContent className="p-4 space-y-4">
+                        {/* WARNING SECTION */}
+                        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex gap-3">
+                            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                            <div className="space-y-1">
+                                <p className="text-[11px] text-red-800 font-black uppercase tracking-tight leading-tight">
+                                    CRITICAL WARNING: SUBMISSION AUDIT ACTIVE
+                                </p>
+                                <p className="text-[10px] text-red-700 font-bold leading-relaxed uppercase">
+                                    Submitting a fake screenshot, incorrect UTR, wrong payment amount, or using an unauthorized payment method will result in an immediate order rejection and permanent system ban. Flex Pay is NOT responsible for funds lost due to non-compliance.
+                                </p>
+                            </div>
+                        </div>
+
+                        <Card className="border-none shadow-sm rounded-2xl bg-slate-50 overflow-hidden">
+                            <CardContent className="p-5 space-y-5">
                                 <div className="space-y-2">
                                     <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                                        Enter UTR / Transaction Hash
+                                        Enter UTR / Reference ID
                                     </Label>
-                                    <Input 
-                                        placeholder="Enter reference number..." 
-                                        value={utr} 
-                                        onChange={(e) => setUtr(e.target.value.replace(/\s/g, '').toUpperCase())}
-                                        className="h-12 rounded-xl bg-white border-none font-mono font-black text-sm ring-1 ring-slate-100 focus-visible:ring-primary/40"
-                                    />
+                                    <div className="relative">
+                                        <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                        <Input 
+                                            placeholder="12-Digit Reference Number" 
+                                            value={utr} 
+                                            onChange={(e) => setUtr(e.target.value.replace(/\s/g, '').toUpperCase())}
+                                            className="h-12 pl-10 rounded-xl bg-white border-none font-mono font-black text-sm ring-1 ring-slate-200 focus-visible:ring-primary/40"
+                                            maxLength={12}
+                                        />
+                                    </div>
+                                    <p className="text-[8px] text-slate-400 font-bold uppercase ml-1">Check your bank SMS for the 12-digit UTR</p>
                                 </div>
                                 
                                 <div className="space-y-2">
+                                    <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                        Upload Transfer Screenshot
+                                    </Label>
                                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
-                                    <Button 
-                                        variant="outline" 
+                                    <div 
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="w-full h-16 border-dashed rounded-xl bg-white text-slate-400 font-bold border-2"
+                                        className={cn(
+                                            "w-full h-32 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all",
+                                            screenshotFile ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-white border-slate-200 text-slate-400 hover:border-blue-300"
+                                        )}
                                     >
                                         {screenshotFile ? (
-                                            <div className="flex items-center gap-2 text-teal-600">
-                                                <CheckCircle2 className="h-5 w-5" />
-                                                Proof Selected ✓
+                                            <div className="text-center space-y-2">
+                                                <div className="h-10 w-10 bg-teal-500 rounded-full flex items-center justify-center mx-auto shadow-md">
+                                                    <CheckCircle2 className="h-6 w-6 text-white" />
+                                                </div>
+                                                <p className="text-xs font-black uppercase">Proof Selected ✓</p>
+                                                <p className="text-[9px] font-bold opacity-60 truncate max-w-[200px] mx-auto">{screenshotFile.name}</p>
                                             </div>
                                         ) : (
-                                            <div className="flex flex-col items-center gap-1">
-                                                <Upload className="h-5 w-5" />
-                                                <span className="text-[10px] uppercase">Upload Transfer Screenshot</span>
+                                            <div className="text-center space-y-2">
+                                                <Upload className="h-8 w-8 mx-auto opacity-30" />
+                                                <p className="text-[10px] font-black uppercase">Tap to choose image</p>
+                                                <p className="text-[8px] font-bold opacity-50 uppercase">Only genuine screenshots accepted</p>
                                             </div>
                                         )}
-                                    </Button>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
 
-                        <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl flex gap-3">
-                            <AlertCircle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
-                            <p className="text-[10px] text-orange-800 font-black leading-tight uppercase tracking-tight">
-                                SYSTEM AUTOMATICALLY BLACKLISTS FRAUDULENT SCREENSHOTS. PLEASE SUBMIT GENUINE DATA ONLY.
-                            </p>
-                        </div>
-
-                        <button onClick={() => setView('info')} className="w-full text-xs font-black text-slate-400 uppercase tracking-widest py-2">
-                            Back to details
+                        <button onClick={() => setView('info')} className="w-full flex items-center justify-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest py-2 hover:text-slate-600 transition-colors">
+                            <ChevronLeft className="h-3 w-3" /> Back to details
                         </button>
                     </div>
                 )}
@@ -396,7 +414,7 @@ function PaymentDetailsContent() {
             <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-md border-t grid grid-cols-2 gap-4 z-50">
                 <Button 
                     variant="outline" 
-                    className="h-12 rounded-xl text-blue-500 border-slate-200 font-black text-xs uppercase" 
+                    className="h-12 rounded-xl text-blue-600 border-slate-200 font-black text-xs uppercase" 
                     onClick={handleGoPay}
                     disabled={isCancelling}
                 >
