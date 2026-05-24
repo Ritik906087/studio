@@ -9,13 +9,14 @@ import {
   LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
-  ExternalLink, Ban, BadgeCheck, AlertTriangle, HelpCircle, Search, ImageIcon
+  ExternalLink, Ban, BadgeCheck, AlertTriangle, HelpCircle, Search, ImageIcon,
+  Clock, Hash, ArrowUpRight, ArrowDownLeft, Info, History
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp, getDocs, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -31,6 +32,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
+  DialogFooter
 } from "@/components/ui/dialog";
 
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
@@ -59,6 +62,7 @@ export default function AdminDashboardPage() {
     const [sellOrders, setSellOrders] = useState<any[]>([]);
     const [pendingBuyOrders, setPendingBuyOrders] = useState<any[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+    const [adminLogs, setAdminLogs] = useState<any[]>([]);
     
     // Search States
     const [userSearch, setUserSearch] = useState('');
@@ -67,6 +71,7 @@ export default function AdminDashboardPage() {
 
     const [editingPayment, setEditingPayment] = useState<string | null>(null);
     const [indexError, setIndexError] = useState<string | null>(null);
+    const [adminId, setAdminId] = useState<string>('SYSTEM');
 
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
@@ -75,6 +80,8 @@ export default function AdminDashboardPage() {
         if (!session.authenticated || !ALLOWED_ADMINS.includes(session.masterId) || session.expires < Date.now()) {
             localStorage.removeItem('flex_admin_session');
             router.replace('/admin/key');
+        } else {
+            setAdminId(session.masterId);
         }
     }, [router]);
 
@@ -126,28 +133,34 @@ export default function AdminDashboardPage() {
         return () => { unsubSell(); unsubBuy(); unsubPM(); };
     }, [firestore, fetchUsers]);
 
-    // Computed Filtered Lists
+    // Computed Filtered Lists (Optimization: useMemo)
     const filteredUsers = useMemo(() => {
+        const s = userSearch.toLowerCase();
         return allUsers.filter(u => 
-            u.numericId?.includes(userSearch) || 
-            u.phoneNumber?.includes(userSearch) || 
-            u.displayName?.toLowerCase().includes(userSearch.toLowerCase())
+            u.numericId?.includes(s) || 
+            u.phoneNumber?.includes(s) || 
+            u.displayName?.toLowerCase().includes(s) ||
+            u.paymentMethods?.some((m: any) => m.upiId?.toLowerCase().includes(s))
         );
     }, [allUsers, userSearch]);
 
     const filteredSellOrders = useMemo(() => {
+        const s = sellSearch.toLowerCase();
         return sellOrders.filter(o => 
-            o.userNumericId?.includes(sellSearch) || 
-            o.userPhoneNumber?.includes(sellSearch) ||
-            o.orderId?.includes(sellSearch)
+            o.userNumericId?.includes(s) || 
+            o.userPhoneNumber?.includes(s) ||
+            o.orderId?.toLowerCase().includes(s) ||
+            o.withdrawalMethod?.upiId?.toLowerCase().includes(s)
         );
     }, [sellOrders, sellSearch]);
 
     const filteredConfirmOrders = useMemo(() => {
+        const s = confirmSearch.toLowerCase();
         return pendingBuyOrders.filter(o => 
-            o.userNumericId?.includes(confirmSearch) || 
-            o.utr?.includes(confirmSearch) ||
-            o.orderId?.includes(confirmSearch)
+            o.userNumericId?.includes(s) || 
+            o.utr?.toLowerCase().includes(s) ||
+            o.orderId?.toLowerCase().includes(s) ||
+            o.amount?.toString().includes(s)
         );
     }, [pendingBuyOrders, confirmSearch]);
 
@@ -156,10 +169,23 @@ export default function AdminDashboardPage() {
         router.replace('/admin/key');
     };
 
+    const logAdminAction = async (action: string, details: any) => {
+        if (!firestore) return;
+        try {
+            await addDoc(collection(firestore, 'adminLogs'), {
+                adminId,
+                action,
+                details,
+                timestamp: serverTimestamp()
+            });
+        } catch (e) { console.warn("Log failed", e); }
+    };
+
     const handleUpdateAdminPayment = async (type: string, data: any) => {
         if (!firestore) return;
         try {
             await setDoc(doc(firestore, 'paymentMethods', type), { ...data, type }, { merge: true });
+            await logAdminAction('UPDATE_PAYMENT_SERVER', { type });
             toast({ title: "Server Updated" });
             setEditingPayment(null);
         } catch (e: any) { toast({ variant: 'destructive', title: "Update Failed" }); }
@@ -169,11 +195,15 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         try {
             await runTransaction(firestore, async (transaction) => {
-                // 1. ALL READS FIRST
                 const buyerRef = doc(firestore, 'users', order.userId);
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
+                
                 const buyerSnap = await transaction.get(buyerRef);
-                const buyerOrderSnap = await transaction.get(orderRef);
+                const currentOrderSnap = await transaction.get(orderRef);
+
+                if (currentOrderSnap.data()?.status === 'completed') {
+                    throw new Error("Already Approved");
+                }
                 
                 let sellSnap = null;
                 let sellerSnap = null;
@@ -190,12 +220,11 @@ export default function AdminDashboardPage() {
                     sellerSnap = await transaction.get(sellerProfileRef);
                 }
 
-                // 2. ALL WRITES SECOND
                 if (!buyerSnap.exists()) throw new Error("Buyer profile missing");
                 
                 const currentBuyerBalance = buyerSnap.data()?.balance || 0;
                 transaction.update(buyerRef, { balance: currentBuyerBalance + order.amount });
-                transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp() });
+                transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
                 
                 if (sellSnap && sellSnap.exists()) {
                     const sellData = sellSnap.data();
@@ -222,18 +251,17 @@ export default function AdminDashboardPage() {
                     transaction.update(sellerProfileRef!, { holdBalance: Math.max(0, currentSellerHold - order.baseAmount) });
                 }
             });
+            await logAdminAction('APPROVE_ORDER', { orderId: order.orderId, buyer: order.userNumericId });
             toast({ title: "Order Approved", description: `Assets credited to ${order.userNumericId}` });
         } catch (e: any) { 
-            console.error("Approval error:", e);
             toast({ variant: "destructive", title: "Approval Failed", description: e.message }); 
         }
     };
 
-    const handleRejectBuy = async (order: any) => {
+    const handleRejectBuy = async (order: any, reason: string = 'Admin Rejected Proof') => {
         if (!firestore) return;
         try {
             await runTransaction(firestore, async (transaction) => {
-                // 1. ALL READS FIRST
                 let sellSnap = null;
                 let sellOrderRef = null;
                 let sellerUserSellRef = null;
@@ -244,9 +272,8 @@ export default function AdminDashboardPage() {
                     sellSnap = await transaction.get(sellOrderRef);
                 }
 
-                // 2. ALL WRITES SECOND
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
-                transaction.update(orderRef, { status: 'failed', rejectionReason: 'Admin Rejected Proof' });
+                transaction.update(orderRef, { status: 'failed', rejectionReason: reason, rejectedBy: adminId, rejectedAt: serverTimestamp() });
                 
                 if (sellSnap && sellSnap.exists()) {
                     const sellData = sellSnap.data();
@@ -268,9 +295,9 @@ export default function AdminDashboardPage() {
                     }
                 }
             });
+            await logAdminAction('REJECT_ORDER', { orderId: order.orderId, reason });
             toast({ title: "Order Rejected" });
         } catch (e: any) { 
-            console.error("Rejection error:", e);
             toast({ variant: "destructive", title: "Rejection Failed", description: e.message }); 
         }
     };
@@ -344,7 +371,7 @@ export default function AdminDashboardPage() {
                             <div className="relative max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <Input 
-                                    placeholder="Search UID or Mobile..." 
+                                    placeholder="Search UID, Name, or Mobile..." 
                                     className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
                                     value={userSearch}
                                     onChange={e => setUserSearch(e.target.value)}
@@ -359,8 +386,9 @@ export default function AdminDashboardPage() {
                                             <TableHeader className="bg-slate-50/50">
                                                 <TableRow className="border-none">
                                                     <TableHead className="font-black text-[10px] uppercase pl-6 py-4">UID</TableHead>
-                                                    <TableHead className="font-black text-[10px] uppercase">User</TableHead>
+                                                    <TableHead className="font-black text-[10px] uppercase">User Information</TableHead>
                                                     <TableHead className="font-black text-[10px] uppercase">Balance</TableHead>
+                                                    <TableHead className="font-black text-[10px] uppercase">Join Date</TableHead>
                                                     <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
                                                 </TableRow>
                                             </TableHeader>
@@ -375,6 +403,9 @@ export default function AdminDashboardPage() {
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="font-black text-xs text-slate-700">₹{u.balance?.toFixed(2)}</TableCell>
+                                                        <TableCell className="text-[10px] font-medium text-slate-400">
+                                                            {u.createdAt ? new Date(u.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}
+                                                        </TableCell>
                                                         <TableCell className="text-right pr-6">
                                                             <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-lg">
                                                                 <Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link>
@@ -393,7 +424,7 @@ export default function AdminDashboardPage() {
                             <div className="relative max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <Input 
-                                    placeholder="Search Seller UID/Mobile..." 
+                                    placeholder="Search UID, UPI, or Request ID..." 
                                     className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
                                     value={sellSearch}
                                     onChange={e => setSellSearch(e.target.value)}
@@ -404,28 +435,43 @@ export default function AdminDashboardPage() {
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
                                             <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase pl-6">UID / Mobile</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase pl-6">UID & ID</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">Amount</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Method</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Status</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">UPI ID / Method</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">Type</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase text-right pr-6">Status</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {filteredSellOrders.map(o => (
-                                                <TableRow key={o.id}>
-                                                    <TableCell className="pl-6">
-                                                        <p className="font-black text-[11px] text-blue-600">{o.userNumericId}</p>
-                                                        <p className="text-[9px] text-slate-400">+91 {o.userPhoneNumber}</p>
-                                                    </TableCell>
-                                                    <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
-                                                    <TableCell>
-                                                        <span className="font-mono text-[9px] font-black">{o.withdrawalMethod?.upiId}</span>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge className="bg-blue-50 text-blue-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {filteredSellOrders.map(o => {
+                                                const isP2P = (o.matchedBuyOrders || []).length > 0;
+                                                return (
+                                                    <TableRow key={o.id} className="hover:bg-slate-50/50">
+                                                        <TableCell className="pl-6 py-4">
+                                                            <p className="font-black text-[11px] text-blue-600">{o.userNumericId}</p>
+                                                            <p className="text-[9px] text-slate-400 uppercase font-bold">{o.orderId}</p>
+                                                        </TableCell>
+                                                        <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
+                                                        <TableCell>
+                                                            <p className="font-mono text-[10px] font-black text-slate-700">{o.withdrawalMethod?.upiId || 'Direct'}</p>
+                                                            <p className="text-[8px] font-bold text-slate-400 uppercase">{o.withdrawalMethod?.name || 'Bank'}</p>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {isP2P ? (
+                                                                <Badge className="bg-orange-50 text-orange-600 border-none text-[8px] font-black uppercase">P2P Matched</Badge>
+                                                            ) : (
+                                                                <Badge className="bg-blue-50 text-blue-600 border-none text-[8px] font-black uppercase">Direct Withdrawal</Badge>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right pr-6">
+                                                            <div className="flex flex-col items-end gap-1">
+                                                                <Badge className="bg-slate-100 text-slate-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
+                                                                {isP2P && <span className="text-[7px] font-black text-slate-400 uppercase italic">Locked for Buyer Approval</span>}
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
                                         </TableBody>
                                     </Table>
                                 </div>
@@ -436,7 +482,7 @@ export default function AdminDashboardPage() {
                              <div className="relative max-w-md">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                 <Input 
-                                    placeholder="Search Buyer UID or UTR..." 
+                                    placeholder="Search UID, UTR, or Amount..." 
                                     className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
                                     value={confirmSearch}
                                     onChange={e => setConfirmSearch(e.target.value)}
@@ -459,11 +505,11 @@ export default function AdminDashboardPage() {
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
                                             <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase pl-6 py-4">Buyer & Amount</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Payment App</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">UTR & Proof</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Recipient (Seller)</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase text-right pr-6">Decision</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase pl-6 py-4">Buyer UID & Amount</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">App</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">UTR Code</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">Matched Seller</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase text-right pr-6">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -471,9 +517,8 @@ export default function AdminDashboardPage() {
                                                 <TableRow key={o.id} className="group hover:bg-slate-50/50">
                                                     <TableCell className="pl-6 py-5">
                                                         <div className="flex flex-col">
-                                                            <span className="font-black text-blue-600 text-[11px] uppercase tracking-wider">UID: {o.userNumericId || 'N/A'}</span>
+                                                            <span className="font-black text-blue-600 text-[11px] uppercase">UID: {o.userNumericId || 'N/A'}</span>
                                                             <span className="font-black text-slate-900 text-lg tabular-nums">₹{o.amount.toFixed(2)}</span>
-                                                            <span className="text-[8px] text-slate-400 font-bold uppercase">ID: {o.orderId}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
@@ -489,57 +534,97 @@ export default function AdminDashboardPage() {
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <div className="flex flex-col gap-2">
-                                                            <span className="font-mono text-[11px] font-black text-primary border-b border-primary/20 pb-0.5 w-fit">{o.utr}</span>
-                                                            <Dialog>
-                                                                <DialogTrigger asChild>
-                                                                    <button className="flex items-center gap-1.5 text-[9px] text-blue-600 font-black uppercase hover:bg-blue-50 w-fit px-2 py-1 rounded-md transition-colors">
-                                                                        <ImageIcon className="h-3 w-3" /> VIEW PROOF
-                                                                    </button>
-                                                                </DialogTrigger>
-                                                                <DialogContent className="max-w-2xl bg-white rounded-[32px] p-0 overflow-hidden border-none">
-                                                                    <DialogHeader className="p-6 bg-slate-50 border-b">
-                                                                        <DialogTitle className="text-sm font-black uppercase flex items-center gap-2">
-                                                                            <ShieldCheck className="h-4 w-4 text-blue-600" /> Payment Evidence: UID {o.userNumericId}
-                                                                        </DialogTitle>
-                                                                    </DialogHeader>
-                                                                    <div className="p-8 bg-white flex justify-center items-center">
-                                                                        {o.screenshotURL ? (
-                                                                            <div className="relative w-full aspect-[3/4] max-h-[60vh]">
-                                                                                 <Image src={o.screenshotURL} alt="Proof" fill className="object-contain rounded-xl" unoptimized />
-                                                                            </div>
-                                                                        ) : (
-                                                                            <div className="h-64 w-full bg-slate-100 rounded-2xl flex flex-col items-center justify-center text-slate-300">
-                                                                                <ImageIcon className="h-12 w-12 mb-2" />
-                                                                                <p className="font-black text-[10px] uppercase">No Screenshot Provided</p>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="p-4 bg-slate-50 border-t flex justify-between items-center px-8">
-                                                                        <p className="font-mono text-xs font-black text-slate-400">UTR: {o.utr}</p>
-                                                                        <p className="font-black text-slate-800">₹{o.amount.toFixed(2)}</p>
-                                                                    </div>
-                                                                </DialogContent>
-                                                            </Dialog>
-                                                        </div>
+                                                        <span className="font-mono text-[11px] font-black text-primary">{o.utr}</span>
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex flex-col">
                                                             <span className="text-[9px] font-black text-slate-400 uppercase">Seller: {o.sellerId === 'ADMIN' ? 'MASTER' : o.sellerId}</span>
-                                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                                                <span className="font-mono text-[10px] font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded">{o.sellerWithdrawalDetails?.upiId || 'SYSTEM'}</span>
-                                                            </div>
+                                                            <span className="font-mono text-[10px] font-black text-slate-600">{o.sellerWithdrawalDetails?.upiId || 'SYSTEM'}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-right pr-6">
-                                                        <div className="flex justify-end gap-2">
-                                                            <button onClick={() => handleApproveBuy(o)} className="bg-green-600 hover:bg-green-700 h-9 px-4 text-[9px] font-black rounded-xl shadow-lg shadow-green-100 text-white">
-                                                                APPROVE
-                                                            </button>
-                                                            <button onClick={() => handleRejectBuy(o)} className="bg-red-500 hover:bg-red-600 h-9 px-4 text-[9px] font-black rounded-xl text-white">
-                                                                REJECT
-                                                            </button>
-                                                        </div>
+                                                        <Dialog>
+                                                            <DialogTrigger asChild>
+                                                                <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black rounded-xl">VIEW DETAIL</Button>
+                                                            </DialogTrigger>
+                                                            <DialogContent className="max-w-3xl bg-white rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
+                                                                <div className="grid grid-cols-1 md:grid-cols-2">
+                                                                    {/* Left: Image */}
+                                                                    <div className="bg-slate-900 p-6 flex flex-col items-center justify-center min-h-[300px]">
+                                                                        <div className="mb-4 flex items-center gap-2 text-white/60">
+                                                                            <ImageIcon className="h-4 w-4" />
+                                                                            <span className="text-[10px] font-black uppercase tracking-widest">Payment Evidence</span>
+                                                                        </div>
+                                                                        {o.screenshotURL ? (
+                                                                            <div className="relative w-full aspect-[3/4] max-h-[500px] shadow-2xl rounded-2xl overflow-hidden ring-4 ring-white/10">
+                                                                                 <Image src={o.screenshotURL} alt="Proof" fill className="object-contain" unoptimized />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="text-white/20 text-center">
+                                                                                <Hash className="h-12 w-12 mx-auto mb-2" />
+                                                                                <p className="text-xs font-black uppercase">No Image Uploaded</p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    {/* Right: Info */}
+                                                                    <div className="p-8 space-y-6">
+                                                                        <DialogHeader>
+                                                                            <DialogTitle className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-2">
+                                                                                <BadgeCheck className="h-6 w-6 text-blue-600" /> Confirm Assets
+                                                                            </DialogTitle>
+                                                                            <DialogDescription className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Order Verification Engine</DialogDescription>
+                                                                        </DialogHeader>
+
+                                                                        <div className="space-y-4">
+                                                                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                                                <p className="text-[9px] font-black text-slate-400 uppercase mb-3 tracking-widest">Buyer Context</p>
+                                                                                <div className="grid grid-cols-2 gap-4">
+                                                                                    <div>
+                                                                                        <p className="text-[8px] font-bold text-slate-400 uppercase">UID</p>
+                                                                                        <p className="text-sm font-black text-blue-600">{o.userNumericId}</p>
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <p className="text-[8px] font-bold text-slate-400 uppercase">Amount</p>
+                                                                                        <p className="text-sm font-black text-slate-900">₹{o.amount.toFixed(2)}</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                                                                                <p className="text-[9px] font-black text-blue-400 uppercase mb-3 tracking-widest">Matched Seller</p>
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <div className="h-10 w-10 rounded-xl bg-white border shadow-sm flex items-center justify-center font-black text-blue-600 text-xs">P2P</div>
+                                                                                    <div>
+                                                                                        <p className="text-[10px] font-black text-slate-800 uppercase">{o.sellerWithdrawalDetails?.name || 'Partner'}</p>
+                                                                                        <p className="text-[11px] font-mono font-black text-blue-600">{o.sellerWithdrawalDetails?.upiId}</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div className="space-y-1">
+                                                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">UTR Reference</p>
+                                                                                <div className="bg-slate-100 p-3 rounded-xl font-mono text-xs font-black text-slate-700 flex justify-between items-center">
+                                                                                    {o.utr}
+                                                                                    <History className="h-3 w-3 text-slate-400" />
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-dashed">
+                                                                            <Button 
+                                                                                onClick={() => handleRejectBuy(o)} 
+                                                                                variant="outline" 
+                                                                                className="h-12 rounded-2xl font-black text-[11px] uppercase border-red-100 text-red-500 hover:bg-red-50"
+                                                                            >REJECT</Button>
+                                                                            <Button 
+                                                                                onClick={() => handleApproveBuy(o)} 
+                                                                                className="h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[11px] uppercase shadow-lg shadow-blue-200"
+                                                                            >APPROVE</Button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </DialogContent>
+                                                        </Dialog>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
