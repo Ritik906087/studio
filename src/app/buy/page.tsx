@@ -123,23 +123,31 @@ export default function BuyPage() {
             return;
         }
 
+        // --- P2P MATCHING ENGINE ---
         const sellOrdersQuery = query(
             collection(firestore, 'sellOrders'),
             where('status', 'in', ['pending', 'partially_filled']),
-            limit(50)
+            limit(100) // Increase limit for better selection pool
         );
 
         const sellSnap = await getDocs(sellOrdersQuery);
         
-        // CRITICAL CHANGE: Specifically exclude orders belonging to the current user
-        // This prevents "Self-Buying" which blocks liquidity.
-        const sellerDoc = sellSnap.docs.find(d => 
+        // 1. FILTER CANDIDATES: Must not be current user and must have enough balance
+        const candidates = sellSnap.docs.filter(d => 
             d.data().userId !== user.uid && 
             d.data().remainingAmount >= amountInInr
         );
 
+        let sellerDoc = null;
+
+        if (candidates.length > 0) {
+            // 2. RANDOM ROTATION: Pick a random seller from candidates to ensure fair distribution
+            const randomIndex = Math.floor(Math.random() * candidates.length);
+            sellerDoc = candidates[randomIndex];
+        }
+
+        // 3. LAST RESORT FALLBACK: If no suitable P2P match, use Admin Server
         if (!sellerDoc) {
-            // FALLBACK: If no other sellers found, use Admin Server
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
             if (adminPMSnap.empty) throw new Error("Liquidity Pool Busy. Try again in 5 mins.");
@@ -172,13 +180,14 @@ export default function BuyPage() {
             return;
         }
 
+        // 4. P2P EXECUTION
         const sellerOrderId = sellerDoc.id;
         await runTransaction(firestore, async (transaction) => {
             const freshSellerSnap = await transaction.get(sellerDoc.ref);
             const freshSellerData = freshSellerSnap.data();
 
             if (!freshSellerData || freshSellerData.remainingAmount < amountInInr || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
-                throw new Error("Match rotation error. Retrying...");
+                throw new Error("Match expired. Retrying...");
             }
 
             const newRemaining = freshSellerData.remainingAmount - amountInInr;
