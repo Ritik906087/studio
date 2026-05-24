@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -10,7 +11,7 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
-import { doc, updateDoc, getDocs, query, collection, where, arrayUnion, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, getDocs, query, collection, where, arrayUnion, runTransaction, serverTimestamp, increment } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
 import { motion } from 'framer-motion';
@@ -33,6 +34,7 @@ const newbieTasksList = [
 
 const FINAL_REWARD_ID = 'nb_final_reward';
 const FINAL_REWARD_AMOUNT = 300;
+const INVITER_BONUS_AMOUNT = 100;
 
 export default function NewbieRewardsPage() {
     const { user, profile, loading: userLoading } = useUser();
@@ -97,20 +99,46 @@ export default function NewbieRewardsPage() {
                 const userRef = doc(firestore, 'users', user.uid);
                 const userSnap = await transaction.get(userRef);
                 const data = userSnap.data();
-                if (data?.claimedUserRewards?.includes(FINAL_REWARD_ID)) throw new Error("Claimed");
                 
+                if (data?.claimedUserRewards?.includes(FINAL_REWARD_ID)) throw new Error("Already claimed");
+
+                // 1. Credit Reward to User
                 transaction.update(userRef, {
-                    balance: (data?.balance || 0) + FINAL_REWARD_AMOUNT,
+                    balance: increment(FINAL_REWARD_AMOUNT),
                     claimedUserRewards: arrayUnion(FINAL_REWARD_ID)
                 });
-                const txRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
-                transaction.set(txRef, {
-                    userId: user.uid, amount: FINAL_REWARD_AMOUNT, type: 'new_user_reward',
-                    description: 'Newbie Mission Reward', createdAt: serverTimestamp(), orderId: `MISSION${Date.now()}`
+                
+                const userTxRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
+                transaction.set(userTxRef, {
+                    userId: user.uid, 
+                    amount: FINAL_REWARD_AMOUNT, 
+                    type: 'new_user_reward',
+                    description: 'Newbie Mission Completion Reward', 
+                    createdAt: serverTimestamp(), 
+                    orderId: `MISSION${Date.now()}`
                 });
+
+                // 2. Credit Reward to Inviter if exists
+                if (data?.inviterUid) {
+                    const inviterRef = doc(firestore, 'users', data.inviterUid);
+                    transaction.update(inviterRef, {
+                        balance: increment(INVITER_BONUS_AMOUNT)
+                    });
+                    
+                    const inviterTxRef = doc(collection(firestore, 'users', data.inviterUid, 'transactions'));
+                    transaction.set(inviterTxRef, {
+                        userId: data.inviterUid,
+                        amount: INVITER_BONUS_AMOUNT,
+                        type: 'team_bonus',
+                        description: `Affiliate Bonus: Member UID ${data.numericId} completed mission`,
+                        createdAt: serverTimestamp(),
+                        orderId: `INV_BONUS_${Date.now()}`
+                    });
+                }
             });
             toast({ title: `₹${FINAL_REWARD_AMOUNT} Credited!` });
         } catch (error: any) {
+             console.error("Claim Error:", error);
              toast({ variant: 'destructive', title: 'Claim Failed' });
         } finally { setIsClaimingFinal(false); }
     };
