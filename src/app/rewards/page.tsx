@@ -40,7 +40,6 @@ const orderAmountTasks = [
 ];
 
 const TaskItem = ({ title, desc, reward, progress, goal, buttonState = 'default', onClaim, isClaiming }: any) => {
-    const isCompleted = progress >= goal;
     const isClaimed = buttonState === 'claimed';
     const isClaimable = buttonState === 'claimable';
 
@@ -119,6 +118,7 @@ export default function RewardsPage() {
         const todayTimestamp = Timestamp.fromDate(today);
 
         try {
+            // 1. Fetch Today's Completed Orders
             const ordersQuery = query(
                 collection(firestore, 'users', user.uid, 'orders'),
                 where('createdAt', '>=', todayTimestamp),
@@ -135,6 +135,7 @@ export default function RewardsPage() {
             });
             setStats({ count: orderCount, maxAmount });
 
+            // 2. Fetch already claimed tasks for today
             const rewardDocRef = doc(firestore, 'users', user.uid, 'dailyRewards', getTodayDateString());
             const rewardDoc = await getDoc(rewardDocRef);
             if (rewardDoc.exists()) {
@@ -143,7 +144,7 @@ export default function RewardsPage() {
                 setClaimedTaskIds([]);
             }
         } catch (error) {
-            console.error("Error fetching daily tasks:", error);
+            console.error("Error fetching rewards data:", error);
         } finally {
             setLoading(false);
         }
@@ -154,7 +155,7 @@ export default function RewardsPage() {
     }, [fetchData]);
 
     const handleClaim = async (taskId: string, reward: number, taskTitle: string) => {
-        if (!user || !firestore) return;
+        if (!user || !firestore || claimingTaskId) return;
         setClaimingTaskId(taskId);
 
         const userRef = doc(firestore, 'users', user.uid);
@@ -162,36 +163,41 @@ export default function RewardsPage() {
 
         try {
             await runTransaction(firestore, async (transaction) => {
+                // Must do all reads first in a transaction
                 const userDoc = await transaction.get(userRef);
-                if (!userDoc.exists()) throw new Error("User missing");
+                if (!userDoc.exists()) throw new Error("User profile not found.");
 
-                const rewardDoc = await getDoc(rewardDocRef); 
+                const rewardDoc = await transaction.get(rewardDocRef); 
                 const alreadyClaimed = rewardDoc.exists() && (rewardDoc.data().claimedTaskIds || []).includes(taskId);
-                if (alreadyClaimed) throw new Error("Already claimed");
+                if (alreadyClaimed) throw new Error("Reward already claimed for today.");
 
+                // Verified: Update balance
                 transaction.update(userRef, { balance: (userDoc.data().balance || 0) + reward });
 
+                // Update claimed tasks record
                 if (rewardDoc.exists()) {
                     transaction.update(rewardDocRef, { claimedTaskIds: arrayUnion(taskId) });
                 } else {
                     transaction.set(rewardDocRef, { claimedTaskIds: [taskId], date: getTodayDateString() });
                 }
 
+                // Add to ledger
                 const txRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
                 transaction.set(txRef, {
                     userId: user.uid,
                     amount: reward,
-                    description: `Daily Task: ${taskTitle}`,
+                    description: `Daily Milestone: ${taskTitle}`,
                     createdAt: serverTimestamp(),
                     type: 'daily_task',
-                    orderId: `DTASK${Date.now()}`
+                    orderId: `DTASK_${Date.now()}`
                 });
             });
 
-            toast({ title: "₹" + reward + " Received!" });
-            await fetchData();
+            toast({ title: `₹${reward} Added!`, description: "Reward injected into your balance." });
+            await fetchData(); // Refresh state
         } catch (error: any) {
-            toast({ variant: 'destructive', title: "Claim Failed" });
+            console.error("Reward claim error:", error);
+            toast({ variant: 'destructive', title: "Claim Failed", description: error.message || "Please try again." });
         } finally {
             setClaimingTaskId(null);
         }
