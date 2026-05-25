@@ -23,12 +23,14 @@ import { useAuth, useFirestore } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { Loader } from "@/components/ui/loader";
+import { Turnstile } from "./turnstile";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   
   const { translations } = useLanguage();
   const { toast } = useToast();
@@ -47,6 +49,11 @@ export function LoginForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!turnstileToken) {
+      toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification." });
+      return;
+    }
+
     if (ADMIN_PHONES.includes(values.phone)) {
       toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
       return;
@@ -56,6 +63,15 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
+      // Backend verification of Turnstile
+      const verifyRes = await fetch('/api/verify-turnstile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: turnstileToken }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyData.success) throw new Error("Security verification failed. Try again.");
+
       // Firebase Sign In
       const email = `91${values.phone}@lgpay.app`;
       const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
@@ -78,8 +94,9 @@ export function LoginForm() {
       toast({ 
         variant: "destructive", 
         title: "Access Denied", 
-        description: "Invalid login details" 
+        description: error.message || "Invalid login details" 
       });
+      setTurnstileToken(null);
       setIsLoading(false);
     }
   }
@@ -141,11 +158,17 @@ export function LoginForm() {
             </FormItem>
           )}
         />
+
+        <Turnstile 
+          onVerify={(token) => setTurnstileToken(token)} 
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+        />
         
         <Button 
           type="submit" 
           className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20 uppercase tracking-widest" 
-          disabled={isLoading}
+          disabled={isLoading || !turnstileToken}
         >
           {isLoading ? (
             <div className="flex items-center gap-2">

@@ -24,12 +24,14 @@ import { useAuth, useFirestore } from "@/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs, limit, serverTimestamp } from "firebase/firestore";
 import { Loader } from "@/components/ui/loader";
+import { Turnstile } from "./turnstile";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
 export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   
   const { toast } = useToast();
   const { translations } = useLanguage();
@@ -90,10 +92,24 @@ export function RegisterForm() {
   };
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
+    if (!turnstileToken) {
+      toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification." });
+      return;
+    }
+
     if (!auth || !firestore) return;
     setIsLoading(true);
 
     try {
+        // Backend verification of Turnstile
+        const verifyRes = await fetch('/api/verify-turnstile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: turnstileToken }),
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) throw new Error("Security verification failed. Try again.");
+
         // Hardware Fingerprint Check
         const fingerprint = generateHardwareFingerprint();
         const fingerprintQuery = query(collection(firestore, 'users'), where('hardwareFingerprint', '==', fingerprint), limit(1));
@@ -153,6 +169,7 @@ export function RegisterForm() {
         title: "Registration Failed", 
         description: error.message 
       });
+      setTurnstileToken(null);
       setIsLoading(false);
     }
   }
@@ -167,11 +184,10 @@ export function RegisterForm() {
             <FormItem className="space-y-1">
               <div className="relative flex items-center group">
                 <div className="absolute left-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-slate-400 group-focus-within:text-primary transition-colors pr-2.5 border-r">
-                  <Smartphone className="h-3.5 w-3.5" />
                   <span className="font-bold">+91</span>
                 </div>
                 <FormControl>
-                  <Input type="tel" placeholder="Mobile Number" className="pl-20 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
+                  <Input type="tel" placeholder="Mobile Number" className="pl-14 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
                 </FormControl>
               </div>
               <FormMessage className="text-[10px] pl-2" />
@@ -248,10 +264,16 @@ export function RegisterForm() {
           </label>
         </div>
 
+        <Turnstile 
+          onVerify={(token) => setTurnstileToken(token)} 
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+        />
+
         <Button 
           type="submit" 
           className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1 uppercase tracking-widest" 
-          disabled={isLoading}
+          disabled={isLoading || !turnstileToken}
         >
             {isLoading ? (
               <div className="flex items-center gap-2">
