@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect } from 'react';
@@ -80,7 +79,7 @@ function ConfirmPageContent() {
     const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number>(1800);
-    fileInputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [isCancelling, setIsCancelling] = useState(false);
     const [cancelReason, setCancelReason] = useState("");
