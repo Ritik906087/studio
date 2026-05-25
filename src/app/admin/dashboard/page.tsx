@@ -6,25 +6,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { 
-  LogOut, Users, LayoutDashboard, ShieldCheck, 
-  Menu, X, TrendingDown, CheckCircle2, Server, 
-  Edit3, Eye, Wallet, Check, RefreshCw,
-  Search, ImageIcon, User as UserIcon,
-  Clock, ArrowUpRight, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap, Lock, AlertTriangle,
-  Banknote, History
+  LogOut, Users, LayoutDashboard, Server, 
+  Eye, Wallet, Check, RefreshCw,
+  Search, ImageIcon, Clock, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap,
+  Banknote, History, CheckCircle2, X, Menu, ArrowUpRight
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, where, doc, setDoc, updateDoc, deleteDoc, collectionGroup, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, deleteDoc, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import Image from 'next/image';
 import { Loader } from '@/components/ui/loader';
 import {
   Dialog,
@@ -48,14 +45,12 @@ export default function AdminDashboardPage() {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     
-    // Data States
     const [allUsers, setAllUsers] = useState<any[]>([]);
     const [usersLoading, setUsersLoading] = useState(false);
     const [sellOrders, setSellOrders] = useState<any[]>([]);
     const [pendingBuyOrders, setPendingBuyOrders] = useState<any[]>([]);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
     
-    // Search States
     const [userSearch, setUserSearch] = useState('');
     const [confirmSearch, setConfirmSearch] = useState('');
     const [withdrawalSearch, setWithdrawalSearch] = useState('');
@@ -63,10 +58,8 @@ export default function AdminDashboardPage() {
     const [adminId, setAdminId] = useState<string>('SYSTEM');
     const [isActionLoading, setIsActionLoading] = useState(false);
 
-    // Permissions check
     const isFullAdmin = useMemo(() => FULL_ACCESS_ADMINS.includes(adminId), [adminId]);
 
-    // Dialog States
     const [isAddPMOpen, setIsAddPMOpen] = useState(false);
     const [newPM, setNewPM] = useState<any>({ type: 'upi', upiId: '', upiHolderName: '', usdtWalletAddress: '', bankName: '', accountNumber: '', ifscCode: '', accountHolderName: '' });
     
@@ -109,12 +102,18 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         try {
             const buyOrdersQuery = query(
-                collectionGroup(firestore, 'orders'), 
-                where('status', '==', 'pending_confirmation'), 
-                limit(100)
+                collection(firestore, 'users'), 
+                limit(500)
             );
-            const snap = await getDocs(buyOrdersQuery);
-            const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => {
+            const userSnaps = await getDocs(buyOrdersQuery);
+            const allPending: any[] = [];
+            
+            for (const uDoc of userSnaps.docs) {
+                const oSnap = await getDocs(query(collection(firestore, 'users', uDoc.id, 'orders'), where('status', '==', 'pending_confirmation')));
+                oSnap.forEach(o => allPending.push({ id: o.id, ...o.data(), userId: uDoc.id }));
+            }
+
+            const sorted = allPending.sort((a: any, b: any) => {
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
                 const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
                 return timeB - timeA;
@@ -129,6 +128,7 @@ export default function AdminDashboardPage() {
         fetchUsers();
         fetchConfirmations();
 
+        // Listen for all sell orders
         const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), orderBy('createdAt', 'desc'), limit(150)), (snap) => {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
@@ -150,9 +150,12 @@ export default function AdminDashboardPage() {
         return pendingBuyOrders.filter(o => o.userNumericId?.includes(s) || o.utr?.toLowerCase().includes(s) || o.amount?.toString().includes(s));
     }, [pendingBuyOrders, confirmSearch]);
 
+    // FILTER: Only show active withdrawals (not completed/failed/cancelled)
     const filteredWithdrawals = useMemo(() => {
         const s = withdrawalSearch.toLowerCase();
-        return sellOrders.filter(o => 
+        const activeOnly = sellOrders.filter(o => !['completed', 'failed', 'cancelled'].includes(o.status));
+        
+        return activeOnly.filter(o => 
             o.userNumericId?.includes(s) || 
             o.orderId?.toLowerCase().includes(s) || 
             o.status?.toLowerCase().includes(s)
@@ -199,59 +202,71 @@ export default function AdminDashboardPage() {
                 const buyerRef = doc(firestore, 'users', order.userId);
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 
+                // --- READS ---
                 const buyerSnap = await transaction.get(buyerRef);
                 if (!buyerSnap.exists()) throw new Error("Buyer profile missing");
                 const buyerData = buyerSnap.data();
 
+                let l1Ref = null;
                 let l1Snap = null;
+                let l2Ref = null;
                 let l2Snap = null;
+
                 if (buyerData.inviterUid) {
-                    const l1Ref = doc(firestore, 'users', buyerData.inviterUid);
+                    l1Ref = doc(firestore, 'users', buyerData.inviterUid);
                     l1Snap = await transaction.get(l1Ref);
                     if (l1Snap.exists() && l1Snap.data().inviterUid) {
-                        const l2Ref = doc(firestore, 'users', l1Snap.data().inviterUid);
+                        l2Ref = doc(firestore, 'users', l1Snap.data().inviterUid);
                         l2Snap = await transaction.get(l2Ref);
                     }
                 }
 
+                let sellOrderRef = null;
                 let sellOrderSnap = null;
-                let sellerProfileSnap = null;
                 if (order.matchedSellOrderId) {
-                    sellOrderSnap = await transaction.get(doc(firestore, 'sellOrders', order.matchedSellOrderId));
-                }
-                if (order.sellerId && !['ADMIN', 'SYSTEM_VAULT'].includes(order.sellerId)) {
-                    sellerProfileSnap = await transaction.get(doc(firestore, 'users', order.sellerId));
+                    sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    sellOrderSnap = await transaction.get(sellOrderRef);
                 }
 
+                let sellerProfileRef = null;
+                let sellerProfileSnap = null;
+                if (order.sellerId && !['ADMIN', 'SYSTEM_VAULT'].includes(order.sellerId)) {
+                    sellerProfileRef = doc(firestore, 'users', order.sellerId);
+                    sellerProfileSnap = await transaction.get(sellerProfileRef);
+                }
+
+                // --- WRITES ---
                 const purchaseAmount = order.baseAmount || order.amount;
 
                 transaction.update(buyerRef, { balance: (buyerData.balance || 0) + order.amount });
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
                 
-                if (l1Snap?.exists()) {
+                if (l1Snap?.exists() && l1Ref) {
                     const bonus1 = purchaseAmount * 0.01;
-                    transaction.update(l1Snap.ref, { balance: (l1Snap.data().balance || 0) + bonus1 });
-                    transaction.set(doc(collection(firestore, 'users', l1Snap.id, 'transactions')), {
+                    transaction.update(l1Ref, { balance: (l1Snap.data().balance || 0) + bonus1 });
+                    const tx1Ref = doc(collection(firestore, 'users', l1Snap.id, 'transactions'));
+                    transaction.set(tx1Ref, {
                         userId: l1Snap.id, amount: bonus1, type: 'team_bonus', description: `L1 Commission: UID ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C1_${order.id}`
                     });
 
-                    if (l2Snap?.exists()) {
+                    if (l2Snap?.exists() && l2Ref) {
                         const bonus2 = purchaseAmount * 0.008;
-                        transaction.update(l2Snap.ref, { balance: (l2Snap.data().balance || 0) + bonus2 });
-                        transaction.set(doc(collection(firestore, 'users', l2Snap.id, 'transactions')), {
+                        transaction.update(l2Ref, { balance: (l2Snap.data().balance || 0) + bonus2 });
+                        const tx2Ref = doc(collection(firestore, 'users', l2Snap.id, 'transactions'));
+                        transaction.set(tx2Ref, {
                             userId: l2Snap.id, amount: bonus2, type: 'team_bonus', description: `L2 Commission: UID ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C2_${order.id}`
                         });
                     }
                 }
 
-                if (sellOrderSnap?.exists()) {
+                if (sellOrderSnap?.exists() && sellOrderRef) {
                     const sData = sellOrderSnap.data();
                     const matches = (sData.matchedBuyOrders || []).map((m: any) => 
                         m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
                     );
                     const isAllDone = matches.every((m: any) => ['completed', 'failed', 'cancelled'].includes(m.status)) && sData.remainingAmount === 0;
                     
-                    transaction.update(sellOrderSnap.ref, { 
+                    transaction.update(sellOrderRef, { 
                         matchedBuyOrders: matches, 
                         status: isAllDone ? 'completed' : 'processing' 
                     });
@@ -264,8 +279,9 @@ export default function AdminDashboardPage() {
                         });
                     }
                 }
-                if (sellerProfileSnap?.exists()) {
-                    transaction.update(sellerProfileSnap.ref, { 
+                
+                if (sellerProfileSnap?.exists() && sellerProfileRef) {
+                    transaction.update(sellerProfileRef, { 
                         holdBalance: Math.max(0, (sellerProfileSnap.data().holdBalance || 0) - purchaseAmount) 
                     });
                 }
@@ -283,9 +299,12 @@ export default function AdminDashboardPage() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
+                
+                let sellOrderRef = null;
                 let sellOrderSnap = null;
                 if (order.matchedSellOrderId) {
-                    sellOrderSnap = await transaction.get(doc(firestore, 'sellOrders', order.matchedSellOrderId));
+                    sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    sellOrderSnap = await transaction.get(sellOrderRef);
                 }
 
                 transaction.update(orderRef, { 
@@ -295,13 +314,13 @@ export default function AdminDashboardPage() {
                     rejectedAt: serverTimestamp() 
                 });
                 
-                if (sellOrderSnap?.exists()) {
+                if (sellOrderSnap?.exists() && sellOrderRef) {
                     const sData = sellOrderSnap.data();
                     const matches = (sData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
                     const restoredAmount = order.baseAmount || order.amount;
                     const newRemaining = (sData.remainingAmount || 0) + restoredAmount;
                     
-                    transaction.update(sellOrderSnap.ref, { 
+                    transaction.update(sellOrderRef, { 
                         remainingAmount: newRemaining, 
                         matchedBuyOrders: matches, 
                         status: 'partially_filled' 
@@ -350,9 +369,8 @@ export default function AdminDashboardPage() {
                     remainingAmount: 0
                 });
 
-                // Deduct remaining from hold
                 transaction.update(userRef, {
-                    holdBalance: Math.max(0, currentHold - settleOrder.remainingAmount)
+                    holdBalance: Math.max(0, currentHold - (settleOrder.remainingAmount || 0))
                 });
             });
             toast({ title: "Withdrawal Completed" });
@@ -515,43 +533,59 @@ export default function AdminDashboardPage() {
                             <div className="grid gap-4">
                                 {filteredWithdrawals.map(order => (
                                     <Card key={order.id} className="border-none shadow-sm rounded-3xl bg-white p-5 group hover:shadow-md transition-all">
-                                        <div className="flex flex-col md:flex-row justify-between gap-4">
-                                            <div className="flex items-start gap-4">
-                                                <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
-                                                    <ArrowDownLeft className="h-6 w-6" />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge variant="outline" className={cn("text-[9px] uppercase font-black", order.status === 'completed' ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600")}>
-                                                            {order.status}
-                                                        </Badge>
-                                                        <span className="text-xs font-black text-slate-800">UID: {order.userNumericId}</span>
+                                        <div className="flex flex-col gap-4">
+                                            <div className="flex flex-col md:flex-row justify-between gap-4">
+                                                <div className="flex items-start gap-4">
+                                                    <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                                                        <ArrowDownLeft className="h-6 w-6" />
                                                     </div>
-                                                    <p className="text-lg font-black text-slate-900">₹{order.amount}</p>
-                                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[10px] space-y-1">
-                                                        <p className="font-black text-slate-400 uppercase">Target Node</p>
-                                                        <p className="font-bold text-slate-800">App: {order.withdrawalMethod?.name}</p>
-                                                        <p className="font-mono text-blue-600 font-black">{order.withdrawalMethod?.upiId || order.withdrawalMethod?.accountNumber}</p>
-                                                        {order.withdrawalMethod?.accountHolderName && <p className="font-bold text-slate-500">Name: {order.withdrawalMethod.accountHolderName}</p>}
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge variant="outline" className={cn("text-[9px] uppercase font-black", order.status === 'completed' ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600")}>
+                                                                {order.status}
+                                                            </Badge>
+                                                            <span className="text-xs font-black text-slate-800">UID: {order.userNumericId}</span>
+                                                        </div>
+                                                        <p className="text-lg font-black text-slate-900">₹{order.amount}</p>
+                                                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[10px] space-y-1">
+                                                            <p className="font-black text-slate-400 uppercase">Target Node</p>
+                                                            <p className="font-bold text-slate-800">App: {order.withdrawalMethod?.name}</p>
+                                                            <p className="font-mono text-blue-600 font-black">{order.withdrawalMethod?.upiId || order.withdrawalMethod?.accountNumber}</p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            <div className="flex items-center gap-2 self-end md:self-center">
-                                                {order.status !== 'completed' && order.status !== 'failed' && (
+                                                <div className="flex items-center gap-2 self-end md:self-center">
                                                     <Button onClick={() => setSettleOrder(order)} className="bg-blue-600 hover:bg-blue-700 h-11 rounded-xl font-black px-6" disabled={isActionLoading}>
                                                         <Banknote className="mr-2 h-4 w-4" /> Settle Payout
                                                     </Button>
-                                                )}
-                                                {order.status === 'completed' && (
-                                                    <div className="flex items-center gap-2 text-green-600 font-black text-[10px] uppercase bg-green-50 px-3 py-2 rounded-xl">
-                                                        <CheckCircle2 className="h-4 w-4" /> Settled: {order.utr}
-                                                    </div>
-                                                )}
+                                                </div>
                                             </div>
+                                            
+                                            {/* P2P MATCHING INFO */}
+                                            {order.matchedBuyOrders && order.matchedBuyOrders.length > 0 && (
+                                                <div className="mt-2 border-t pt-4">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Live P2P Sub-Orders</p>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                        {order.matchedBuyOrders.map((m: any, idx: number) => (
+                                                            <div key={idx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                                                                <div>
+                                                                    <p className="text-[8px] font-black text-slate-400">₹{m.amount}</p>
+                                                                    <p className="text-[10px] font-bold text-slate-700">Buyer ID: {m.buyerId?.slice(-6)}</p>
+                                                                </div>
+                                                                <Badge variant="outline" className={cn("text-[7px] h-4 uppercase", 
+                                                                    m.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'
+                                                                )}>
+                                                                    {m.status?.replace('_', ' ')}
+                                                                </Badge>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </Card>
                                 ))}
-                                {filteredWithdrawals.length === 0 && <div className="text-center py-24 opacity-30 font-black uppercase text-[10px] tracking-widest">No withdrawal requests</div>}
+                                {filteredWithdrawals.length === 0 && <div className="text-center py-24 opacity-30 font-black uppercase text-[10px] tracking-widest">No active withdrawal requests</div>}
                             </div>
                         </TabsContent>
 
