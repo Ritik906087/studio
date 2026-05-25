@@ -25,7 +25,7 @@ const TelegramIcon = () => (
 const MK_LOGO = "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png";
 
 const newbieTasksList = [
-    { id: 'nb_telegram', title: 'Subscribe Official', desc: 'Join telegram channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/+LNEKI3SSaUU2NWE9" },
+    { id: 'nb_telegram', title: 'Subscribe Official', desc: 'Join telegram channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/+oC2LaqBPdrg0NGM1" },
     { id: 'nb_tutorial', title: 'Beginner Guide', desc: 'Watch tutorial video', icon: <PlaySquare className="h-4 w-4 text-blue-500" />, action: "go", href: "/my/tutorial" },
     { id: 'nb_upi', title: 'Payment Binding', desc: 'Link verified wallet', icon: <div className="h-5 w-5 rounded-lg bg-white p-0.5 shadow-sm border border-slate-50 flex items-center justify-center overflow-hidden">{MK_LOGO && <Image src={MK_LOGO} alt="MK" width={18} height={18} />}</div>, action: "go", href: "/my/collection/add" },
     { id: 'nb_purchase', title: 'Trade Milestone', desc: 'Total trade reached 1500', icon: <CircleDollarSign className="h-4 w-4 text-orange-500" />, action: 'go', href: '/buy', goal: 1500 },
