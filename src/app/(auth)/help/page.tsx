@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -16,6 +15,7 @@ import { useLanguage } from '@/context/language-context';
 import { useUser, useFirestore } from '@/firebase';
 import React, { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -349,9 +349,12 @@ export default function HelpPage() {
               </div>
           </div>
         </CardContent>
-        <CardFooter className="flex-col pb-8">
+        <CardFooter className="flex-col pb-8 gap-3">
           <Button onClick={handleStartChat} className="w-full h-14 btn-gradient rounded-2xl font-black text-base shadow-teal-500/20" disabled={isVerifying}>
             {isVerifying ? <Loader size="xs" /> : 'START CHAT'}
+          </Button>
+          <Button asChild variant="outline" className="w-full h-12 rounded-2xl font-black text-xs uppercase border-slate-200 text-sky-600">
+             <Link href="https://t.me/+oC2LaqBPdrg0NGM1" target="_blank">Join Official Channel</Link>
           </Button>
           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-4">Secured by Flex Shield 4.0</p>
         </CardFooter>

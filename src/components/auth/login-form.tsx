@@ -53,14 +53,14 @@ export function LoginForm() {
       const email = `91${values.phone}@lgpay.app`;
       await signInWithEmailAndPassword(auth, email, values.password);
       
-      toast({ title: "Welcome Back!" });
+      // Removed success toast alert
       router.push('/home');
     } catch (error: any) {
       console.error("Login error:", error);
       toast({ 
         variant: "destructive", 
         title: "Login Failed", 
-        description: error.message || "Invalid credentials or verification error." 
+        description: "Invalid login details" 
       });
       setIsLoading(false);
     }
