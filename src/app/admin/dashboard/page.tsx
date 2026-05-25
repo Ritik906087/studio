@@ -10,7 +10,8 @@ import {
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
   Search, ImageIcon, User as UserIcon,
-  Clock, ArrowUpRight, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap, Lock, AlertTriangle
+  Clock, ArrowUpRight, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap, Lock, AlertTriangle,
+  Banknote, History
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -56,13 +57,17 @@ export default function AdminDashboardPage() {
     // Search States
     const [userSearch, setUserSearch] = useState('');
     const [confirmSearch, setConfirmSearch] = useState('');
+    const [withdrawalSearch, setWithdrawalSearch] = useState('');
 
     const [adminId, setAdminId] = useState<string>('SYSTEM');
     const [isActionLoading, setIsActionLoading] = useState(false);
 
-    // Payment Method Form State
+    // Dialog States
     const [isAddPMOpen, setIsAddPMOpen] = useState(false);
     const [newPM, setNewPM] = useState<any>({ type: 'upi', upiId: '', upiHolderName: '', usdtWalletAddress: '', bankName: '', accountNumber: '', ifscCode: '', accountHolderName: '' });
+    
+    const [settleUTR, setSettleUTR] = useState('');
+    const [settleOrder, setSettleOrder] = useState<any>(null);
 
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
@@ -141,6 +146,15 @@ export default function AdminDashboardPage() {
         return pendingBuyOrders.filter(o => o.userNumericId?.includes(s) || o.utr?.toLowerCase().includes(s) || o.amount?.toString().includes(s));
     }, [pendingBuyOrders, confirmSearch]);
 
+    const filteredWithdrawals = useMemo(() => {
+        const s = withdrawalSearch.toLowerCase();
+        return sellOrders.filter(o => 
+            o.userNumericId?.includes(s) || 
+            o.orderId?.toLowerCase().includes(s) || 
+            o.status?.toLowerCase().includes(s)
+        );
+    }, [sellOrders, withdrawalSearch]);
+
     const handleLogout = () => {
         localStorage.removeItem('flex_admin_session');
         router.replace('/admin/key');
@@ -181,7 +195,6 @@ export default function AdminDashboardPage() {
                 const buyerRef = doc(firestore, 'users', order.userId);
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 
-                // --- STEP 1: PERFORM ALL READS FIRST ---
                 const buyerSnap = await transaction.get(buyerRef);
                 if (!buyerSnap.exists()) throw new Error("Buyer profile missing");
                 const buyerData = buyerSnap.data();
@@ -206,16 +219,11 @@ export default function AdminDashboardPage() {
                     sellerProfileSnap = await transaction.get(doc(firestore, 'users', order.sellerId));
                 }
 
-                // --- STEP 2: PERFORM ALL WRITES ---
                 const purchaseAmount = order.baseAmount || order.amount;
 
-                // 1. Update Buyer Balance
                 transaction.update(buyerRef, { balance: (buyerData.balance || 0) + order.amount });
-                
-                // 2. Update Order Status
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
                 
-                // 3. Commissions Logic
                 if (l1Snap?.exists()) {
                     const bonus1 = purchaseAmount * 0.01;
                     transaction.update(l1Snap.ref, { balance: (l1Snap.data().balance || 0) + bonus1 });
@@ -232,20 +240,18 @@ export default function AdminDashboardPage() {
                     }
                 }
 
-                // 4. Update Sell Order Matches & Escrow
                 if (sellOrderSnap?.exists()) {
                     const sData = sellOrderSnap.data();
                     const matches = (sData.matchedBuyOrders || []).map((m: any) => 
                         m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
                     );
-                    const isAllDone = matches.every((m: any) => ['completed', 'failed', 'cancelled'].includes(m.status));
+                    const isAllDone = matches.every((m: any) => ['completed', 'failed', 'cancelled'].includes(m.status)) && sData.remainingAmount === 0;
                     
                     transaction.update(sellOrderSnap.ref, { 
                         matchedBuyOrders: matches, 
                         status: isAllDone ? 'completed' : 'processing' 
                     });
 
-                    // Sync to User Subcollection
                     if (sData.userId) {
                         const userSRef = doc(firestore, 'users', sData.userId, 'sellOrders', sellOrderSnap.id);
                         transaction.update(userSRef, { 
@@ -273,14 +279,11 @@ export default function AdminDashboardPage() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
-                
-                // --- STEP 1: READ FIRST ---
                 let sellOrderSnap = null;
                 if (order.matchedSellOrderId) {
                     sellOrderSnap = await transaction.get(doc(firestore, 'sellOrders', order.matchedSellOrderId));
                 }
 
-                // --- STEP 2: WRITE ---
                 transaction.update(orderRef, { 
                     status: 'failed', 
                     rejectionReason: 'Verification failed or UTR mismatch', 
@@ -317,6 +320,47 @@ export default function AdminDashboardPage() {
         } finally { setIsActionLoading(false); }
     };
 
+    const handleSettleSell = async () => {
+        if (!settleOrder || !settleUTR || !firestore) return;
+        setIsActionLoading(true);
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const sellRef = doc(firestore, 'sellOrders', settleOrder.id);
+                const userSellRef = doc(firestore, 'users', settleOrder.userId, 'sellOrders', settleOrder.id);
+                const userRef = doc(firestore, 'users', settleOrder.userId);
+                
+                const userSnap = await transaction.get(userRef);
+                const currentHold = userSnap.data()?.holdBalance || 0;
+                
+                transaction.update(sellRef, {
+                    status: 'completed',
+                    utr: settleUTR,
+                    completedAt: serverTimestamp(),
+                    remainingAmount: 0
+                });
+                
+                transaction.update(userSellRef, {
+                    status: 'completed',
+                    utr: settleUTR,
+                    completedAt: serverTimestamp(),
+                    remainingAmount: 0
+                });
+
+                // Deduct remaining from hold
+                transaction.update(userRef, {
+                    holdBalance: Math.max(0, currentHold - settleOrder.remainingAmount)
+                });
+            });
+            toast({ title: "Withdrawal Completed" });
+            setSettleOrder(null);
+            setSettleUTR('');
+        } catch (e: any) {
+            toast({ variant: 'destructive', title: "Update Failed", description: e.message });
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
 
     return (
@@ -348,6 +392,7 @@ export default function AdminDashboardPage() {
                           { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
                           { id: 'users', label: 'User Registry', icon: Users },
                           { id: 'confirm', label: 'Confirmation', icon: CheckCircle2 },
+                          { id: 'withdrawals', label: 'Withdrawals', icon: Landmark },
                           { id: 'server', label: 'Payment Nodes', icon: Server },
                         ].map(item => (
                           <button 
@@ -449,6 +494,56 @@ export default function AdminDashboardPage() {
                             </div>
                         </TabsContent>
 
+                        <TabsContent value="withdrawals" className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <Input placeholder="Search UID, ID..." className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" value={withdrawalSearch} onChange={e => setWithdrawalSearch(e.target.value)} />
+                                </div>
+                            </div>
+                            <div className="grid gap-4">
+                                {filteredWithdrawals.map(order => (
+                                    <Card key={order.id} className="border-none shadow-sm rounded-3xl bg-white p-5 group hover:shadow-md transition-all">
+                                        <div className="flex flex-col md:flex-row justify-between gap-4">
+                                            <div className="flex items-start gap-4">
+                                                <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                                                    <ArrowDownLeft className="h-6 w-6" />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline" className={cn("text-[9px] uppercase font-black", order.status === 'completed' ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600")}>
+                                                            {order.status}
+                                                        </Badge>
+                                                        <span className="text-xs font-black text-slate-800">UID: {order.userNumericId}</span>
+                                                    </div>
+                                                    <p className="text-lg font-black text-slate-900">₹{order.amount}</p>
+                                                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[10px] space-y-1">
+                                                        <p className="font-black text-slate-400 uppercase">Target Node</p>
+                                                        <p className="font-bold text-slate-800">App: {order.withdrawalMethod?.name}</p>
+                                                        <p className="font-mono text-blue-600 font-black">{order.withdrawalMethod?.upiId || order.withdrawalMethod?.accountNumber}</p>
+                                                        {order.withdrawalMethod?.accountHolderName && <p className="font-bold text-slate-500">Name: {order.withdrawalMethod.accountHolderName}</p>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 self-end md:self-center">
+                                                {order.status !== 'completed' && order.status !== 'failed' && (
+                                                    <Button onClick={() => setSettleOrder(order)} className="bg-blue-600 hover:bg-blue-700 h-11 rounded-xl font-black px-6" disabled={isActionLoading}>
+                                                        <Banknote className="mr-2 h-4 w-4" /> Settle Payout
+                                                    </Button>
+                                                )}
+                                                {order.status === 'completed' && (
+                                                    <div className="flex items-center gap-2 text-green-600 font-black text-[10px] uppercase bg-green-50 px-3 py-2 rounded-xl">
+                                                        <CheckCircle2 className="h-4 w-4" /> Settled: {order.utr}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </Card>
+                                ))}
+                                {filteredWithdrawals.length === 0 && <div className="text-center py-24 opacity-30 font-black uppercase text-[10px] tracking-widest">No withdrawal requests</div>}
+                            </div>
+                        </TabsContent>
+
                         <TabsContent value="server" className="space-y-4">
                             <div className="flex justify-between items-center mb-6">
                                 <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">Active Payment Nodes</h2>
@@ -490,6 +585,31 @@ export default function AdminDashboardPage() {
                     </Tabs>
                 </main>
             </div>
+
+            {/* Settle Payout Dialog */}
+            <Dialog open={!!settleOrder} onOpenChange={(o) => !o && setSettleOrder(null)}>
+                <DialogContent className="rounded-[32px] max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase tracking-tight">Complete Settlement</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400">Mark withdrawal as paid</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-1 text-center">
+                            <p className="text-[9px] font-black text-blue-400 uppercase">Payout Amount</p>
+                            <p className="text-2xl font-black text-blue-700 tracking-tighter">₹{settleOrder?.amount}</p>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400">Payment Reference (UTR)</Label>
+                            <Input value={settleUTR} onChange={e => setSettleUTR(e.target.value)} className="h-12 rounded-xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black" placeholder="12-digit UTR" />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={handleSettleSell} className="w-full h-12 btn-gradient rounded-xl font-black uppercase text-[10px] tracking-widest" disabled={isActionLoading || !settleUTR}>
+                            {isActionLoading ? "Processing..." : "Confirm Settlement"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={isAddPMOpen} onOpenChange={setIsAddPMOpen}>
                 <DialogContent className="rounded-[32px] max-w-sm">
