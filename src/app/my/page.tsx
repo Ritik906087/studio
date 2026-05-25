@@ -138,11 +138,11 @@ export default function MyPage() {
         </div>
 
         <div className="bg-white shadow-sm rounded-[20px] overflow-hidden border border-blue-50 divide-y divide-slate-50">
-          <ServiceTile icon={Send} title="Help Center" subtitle="24/7 Telegram Support" href="/help" iconColor="bg-sky-50 text-sky-500" />
-          <ServiceTile icon={HelpCircle} title="FAQ & Guide" subtitle="How to use Flex Pay" href="/my/faq" iconColor="bg-teal-50 text-teal-600" />
           <ServiceTile icon={CreditCard} title="Account" subtitle="Linked Payment IDs" href="/my/collection" iconColor="bg-blue-50 text-blue-500" />
+          <ServiceTile icon={Trophy} title="Newbie Reward" subtitle="Newbie starter rewards" href="/my/new-user-rewards" iconColor="bg-orange-50 text-orange-500" />
           <ServiceTile icon={KeyRound} title="Security" subtitle="Update Login Password" href="/my/change-password" iconColor="bg-sky-50 text-sky-600" />
-          <ServiceTile icon={Trophy} title="Missions" subtitle="Newbie starter rewards" href="/my/new-user-rewards" iconColor="bg-orange-50 text-orange-500" />
+          <ServiceTile icon={HelpCircle} title="FAQ & Guide" subtitle="How to use Flex Pay" href="/my/faq" iconColor="bg-teal-50 text-teal-600" />
+          <ServiceTile icon={Send} title="Help Center" subtitle="24/7 Telegram Support" href="/help" iconColor="bg-sky-50 text-sky-500" />
         </div>
 
         <div className="pt-4 pb-12">
