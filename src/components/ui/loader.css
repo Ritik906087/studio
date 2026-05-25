@@ -1,11 +1,13 @@
+
+/* Optimized Keyframes with Will-Change for Hardware Acceleration */
 @keyframes breathing {
   0%, 100% {
     transform: scale(1);
     filter: brightness(1);
   }
   50% {
-    transform: scale(1.05);
-    filter: brightness(1.1);
+    transform: scale(1.03);
+    filter: brightness(1.05);
   }
 }
 
@@ -15,14 +17,14 @@
     transform: scale(1);
   }
   50% {
-    opacity: 0.3;
-    transform: scale(1.2);
+    opacity: 0.25;
+    transform: scale(1.15);
   }
 }
 
 @keyframes scanner {
   0% {
-    top: -5%;
+    transform: translateY(-10%);
     opacity: 0;
   }
   10% {
@@ -32,7 +34,7 @@
     opacity: 1;
   }
   100% {
-    top: 105%;
+    transform: translateY(110%);
     opacity: 0;
   }
 }
@@ -47,17 +49,21 @@
 }
 
 .animate-breathing {
-  animation: breathing 3s ease-in-out infinite;
+  animation: breathing 2.5s ease-in-out infinite;
+  will-change: transform;
 }
 
 .animate-pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
+  animation: pulse-glow 2.5s ease-in-out infinite;
+  will-change: opacity, transform;
 }
 
 .animate-scanner {
-  animation: scanner 2.5s linear infinite;
+  animation: scanner 2.2s linear infinite;
+  will-change: transform;
 }
 
 .animate-progress-line {
-  animation: progress-line 1.5s ease-in-out infinite;
+  animation: progress-line 1.2s ease-in-out infinite;
+  will-change: transform;
 }

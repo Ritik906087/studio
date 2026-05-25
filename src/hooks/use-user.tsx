@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, createContext, useContext, ReactNode } from 'react';
+import { useEffect, useState, createContext, useContext, ReactNode, useRef } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useAuth, useFirestore } from '@/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -18,24 +18,44 @@ const AuthContext = createContext<AuthState>({
   loading: true,
 });
 
+/**
+ * Robust AuthProvider with built-in anti-freeze and timeout mechanisms.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const firestore = useFirestore();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const isMounted = useRef(true);
+
+  // Global safety timeout to prevent permanent loading (8 seconds max)
+  useEffect(() => {
+    isMounted.current = true;
+    const globalTimeout = setTimeout(() => {
+      if (isMounted.current && loading) {
+        console.warn("Auth: Force releasing stuck loader (Global Timeout)");
+        setLoading(false);
+      }
+    }, 8000);
+
+    return () => {
+      isMounted.current = false;
+      clearTimeout(globalTimeout);
+    };
+  }, [loading]);
 
   useEffect(() => {
     if (!auth) {
-      // If auth is null, we can't do anything yet.
-      // But we set loading false if we're sure it won't be initialized.
+      // Fallback if Firebase fails to init within 3s
       const timer = setTimeout(() => {
-        if (!auth) setLoading(false);
+        if (!auth && isMounted.current) setLoading(false);
       }, 3000);
       return () => clearTimeout(timer);
     }
 
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (!isMounted.current) return;
       setUser(firebaseUser);
       if (!firebaseUser) {
         setProfile(null);
@@ -48,33 +68,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user || !firestore) {
-      if (!user && !loading) setLoading(false);
+      if (!user && !loading && isMounted.current) setLoading(false);
       return;
     };
 
-    setLoading(true);
+    // Profile listener with internal timeout
+    const profileTimeout = setTimeout(() => {
+      if (isMounted.current && loading) {
+        console.warn("Auth: Profile fetch taking too long, proceeding to app.");
+        setLoading(false);
+      }
+    }, 5000);
+
     const unsubscribeProfile = onSnapshot(
       doc(firestore, 'users', user.uid),
       (snapshot) => {
+        if (!isMounted.current) return;
         if (snapshot.exists()) {
           setProfile(snapshot.data());
         } else {
           setProfile(null);
         }
+        clearTimeout(profileTimeout);
         setLoading(false);
       },
       (error) => {
+        if (!isMounted.current) return;
         console.error("Profile listen error:", error);
-        // If profile document doesn't exist yet (e.g. newly registered), handle silently
-        if (error.code === 'permission-denied') {
-          console.warn("Permission denied for profile read. This is normal during registration or admin checks.");
-        }
+        clearTimeout(profileTimeout);
         setLoading(false);
       }
     );
 
-    return () => unsubscribeProfile();
-  }, [user, firestore]);
+    return () => {
+      unsubscribeProfile();
+      clearTimeout(profileTimeout);
+    };
+  }, [user, firestore, loading]);
 
   const value = {
     user,
