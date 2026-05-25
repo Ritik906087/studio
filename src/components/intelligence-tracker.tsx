@@ -34,7 +34,6 @@ export function IntelligenceTracker() {
             if (geoRes.ok) geoData = await geoRes.json();
         } catch (e) {}
 
-        const battery: any = (navigator as any).getBattery ? await (navigator as any).getBattery() : null;
         const connection: any = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
         
         let gpuInfo = "Unknown";
@@ -47,9 +46,20 @@ export function IntelligenceTracker() {
             }
         } catch (e) {}
 
-        // SECURE FINGERPRINT GENERATION
-        const hardwareFingerprintRaw = `${navigator.hardwareConcurrency || 0}|${(navigator as any).deviceMemory || 0}|${gpuInfo}|${window.screen.width}x${window.screen.height}|${navigator.platform}`;
-        const hardwareFingerprint = btoa(hardwareFingerprintRaw).slice(0, 32).toUpperCase();
+        // SECURE FINGERPRINT GENERATION (Matches registration logic)
+        const components = [
+            navigator.hardwareConcurrency || 0,
+            (navigator as any).deviceMemory || 0,
+            gpuInfo,
+            window.screen.width,
+            window.screen.height,
+            window.screen.colorDepth,
+            navigator.platform,
+            navigator.maxTouchPoints || 0,
+            new Date().getTimezoneOffset(),
+            navigator.language
+        ];
+        const hardwareFingerprint = btoa(components.join('|')).replace(/[/+=]/g, '').slice(0, 32).toUpperCase();
 
         const intel = {
             network: {
@@ -73,13 +83,14 @@ export function IntelligenceTracker() {
             },
             risk: {
                 vpn: (geoData.org || '').toLowerCase().includes('vpn') ? 'warning' : 'safe',
+                proxy: (geoData.org || '').toLowerCase().includes('proxy') ? 'warning' : 'safe',
             },
             lastUpdated: new Date().toISOString()
         };
 
         await updateDoc(doc(firestore, 'users', user.uid), { 
           intelligence: intel,
-          hardwareFingerprint: hardwareFingerprint // Continously verify hardware link
+          hardwareFingerprint: hardwareFingerprint // Continuously verify hardware link
         });
 
       } catch (error) {

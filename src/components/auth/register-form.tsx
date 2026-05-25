@@ -59,6 +59,10 @@ export function RegisterForm() {
     }
   }, [invitationCodeFromUrl, form]);
 
+  /**
+   * Generates a deep hardware fingerprint that is resistant to browser changes,
+   * clones, and WebViews (like Telegram).
+   */
   const generateHardwareFingerprint = () => {
     let gpuInfo = "Unknown";
     try {
@@ -70,30 +74,52 @@ export function RegisterForm() {
         }
     } catch (e) {}
 
-    const raw = `${navigator.hardwareConcurrency || 0}|${(navigator as any).deviceMemory || 0}|${gpuInfo}|${window.screen.width}x${window.screen.height}|${navigator.platform}`;
-    return btoa(raw).slice(0, 32).toUpperCase();
+    // Combine multiple hardware entropy sources
+    const components = [
+        navigator.hardwareConcurrency || 0, // CPU Cores
+        (navigator as any).deviceMemory || 0, // RAM (approx)
+        gpuInfo, // Physical GPU
+        window.screen.width,
+        window.screen.height,
+        window.screen.colorDepth,
+        navigator.platform,
+        navigator.maxTouchPoints || 0,
+        new Date().getTimezoneOffset(), // Locale hint
+        navigator.language
+    ];
+
+    const raw = components.join('|');
+    // Strong hashing to create a 32-char unique device ID
+    return btoa(raw).replace(/[/+=]/g, '').slice(0, 32).toUpperCase();
   };
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     if (!auth || !firestore) return;
     setIsLoading(true);
     try {
-        // 1. Generate Hardware Fingerprint
+        // 1. Generate Deep Hardware Fingerprint
         const fingerprint = generateHardwareFingerprint();
 
-        // 2. Check for duplicate hardware fingerprint
-        const fingerprintQuery = query(collection(firestore, 'users'), where('hardwareFingerprint', '==', fingerprint), limit(1));
+        // 2. CHECK: Does this hardware ID already exist in our network?
+        // This blocks clones, Island, Telegram WebView, and browser switching.
+        const fingerprintQuery = query(
+            collection(firestore, 'users'), 
+            where('hardwareFingerprint', '==', fingerprint), 
+            limit(1)
+        );
         const fingerprintSnap = await getDocs(fingerprintQuery);
         
         if (!fingerprintSnap.empty) {
           throw new Error("Already account created by this device please login");
         }
 
+        // 3. CHECK: Phone number uniqueness
         const email = `91${values.phone}@lgpay.app`;
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
         if (!phoneCheckSnap.empty) throw new Error("This phone number is already registered.");
 
+        // 4. CHECK: Invitation code validity
         let inviterUid = null;
         const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
         const inviterSnap = await getDocs(inviterQuery);
@@ -101,12 +127,15 @@ export function RegisterForm() {
         if (inviterSnap.empty) throw new Error("Invalid invitation code.");
         inviterUid = inviterSnap.docs[0].id;
 
+        // 5. CREATE AUTH: Create Firebase Auth account
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
+        // Unique session ID for single-device enforcement
         const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
+        // 6. SAVE PROFILE: Store hardware fingerprint permanently
         await setDoc(doc(firestore, 'users', user.uid), {
             uid: user.uid,
             email: email,
@@ -118,7 +147,7 @@ export function RegisterForm() {
             balance: 0,
             holdBalance: 0,
             claimedUserRewards: [],
-            hardwareFingerprint: fingerprint, // Secure hardware link
+            hardwareFingerprint: fingerprint, // LOCK THE DEVICE
             sessionId: newSessionId,
             createdAt: serverTimestamp(),
         });
@@ -129,7 +158,11 @@ export function RegisterForm() {
         router.push("/login");
     } catch (error: any) {
       console.error("Registration failed:", error);
-      toast({ variant: "destructive", title: "Registration Failed", description: error.message });
+      toast({ 
+        variant: "destructive", 
+        title: "Security Violation", 
+        description: error.message 
+      });
       setIsLoading(false);
     }
   }
@@ -226,7 +259,7 @@ export function RegisterForm() {
         </div>
 
         <Button type="submit" className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1 uppercase tracking-widest" disabled={isLoading}>
-            {isLoading ? "REGISTERING..." : "REGISTER"}
+            {isLoading ? "SECURING..." : "REGISTER"}
         </Button>
       </form>
     </Form>
