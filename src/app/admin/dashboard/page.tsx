@@ -160,6 +160,7 @@ export default function AdminDashboardPage() {
         } catch (e) {
             toast({ variant: 'destructive', title: "Failed to add" });
         } finally {
+            setIsAddPMOpen(false);
             setIsActionLoading(false);
         }
     };
@@ -180,61 +181,89 @@ export default function AdminDashboardPage() {
                 const buyerRef = doc(firestore, 'users', order.userId);
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 
+                // --- STEP 1: PERFORM ALL READS FIRST ---
                 const buyerSnap = await transaction.get(buyerRef);
-                if (!buyerSnap.exists()) throw new Error("Buyer missing");
-
+                if (!buyerSnap.exists()) throw new Error("Buyer profile missing");
                 const buyerData = buyerSnap.data();
-                const purchaseAmount = order.baseAmount || order.amount;
 
-                transaction.update(buyerRef, { balance: (buyerData.balance || 0) + order.amount });
-                transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
-                
-                // Commision Logic (L1: 1%, L2: 0.8%)
+                let l1Snap = null;
+                let l2Snap = null;
                 if (buyerData.inviterUid) {
                     const l1Ref = doc(firestore, 'users', buyerData.inviterUid);
-                    const l1Snap = await transaction.get(l1Ref);
-                    if (l1Snap.exists()) {
-                        const bonus = purchaseAmount * 0.01;
-                        transaction.update(l1Ref, { balance: (l1Snap.data().balance || 0) + bonus });
-                        transaction.set(doc(collection(firestore, 'users', l1Ref.id, 'transactions')), {
-                            userId: l1Ref.id, amount: bonus, type: 'team_bonus', description: `L1 Commission: UID ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C1_${order.id}`
-                        });
-
-                        if (l1Snap.data().inviterUid) {
-                            const l2Ref = doc(firestore, 'users', l1Snap.data().inviterUid);
-                            const l2Snap = await transaction.get(l2Ref);
-                            if (l2Snap.exists()) {
-                                const b2 = purchaseAmount * 0.008;
-                                transaction.update(l2Ref, { balance: (l2Snap.data().balance || 0) + b2 });
-                                transaction.set(doc(collection(firestore, 'users', l2Ref.id, 'transactions')), {
-                                    userId: l2Ref.id, amount: b2, type: 'team_bonus', description: `L2 Commission: UID ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C2_${order.id}`
-                                });
-                            }
-                        }
+                    l1Snap = await transaction.get(l1Ref);
+                    if (l1Snap.exists() && l1Snap.data().inviterUid) {
+                        const l2Ref = doc(firestore, 'users', l1Snap.data().inviterUid);
+                        l2Snap = await transaction.get(l2Ref);
                     }
                 }
 
-                if (order.matchedSellOrderId && order.sellerId && !['ADMIN', 'SYSTEM_VAULT'].includes(order.sellerId)) {
-                    const sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    const sellerProfileRef = doc(firestore, 'users', order.sellerId);
-                    const sellSnap = await transaction.get(sellOrderRef);
-                    const sellerSnap = await transaction.get(sellerProfileRef);
+                let sellOrderSnap = null;
+                let sellerProfileSnap = null;
+                if (order.matchedSellOrderId) {
+                    sellOrderSnap = await transaction.get(doc(firestore, 'sellOrders', order.matchedSellOrderId));
+                }
+                if (order.sellerId && !['ADMIN', 'SYSTEM_VAULT'].includes(order.sellerId)) {
+                    sellerProfileSnap = await transaction.get(doc(firestore, 'users', order.sellerId));
+                }
 
-                    if (sellSnap.exists()) {
-                        const matches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => 
-                            m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
-                        );
-                        transaction.update(sellOrderRef, { matchedBuyOrders: matches, status: matches.every((m: any) => m.status === 'completed' || m.status === 'failed') ? 'completed' : 'processing' });
+                // --- STEP 2: PERFORM ALL WRITES ---
+                const purchaseAmount = order.baseAmount || order.amount;
+
+                // 1. Update Buyer Balance
+                transaction.update(buyerRef, { balance: (buyerData.balance || 0) + order.amount });
+                
+                // 2. Update Order Status
+                transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
+                
+                // 3. Commissions Logic
+                if (l1Snap?.exists()) {
+                    const bonus1 = purchaseAmount * 0.01;
+                    transaction.update(l1Snap.ref, { balance: (l1Snap.data().balance || 0) + bonus1 });
+                    transaction.set(doc(collection(firestore, 'users', l1Snap.id, 'transactions')), {
+                        userId: l1Snap.id, amount: bonus1, type: 'team_bonus', description: `L1 Commission: UID ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C1_${order.id}`
+                    });
+
+                    if (l2Snap?.exists()) {
+                        const bonus2 = purchaseAmount * 0.008;
+                        transaction.update(l2Snap.ref, { balance: (l2Snap.data().balance || 0) + bonus2 });
+                        transaction.set(doc(collection(firestore, 'users', l2Snap.id, 'transactions')), {
+                            userId: l2Snap.id, amount: bonus2, type: 'team_bonus', description: `L2 Commission: UID ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C2_${order.id}`
+                        });
                     }
-                    if (sellerSnap.exists()) {
-                        transaction.update(sellerProfileRef, { holdBalance: Math.max(0, (sellerSnap.data().holdBalance || 0) - purchaseAmount) });
+                }
+
+                // 4. Update Sell Order Matches & Escrow
+                if (sellOrderSnap?.exists()) {
+                    const sData = sellOrderSnap.data();
+                    const matches = (sData.matchedBuyOrders || []).map((m: any) => 
+                        m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
+                    );
+                    const isAllDone = matches.every((m: any) => ['completed', 'failed', 'cancelled'].includes(m.status));
+                    
+                    transaction.update(sellOrderSnap.ref, { 
+                        matchedBuyOrders: matches, 
+                        status: isAllDone ? 'completed' : 'processing' 
+                    });
+
+                    // Sync to User Subcollection
+                    if (sData.userId) {
+                        const userSRef = doc(firestore, 'users', sData.userId, 'sellOrders', sellOrderSnap.id);
+                        transaction.update(userSRef, { 
+                            matchedBuyOrders: matches, 
+                            status: isAllDone ? 'completed' : 'processing' 
+                        });
                     }
+                }
+                if (sellerProfileSnap?.exists()) {
+                    transaction.update(sellerProfileSnap.ref, { 
+                        holdBalance: Math.max(0, (sellerProfileSnap.data().holdBalance || 0) - purchaseAmount) 
+                    });
                 }
             });
-            toast({ title: "Approved" });
+            toast({ title: "Approved Successfully" });
             fetchConfirmations();
         } catch (e: any) { 
-            toast({ variant: "destructive", title: "Failed", description: e.message }); 
+            toast({ variant: "destructive", title: "Approval Failed", description: e.message }); 
         } finally { setIsActionLoading(false); }
     };
 
@@ -244,25 +273,48 @@ export default function AdminDashboardPage() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
-                transaction.update(orderRef, { status: 'failed', rejectionReason: 'Verification failed or UTR mismatch', rejectedBy: adminId, rejectedAt: serverTimestamp() });
                 
-                if (order.matchedSellOrderId && order.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(order.sellerId)) {
-                    const sRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    const userSRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
-                    const sSnap = await transaction.get(sRef);
-                    if (sSnap.exists()) {
-                        const matches = (sSnap.data().matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
-                        const restoredAmount = order.baseAmount || order.amount;
-                        const newRemaining = (sSnap.data().remainingAmount || 0) + restoredAmount;
-                        
-                        transaction.update(sRef, { remainingAmount: newRemaining, matchedBuyOrders: matches, status: 'partially_filled' });
-                        transaction.update(userSRef, { remainingAmount: newRemaining, matchedBuyOrders: matches, status: 'partially_filled' });
+                // --- STEP 1: READ FIRST ---
+                let sellOrderSnap = null;
+                if (order.matchedSellOrderId) {
+                    sellOrderSnap = await transaction.get(doc(firestore, 'sellOrders', order.matchedSellOrderId));
+                }
+
+                // --- STEP 2: WRITE ---
+                transaction.update(orderRef, { 
+                    status: 'failed', 
+                    rejectionReason: 'Verification failed or UTR mismatch', 
+                    rejectedBy: adminId, 
+                    rejectedAt: serverTimestamp() 
+                });
+                
+                if (sellOrderSnap?.exists()) {
+                    const sData = sellOrderSnap.data();
+                    const matches = (sData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
+                    const restoredAmount = order.baseAmount || order.amount;
+                    const newRemaining = (sData.remainingAmount || 0) + restoredAmount;
+                    
+                    transaction.update(sellOrderSnap.ref, { 
+                        remainingAmount: newRemaining, 
+                        matchedBuyOrders: matches, 
+                        status: 'partially_filled' 
+                    });
+
+                    if (sData.userId) {
+                        const userSRef = doc(firestore, 'users', sData.userId, 'sellOrders', sellOrderSnap.id);
+                        transaction.update(userSRef, { 
+                            remainingAmount: newRemaining, 
+                            matchedBuyOrders: matches, 
+                            status: 'partially_filled' 
+                        });
                     }
                 }
             });
-            toast({ title: "Rejected" });
+            toast({ title: "Order Rejected" });
             fetchConfirmations();
-        } catch (e) { toast({ variant: "destructive", title: "Action Failed" }); } finally { setIsActionLoading(false); }
+        } catch (e: any) { 
+            toast({ variant: "destructive", title: "Action Failed", description: e.message }); 
+        } finally { setIsActionLoading(false); }
     };
 
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
@@ -387,8 +439,8 @@ export default function AdminDashboardPage() {
                                                     <DialogTrigger asChild><Button variant="outline" className="rounded-xl h-11"><ImageIcon className="mr-2 h-4 w-4" /> Proof</Button></DialogTrigger>
                                                     <DialogContent className="max-w-md rounded-3xl"><div className="relative aspect-auto max-h-[70vh] overflow-hidden rounded-xl"><img src={order.screenshotURL} alt="Proof" className="w-full h-full object-contain" /></div></DialogContent>
                                                 </Dialog>
-                                                <Button onClick={() => handleApproveBuy(order)} className="bg-green-600 hover:bg-green-700 h-11 rounded-xl font-black px-6"><Check className="mr-2 h-4 w-4" /> Approve</Button>
-                                                <Button onClick={() => handleRejectBuy(order)} variant="destructive" className="h-11 rounded-xl font-black px-6"><X className="mr-2 h-4 w-4" /> Reject</Button>
+                                                <Button onClick={() => handleApproveBuy(order)} className="bg-green-600 hover:bg-green-700 h-11 rounded-xl font-black px-6" disabled={isActionLoading}><Check className="mr-2 h-4 w-4" /> Approve</Button>
+                                                <Button onClick={() => handleRejectBuy(order)} variant="destructive" className="h-11 rounded-xl font-black px-6" disabled={isActionLoading}><X className="mr-2 h-4 w-4" /> Reject</Button>
                                             </div>
                                         </div>
                                     </Card>
