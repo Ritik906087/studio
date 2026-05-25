@@ -32,17 +32,27 @@ import {
   Landmark,
   BadgeCheck,
   MessageSquare,
-  Key
+  Key,
+  Edit3
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader } from '@/components/ui/loader';
 import { useFirestore } from '@/firebase';
-import { doc, onSnapshot, collection, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, collection, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
@@ -55,7 +65,7 @@ const providerLogos: Record<string, string> = {
   Airtel: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(2).png",
 };
 
-const DataRow = ({ icon: Icon, label, value, colorClass = "text-slate-400", isCopyable = false, isMono = false, sub }: any) => {
+const DataRow = ({ icon: Icon, label, value, colorClass = "text-slate-400", isCopyable = false, isMono = false, sub, onEdit }: any) => {
     const { toast } = useToast();
     const handleCopy = () => {
         if (!isCopyable || !value) return;
@@ -81,11 +91,18 @@ const DataRow = ({ icon: Icon, label, value, colorClass = "text-slate-400", isCo
                 )} title={value}>
                     {value || 'N/A'}
                 </span>
-                {isCopyable && value && (
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300" onClick={handleCopy}>
-                        <Copy className="h-3 w-3" />
-                    </Button>
-                )}
+                <div className="flex items-center gap-1">
+                    {onEdit && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500" onClick={onEdit}>
+                            <Edit3 className="h-3 w-3" />
+                        </Button>
+                    )}
+                    {isCopyable && value && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-300" onClick={handleCopy}>
+                            <Copy className="h-3 w-3" />
+                        </Button>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -119,6 +136,14 @@ export default function UserDetailsPage() {
     const [amount, setAmount] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
+
+    // Edit states
+    const [isUidEditOpen, setIsUidEditOpen] = useState(false);
+    const [newUid, setNewUid] = useState('');
+    
+    const [editingMethodIndex, setEditingMethodIndex] = useState<number | null>(null);
+    const [editMethodData, setEditMethodData] = useState<any>(null);
+    const [isEditMethodOpen, setIsEditMethodOpen] = useState(false);
 
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
@@ -168,6 +193,61 @@ export default function UserDetailsPage() {
             toast({ title: "Success" });
             setAmount('');
         } catch (e: any) { toast({ variant: 'destructive', title: "Error" }); } finally { setIsUpdating(false); }
+    };
+
+    const handleUpdateUid = async () => {
+        if (!newUid || !firestore || !user) return;
+        setIsUpdating(true);
+        try {
+            await updateDoc(doc(firestore, 'users', user.id), {
+                numericId: newUid
+            });
+            toast({ title: "UID Updated" });
+            setIsUidEditOpen(false);
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Update Failed" });
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
+    const handleOpenEditMethod = (method: any, index: number) => {
+        setEditingMethodIndex(index);
+        setEditMethodData({ ...method });
+        setIsEditMethodOpen(true);
+    };
+
+    const handleSaveMethodEdit = async () => {
+        if (editingMethodIndex === null || !editMethodData || !firestore || !user) return;
+        setIsUpdating(true);
+        try {
+            const userRef = doc(firestore, 'users', user.id);
+            const updatedMethods = [...(user.paymentMethods || [])];
+            
+            // Sync upiIds array for uniqueness checks
+            let upiIds = [...(user.upiIds || [])];
+            const oldUpiId = updatedMethods[editingMethodIndex].upiId?.toLowerCase();
+            const newUpiId = editMethodData.upiId?.toLowerCase();
+
+            if (oldUpiId !== newUpiId) {
+                upiIds = upiIds.filter(id => id !== oldUpiId);
+                if (newUpiId) upiIds.push(newUpiId);
+            }
+
+            updatedMethods[editingMethodIndex] = { ...editMethodData };
+            
+            await updateDoc(userRef, { 
+                paymentMethods: updatedMethods,
+                upiIds: upiIds
+            });
+            
+            toast({ title: "Payment Method Updated" });
+            setIsEditMethodOpen(false);
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Update Failed" });
+        } finally {
+            setIsUpdating(false);
+        }
     };
 
     if (!isAdmin) return null;
@@ -307,7 +387,15 @@ export default function UserDetailsPage() {
                                 </div>
                             </div>
                             <DataRow icon={Smartphone} label="Mobile" value={`+91 ${user.phoneNumber}`} colorClass="text-blue-500" isCopyable />
-                            <DataRow icon={Zap} label="UID" value={user.numericId} colorClass="text-amber-500" isCopyable isMono />
+                            <DataRow 
+                                icon={Zap} 
+                                label="UID" 
+                                value={user.numericId} 
+                                colorClass="text-amber-500" 
+                                isCopyable 
+                                isMono 
+                                onEdit={() => { setNewUid(user.numericId); setIsUidEditOpen(true); }}
+                            />
                             <DataRow icon={Clock} label="Joined" value={user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleString() : 'N/A'} colorClass="text-slate-400" />
                         </CardContent>
                     </Card>
@@ -320,7 +408,15 @@ export default function UserDetailsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {paymentMethods.length > 0 ? (
                             paymentMethods.map((method: any, idx: number) => (
-                                <Card key={idx} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden group">
+                                <Card key={idx} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden group relative">
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="absolute top-4 right-4 h-8 px-2 rounded-lg bg-slate-50 text-[10px] font-black text-blue-600 hover:bg-blue-50"
+                                        onClick={() => handleOpenEditMethod(method, idx)}
+                                    >
+                                        <Edit3 className="h-3 w-3 mr-1" /> Admin Edit
+                                    </Button>
                                     <CardHeader className="p-0">
                                         <div className="h-2 w-full" style={{ backgroundColor: providerLogos[method.name] ? 'transparent' : '#cbd5e1' }} />
                                     </CardHeader>
@@ -352,10 +448,6 @@ export default function UserDetailsPage() {
                                             <DataRow icon={User} label="Bank Record Name" value={method.verifiedName} colorClass="text-teal-500" />
                                             <DataRow icon={Landmark} label="PSP Bank" value={method.pspBank} colorClass="text-amber-500" />
                                             <DataRow icon={Smartphone} label="TPAP Engine" value={method.tpap} colorClass="text-blue-500" sub="NPCI Gate" />
-                                            <DataRow icon={Key} label="External UserID" value={method.externalUserId} colorClass="text-indigo-500" isMono isCopyable />
-                                            <DataRow icon={User} label="Handle Name" value={method.handleName} colorClass="text-pink-500" />
-                                            <DataRow icon={MessageSquare} label="Verification Msg" value={method.apiMessage} colorClass="text-slate-400" />
-                                            <DataRow icon={BadgeCheck} label="VPA Valid" value={method.isVpaVerified ? 'YES' : 'NO'} colorClass={method.isVpaVerified ? 'text-green-500' : 'text-red-500'} />
                                             <DataRow icon={Clock} label="Link Date" value={method.linkedAt ? new Date(method.linkedAt).toLocaleString() : 'N/A'} colorClass="text-slate-400" />
                                         </div>
                                     </CardContent>
@@ -370,6 +462,74 @@ export default function UserDetailsPage() {
                     </div>
                 </div>
             </main>
+
+            {/* UID Edit Dialog */}
+            <Dialog open={isUidEditOpen} onOpenChange={setIsUidEditOpen}>
+                <DialogContent className="rounded-[32px] max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase tracking-tight">Modify Identity</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400">Update User's Numeric ID</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400 ml-1">New 8-Digit UID</Label>
+                            <Input 
+                                value={newUid} 
+                                onChange={e => setNewUid(e.target.value.replace(/\D/g, '').slice(0, 8))} 
+                                className="h-12 rounded-xl bg-slate-50 border-none ring-1 ring-slate-100 focus-visible:ring-primary/40 font-mono font-black"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter className="flex-row gap-3">
+                        <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px] uppercase" onClick={() => setIsUidEditOpen(false)}>Cancel</Button>
+                        <Button className="flex-1 btn-gradient rounded-xl font-black text-[10px] uppercase shadow-blue-500/20" onClick={handleUpdateUid} disabled={isUpdating}>
+                            {isUpdating ? "UPDATING..." : "SAVE UID"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Payment Method Edit Dialog */}
+            <Dialog open={isEditMethodOpen} onOpenChange={setIsEditMethodOpen}>
+                <DialogContent className="rounded-[32px] max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase tracking-tight">Edit Payment Account</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400">Manual override for user withdrawal channel</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400 ml-1">UPI ID / Identifier</Label>
+                            <Input 
+                                value={editMethodData?.upiId || ''} 
+                                onChange={e => setEditMethodData({...editMethodData, upiId: e.target.value})} 
+                                className="h-12 rounded-xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Verified Holder Name</Label>
+                            <Input 
+                                value={editMethodData?.verifiedName || ''} 
+                                onChange={e => setEditMethodData({...editMethodData, verifiedName: e.target.value})} 
+                                className="h-12 rounded-xl bg-slate-50 border-none ring-1 ring-slate-100 font-black uppercase"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Bank Name / Provider</Label>
+                            <Input 
+                                value={editMethodData?.pspBank || ''} 
+                                onChange={e => setEditMethodData({...editMethodData, pspBank: e.target.value})} 
+                                className="h-12 rounded-xl bg-slate-50 border-none ring-1 ring-slate-100 font-bold"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter className="flex-row gap-3">
+                        <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px] uppercase" onClick={() => setIsEditMethodOpen(false)}>Discard</Button>
+                        <Button className="flex-1 btn-gradient rounded-xl font-black text-[10px] uppercase shadow-blue-500/20" onClick={handleSaveMethodEdit} disabled={isUpdating}>
+                            {isUpdating ? "SAVING..." : "UPDATE CHANNEL"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <footer className="fixed bottom-0 inset-x-0 bg-white/80 backdrop-blur-md border-t p-4 z-40 flex justify-center gap-3">
                 <Button asChild variant="outline" className="flex-1 md:flex-none md:w-48 h-12 rounded-xl border-slate-200 font-black text-[10px] uppercase tracking-widest">
