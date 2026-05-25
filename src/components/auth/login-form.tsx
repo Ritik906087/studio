@@ -22,7 +22,6 @@ import { useRouter } from "next/navigation";
 import { useAuth, useFirestore } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
-import { Turnstile } from "./turnstile";
 import { Loader } from "@/components/ui/loader";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
@@ -30,7 +29,6 @@ const ADMIN_PHONES = ['9955557336', '9060873927'];
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   
   const { translations } = useLanguage();
   const { toast } = useToast();
@@ -54,33 +52,16 @@ export function LoginForm() {
       return;
     }
     
-    if (!turnstileToken) {
-      toast({ variant: "destructive", title: "Verification Required", description: "Please complete the captcha." });
-      return;
-    }
-
     if (!auth || !firestore) return;
     setIsLoading(true);
 
     try {
-      // 1. Backend Verification of Turnstile Token
-      const verifyRes = await fetch('/api/verify-turnstile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: turnstileToken }),
-      });
-
-      const verifyData = await verifyRes.json();
-      if (!verifyData.success) {
-        throw new Error(verifyData.error || "Captcha verification failed");
-      }
-
-      // 2. Firebase Sign In
+      // Firebase Sign In
       const email = `91${values.phone}@lgpay.app`;
       const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
       const user = userCredential.user;
 
-      // 3. SINGLE DEVICE ENFORCEMENT: Generate new Session ID
+      // SINGLE DEVICE ENFORCEMENT: Generate new Session ID
       const newSessionId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
       
       // Update Firestore and LocalStorage simultaneously
@@ -94,16 +75,12 @@ export function LoginForm() {
       router.push('/home');
     } catch (error: any) {
       console.error("Login error:", error);
-      let errMsg = "Invalid login details";
-      if (error.message === "Captcha verification failed") errMsg = error.message;
-      
       toast({ 
         variant: "destructive", 
         title: "Access Denied", 
-        description: errMsg 
+        description: "Invalid login details" 
       });
       setIsLoading(false);
-      setTurnstileToken(null);
     }
   }
 
@@ -165,19 +142,10 @@ export function LoginForm() {
           )}
         />
         
-        <Turnstile 
-          onVerify={(token) => setTurnstileToken(token)} 
-          onExpire={() => setTurnstileToken(null)}
-          onError={() => {
-            setTurnstileToken(null);
-            toast({ variant: "destructive", title: "Security Error", description: "Captcha failed to load. Refresh page." });
-          }}
-        />
-        
         <Button 
           type="submit" 
           className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20 uppercase tracking-widest" 
-          disabled={isLoading || !turnstileToken}
+          disabled={isLoading}
         >
           {isLoading ? (
             <div className="flex items-center gap-2">
