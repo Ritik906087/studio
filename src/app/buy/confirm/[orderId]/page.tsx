@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect } from 'react';
@@ -47,13 +48,15 @@ const formatTime = (seconds: number) => {
     return `${hours} : ${mins} : ${secs}`;
 };
 
-const CopyRow = ({ label, value }: { label: string, value?: string | number }) => {
+const CopyRow = ({ label, value, isHidden = false }: { label: string, value?: string | number, isHidden?: boolean }) => {
     const { toast } = useToast();
     const handleCopy = () => {
         if (!value) return;
         navigator.clipboard.writeText(value.toString());
         toast({ title: 'Copied' });
     };
+
+    if (isHidden) return null;
 
     return (
         <div className="flex items-center justify-between py-3.5 border-b border-slate-50 last:border-0">
@@ -220,8 +223,9 @@ function ConfirmPageContent() {
     if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400 pt-32">Order Expired</div>;
 
     const details = order.sellerWithdrawalDetails;
-    const upiLink = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Verified User')}&am=${order.baseAmount}&tr=${order.orderId}&cu=INR`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
+    // Generate simple text string instead of payment URI
+    const qrText = `Order: ${order.orderId}\nAmount: ₹${order.baseAmount.toFixed(2)}\nReceiver ID: ${details?.upiId}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrText)}`;
 
     return (
         <div className="flex flex-col min-h-screen bg-white font-body">
@@ -229,37 +233,46 @@ function ConfirmPageContent() {
                 <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
                     <ChevronLeft className="h-6 w-6 text-slate-800" />
                 </Button>
-                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">Payment Details</h1>
+                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">Payment Audit</h1>
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
 
             <div className="bg-red-50 px-4 py-3 flex items-center gap-3 text-red-500 border-b border-red-100">
                 <Clock className="h-5 w-5" />
                 <span className="font-mono font-black text-base">{formatTime(timeLeft)}</span>
-                <span className="text-[10px] font-black uppercase tracking-tight ml-1">Time Remaining</span>
+                <span className="text-[10px] font-black uppercase tracking-tight ml-1">Session Active</span>
             </div>
 
             <main className="flex-1 p-4 overflow-y-auto no-scrollbar pb-32">
                 {view === 'info' ? (
                     <div className="space-y-6 animate-in fade-in duration-300">
                         <div className="flex flex-col items-center justify-center space-y-4">
-                            <div className="relative p-4 bg-white rounded-3xl shadow-xl ring-1 ring-slate-100">
-                                <div className="relative h-48 w-48 overflow-hidden rounded-xl">
-                                    <Image src={qrUrl} alt="QR Code" fill className="object-contain" unoptimized />
+                            <div className="relative p-6 bg-white rounded-[32px] shadow-2xl ring-1 ring-slate-100">
+                                <div className="relative h-48 w-48 overflow-hidden rounded-2xl">
+                                    <Image src={qrUrl} alt="Secure QR" fill className="object-contain" unoptimized />
                                 </div>
                             </div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scan QR to pay</p>
+                            <div className="text-center space-y-1">
+                                <p className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">Scan text code to proceed</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Protocol: Secure Text-to-QR</p>
+                            </div>
                         </div>
 
-                        <div className="space-y-1 bg-slate-50 p-2 rounded-[24px] border border-slate-100 shadow-inner">
-                            <CopyRow label="Receiver" value={details?.name || 'Verified User'} />
-                            <CopyRow label="UPI ID" value={details?.upiId} />
+                        <div className="space-y-1 bg-slate-50 p-3 rounded-[28px] border border-slate-100 shadow-inner">
+                            <CopyRow label="Receiver" value={details?.name || 'Authorized Member'} />
                             <CopyRow label="Amount" value={`₹${order.baseAmount.toFixed(2)}`} />
                             <CopyRow label="Order ID" value={order.orderId} />
+                            {/* Identifier hidden from written UI as requested */}
+                        </div>
+
+                        <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                            <p className="text-[9px] text-blue-700 font-bold uppercase leading-relaxed text-center">
+                                Identity protected. Use the QR code to verify the destination account in your app.
+                            </p>
                         </div>
 
                         <div className="space-y-3 pt-2 text-center">
-                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Cancel Order</button>
+                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Terminate Contract</button>
                         </div>
                     </div>
                 ) : (

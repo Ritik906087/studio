@@ -579,7 +579,7 @@ export default function AdminDashboardPage() {
                                                 <Select onValueChange={(v) => setNewPM({ ...newPM, type: v })} defaultValue={newPM.type}>
                                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="upi">UPI ID</SelectItem>
+                                                        <SelectItem value="upi">QR Display Node</SelectItem>
                                                         <SelectItem value="usdt">USDT Wallet (TRC20)</SelectItem>
                                                         <SelectItem value="bank">Bank Account</SelectItem>
                                                     </SelectContent>
@@ -588,8 +588,8 @@ export default function AdminDashboardPage() {
 
                                             {newPM.type === 'upi' && (
                                                 <div className="space-y-4">
-                                                    <div className="space-y-1.5"><Label>UPI address</Label><Input placeholder="master@upi" value={newPM.upiId} onChange={e => setNewPM({...newPM, upiId: e.target.value})} /></div>
-                                                    <div className="space-y-1.5"><Label>Holder identity</Label><Input placeholder="Master Name" value={newPM.upiHolderName} onChange={e => setNewPM({...newPM, upiHolderName: e.target.value})} /></div>
+                                                    <div className="space-y-1.5"><Label>Access ID / Text (For QR)</Label><Input placeholder="master@upi or internal_id" value={newPM.upiId} onChange={e => setNewPM({...newPM, upiId: e.target.value})} /></div>
+                                                    <div className="space-y-1.5"><Label>Holder Identity</Label><Input placeholder="Master Name" value={newPM.upiHolderName} onChange={e => setNewPM({...newPM, upiHolderName: e.target.value})} /></div>
                                                 </div>
                                             )}
 
@@ -623,9 +623,9 @@ export default function AdminDashboardPage() {
                                                 <Button onClick={() => handleDeletePaymentMethod(m.id)} variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button>
                                             </div>
                                             <div className="space-y-1">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.type} Access ID</p>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.type === 'upi' ? 'Access Text' : m.type + ' Access ID'}</p>
                                                 <p className="font-mono text-xs font-black text-slate-800 break-all">{m.upiId || m.usdtWalletAddress || m.accountNumber}</p>
-                                                {m.upiHolderName && <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">Node: {m.upiHolderName}</p>}
+                                                {m.upiHolderName && <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">Identity: {m.upiHolderName}</p>}
                                                 {m.bankName && <p className="text-[9px] font-bold text-slate-500 uppercase">{m.bankName} - {m.accountHolderName}</p>}
                                             </div>
                                         </CardContent>
