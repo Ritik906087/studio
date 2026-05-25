@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, limit, arrayUnion } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -148,15 +148,25 @@ export default function AddCollectionPage() {
 
     setIsSaving(true);
     try {
+        // --- UNIQUENESS CHECK ---
+        // Verify if this UPI is already linked by ANY user in the system
+        const upiQuery = query(
+            collection(firestore, 'users'), 
+            where('upiIds', 'array-contains', verificationData.vpa.toLowerCase()), 
+            limit(1)
+        );
+        const upiSnap = await getDocs(upiQuery);
+        
+        if (!upiSnap.empty) {
+            throw new Error("This UPI ID is already linked to another account.");
+        }
+
         const userRef = doc(firestore, 'users', user.uid);
         const userSnap = await getDoc(userRef);
         
         if (!userSnap.exists()) throw new Error("Profile not found.");
 
         const currentMethods = userSnap.data().paymentMethods || [];
-        const isDuplicate = currentMethods.some((pm: any) => pm.upiId === verificationData.vpa);
-
-        if (isDuplicate) throw new Error("This UPI ID is already linked.");
         
         const methodData = {
             type: 'upi',
@@ -172,7 +182,10 @@ export default function AddCollectionPage() {
             linkedAt: new Date().toISOString()
         };
 
-        await updateDoc(userRef, { paymentMethods: [...currentMethods, methodData] });
+        await updateDoc(userRef, { 
+            paymentMethods: [...currentMethods, methodData],
+            upiIds: arrayUnion(verificationData.vpa.toLowerCase()) // Technical index for uniqueness
+        });
       
         toast({ title: "Success", description: `${selectedProvider.name} linked successfully.` });
         setIsSheetOpen(false);

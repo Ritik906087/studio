@@ -101,7 +101,6 @@ export function RegisterForm() {
         const fingerprint = generateHardwareFingerprint();
 
         // 2. CHECK: Does this hardware ID already exist in our network?
-        // This blocks clones, Island, Telegram WebView, and browser switching.
         const fingerprintQuery = query(
             collection(firestore, 'users'), 
             where('hardwareFingerprint', '==', fingerprint), 
@@ -146,6 +145,8 @@ export function RegisterForm() {
             inviterUid: inviterUid,
             balance: 0,
             holdBalance: 0,
+            paymentMethods: [],
+            upiIds: [], // Technical field to track linked UPIs for cross-account uniqueness
             claimedUserRewards: [],
             hardwareFingerprint: fingerprint, // LOCK THE DEVICE
             sessionId: newSessionId,

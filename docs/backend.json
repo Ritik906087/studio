@@ -94,6 +94,11 @@
             "required": ["type", "name"]
           }
         },
+        "upiIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Index of all linked UPI IDs for cross-account uniqueness checks."
+        },
         "inviterUid": {
             "type": "string",
             "description": "The Firebase Auth UID of the user who invited this user."
@@ -648,3 +653,5 @@
     }
   }
 }
+
+    
