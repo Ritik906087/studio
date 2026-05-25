@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -15,7 +14,8 @@ import {
     CheckCircle2, 
     ChevronUp, 
     ChevronDown,
-    ArrowRight
+    ArrowRight,
+    Zap
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
