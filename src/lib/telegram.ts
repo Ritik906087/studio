@@ -3,13 +3,13 @@
 
 import 'dotenv/config';
 
-const FETCH_TIMEOUT = 25000;
-const RETRY_COUNT = 3;
-const RETRY_DELAY = 2000;
+const FETCH_TIMEOUT = 15000; // Reduced for serverless efficiency
+const RETRY_COUNT = 2;
+const RETRY_DELAY = 1000;
 
-// Hardcoded fallbacks as requested by user to ensure 24/7 reliability even without .env
+// HARDCODED CREDENTIALS (Failsafe for Vercel/Studio without .env)
 const FALLBACK_TOKEN = '8762196679:AAF5hgLZoUQZbjrqk-ONmrAh07nFzdPF9k0';
-const FALLBACK_GROUP_ID = '-1002273617326'; // Update this with your actual Group ID if needed
+const FALLBACK_GROUP_ID = '-1002273617326'; 
 
 async function fetchWithRetry(url: string, options: RequestInit, retries: number, botName: string): Promise<Response> {
     for (let i = 0; i < retries; i++) {
@@ -17,15 +17,19 @@ async function fetchWithRetry(url: string, options: RequestInit, retries: number
         const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
         try {
-            const response = await fetch(url, { ...options, signal: controller.signal });
+            const response = await fetch(url, { 
+                ...options, 
+                signal: controller.signal,
+                cache: 'no-store' // Critical for serverless
+            });
             clearTimeout(timeoutId);
 
             if (response.ok) return response;
             
-            // If it's a 4xx error (except 429), don't retry as it's likely a bad request/token
+            const errData = await response.json().catch(() => ({}));
+            console.error(`[TelegramBot] [${botName}] API Error (Status ${response.status}):`, errData);
+            
             if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-                const errData = await response.json().catch(() => ({}));
-                console.error(`[TelegramBot] [${botName}] API Error:`, errData);
                 return response;
             }
             
@@ -45,13 +49,8 @@ async function sendTelegramMessage(message: string, botName: string) {
     const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || FALLBACK_TOKEN;
     const GROUP_ID = process.env.TELEGRAM_GROUP_ID || FALLBACK_GROUP_ID;
 
-    if (!BOT_TOKEN) {
-        console.error(`[TelegramBot] [${botName}] Error: BOT_TOKEN is missing`);
-        return;
-    }
-
-    if (!GROUP_ID) {
-        console.error(`[TelegramBot] [${botName}] Error: GROUP_ID is missing`);
+    if (!BOT_TOKEN || !GROUP_ID) {
+        console.error(`[TelegramBot] [${botName}] Error: Credentials missing`);
         return;
     }
 
@@ -66,19 +65,19 @@ async function sendTelegramMessage(message: string, botName: string) {
                     chat_id: GROUP_ID,
                     text: message,
                     parse_mode: 'Markdown',
+                    disable_web_page_preview: true
                 }),
             },
             RETRY_COUNT,
             botName
         );
     } catch (error: any) {
-        console.error(`[TelegramBot] [${botName}] Critical failure: ${error.message}`);
+        console.error(`[TelegramBot] [${botName}] Final failure: ${error.message}`);
     }
 }
 
 /**
  * Sends buy order submission details to the configured Telegram group.
- * This is triggered ONLY when a user successfully submits their payment proof.
  */
 export async function sendOrderSubmissionToTelegram(details: {
     orderId: string;
@@ -88,15 +87,15 @@ export async function sendOrderSubmissionToTelegram(details: {
     utr: string;
 }) {
     const message = `
-🚀 *New Order Submitted!*
+🚀 *NEW ORDER SUBMITTED!*
 
 *Order ID:* \`${details.orderId}\`
 *User UID:* \`${details.uid}\`
 *Mobile:* \`+91 ${details.mobile}\`
-*Amount:* ₹${details.amount.toFixed(2)}
-*UTR:* \`${details.utr}\`
+*Amount:* ₹${details.amount.toLocaleString()}
+*UTR/Ref:* \`${details.utr}\`
 
-*Status:* Pending System Audit
+*Status:* Waiting for Admin Audit
     `;
 
     await sendTelegramMessage(message, 'OrderAlert');
@@ -110,7 +109,7 @@ export async function sendNewChatRequestToTelegram(details: {
     enteredIdentifier: string;
 }) {
     const message = `
-💬 *New Live Chat Request!*
+💬 *LIVE CHAT REQUEST!*
 
 *User UID:* \`${details.userNumericId || 'N/A'}\`
 *Identifier:* \`${details.enteredIdentifier}\`

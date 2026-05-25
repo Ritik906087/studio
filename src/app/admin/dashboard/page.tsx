@@ -15,7 +15,7 @@ import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, where, doc, deleteDoc, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
+import { collection, collectionGroup, onSnapshot, query, orderBy, where, doc, deleteDoc, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -101,17 +101,13 @@ export default function AdminDashboardPage() {
     const fetchConfirmations = useCallback(async () => {
         if (!firestore) return;
         try {
-            const buyOrdersQuery = query(
-                collection(firestore, 'users'), 
-                limit(500)
+            // Using collectionGroup to find all pending_confirmation orders across all users
+            const pendingQuery = query(
+                collectionGroup(firestore, 'orders'),
+                where('status', '==', 'pending_confirmation')
             );
-            const userSnaps = await getDocs(buyOrdersQuery);
-            const allPending: any[] = [];
-            
-            for (const uDoc of userSnaps.docs) {
-                const oSnap = await getDocs(query(collection(firestore, 'users', uDoc.id, 'orders'), where('status', '==', 'pending_confirmation')));
-                oSnap.forEach(o => allPending.push({ id: o.id, ...o.data(), userId: uDoc.id }));
-            }
+            const snap = await getDocs(pendingQuery);
+            const allPending = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
             const sorted = allPending.sort((a: any, b: any) => {
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
@@ -119,7 +115,9 @@ export default function AdminDashboardPage() {
                 return timeB - timeA;
             });
             setPendingBuyOrders(sorted);
-        } catch (e) {}
+        } catch (e) {
+            console.error("Fetch Confirmations Error:", e);
+        }
     }, [firestore]);
 
     useEffect(() => {
@@ -147,10 +145,13 @@ export default function AdminDashboardPage() {
 
     const filteredConfirmOrders = useMemo(() => {
         const s = confirmSearch.toLowerCase();
-        return pendingBuyOrders.filter(o => o.userNumericId?.includes(s) || o.utr?.toLowerCase().includes(s) || o.amount?.toString().includes(s));
+        return pendingBuyOrders.filter(o => 
+            o.userNumericId?.includes(s) || 
+            o.utr?.toLowerCase().includes(s) || 
+            o.amount?.toString().includes(s)
+        );
     }, [pendingBuyOrders, confirmSearch]);
 
-    // FILTER: Only show active withdrawals (not completed/failed/cancelled)
     const filteredWithdrawals = useMemo(() => {
         const s = withdrawalSearch.toLowerCase();
         const activeOnly = sellOrders.filter(o => !['completed', 'failed', 'cancelled'].includes(o.status));
@@ -208,7 +209,6 @@ export default function AdminDashboardPage() {
                 const buyerRef = doc(firestore, 'users', order.userId);
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 
-                // --- READS ---
                 const buyerSnap = await transaction.get(buyerRef);
                 if (!buyerSnap.exists()) throw new Error("Buyer profile missing");
                 const buyerData = buyerSnap.data();
@@ -241,7 +241,6 @@ export default function AdminDashboardPage() {
                     sellerProfileSnap = await transaction.get(sellerProfileRef);
                 }
 
-                // --- WRITES ---
                 const purchaseAmount = order.baseAmount || order.amount;
 
                 transaction.update(buyerRef, { balance: (buyerData.balance || 0) + order.amount });

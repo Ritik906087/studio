@@ -218,13 +218,18 @@ function ConfirmPageContent() {
                 });
             });
 
-            await sendOrderSubmissionToTelegram({
-                orderId: order.orderId,
-                uid: profile.numericId,
-                mobile: profile.phoneNumber,
-                amount: order.baseAmount || order.amount,
-                utr: utr
-            });
+            // Send Telegram Notification Failsafe
+            try {
+                await sendOrderSubmissionToTelegram({
+                    orderId: order.orderId,
+                    uid: profile.numericId,
+                    mobile: profile.phoneNumber,
+                    amount: order.baseAmount || order.amount,
+                    utr: utr
+                });
+            } catch (tgError) {
+                console.error("Telegram alert failed, but order was submitted.");
+            }
 
             toast({ title: 'Submitted for Audit' });
             router.push(`/order/${orderId}`);
