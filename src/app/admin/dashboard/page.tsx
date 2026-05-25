@@ -37,7 +37,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const ALLOWED_ADMINS = ['9955557336', '9060873927'];
+const ALLOWED_ADMINS = ['9955557336', '9060873927', '7307081891', '9199604613'];
+const FULL_ACCESS_ADMINS = ['9955557336', '9060873927'];
 
 export default function AdminDashboardPage() {
     const router = useRouter();
@@ -61,6 +62,9 @@ export default function AdminDashboardPage() {
 
     const [adminId, setAdminId] = useState<string>('SYSTEM');
     const [isActionLoading, setIsActionLoading] = useState(false);
+
+    // Permissions check
+    const isFullAdmin = useMemo(() => FULL_ACCESS_ADMINS.includes(adminId), [adminId]);
 
     // Dialog States
     const [isAddPMOpen, setIsAddPMOpen] = useState(false);
@@ -161,7 +165,7 @@ export default function AdminDashboardPage() {
     };
 
     const handleAddPaymentMethod = async () => {
-        if (!firestore) return;
+        if (!firestore || !isFullAdmin) return;
         setIsActionLoading(true);
         try {
             await addDoc(collection(firestore, 'paymentMethods'), {
@@ -180,7 +184,7 @@ export default function AdminDashboardPage() {
     };
 
     const handleDeletePaymentMethod = async (id: string) => {
-        if (!firestore) return;
+        if (!firestore || !isFullAdmin) return;
         try {
             await deleteDoc(doc(firestore, 'paymentMethods', id));
             toast({ title: "Node Removed" });
@@ -363,6 +367,19 @@ export default function AdminDashboardPage() {
 
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
 
+    const sidebarItems = useMemo(() => {
+        const items = [
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'users', label: 'User Registry', icon: Users },
+            { id: 'confirm', label: 'Confirmation', icon: CheckCircle2 },
+            { id: 'withdrawals', label: 'Withdrawals', icon: Landmark },
+        ];
+        if (isFullAdmin) {
+            items.push({ id: 'server', label: 'Payment Nodes', icon: Server });
+        }
+        return items;
+    }, [isFullAdmin]);
+
     return (
         <div className="flex min-h-screen w-full flex-col bg-[#F8FAFC]">
             <header className="sticky top-0 flex h-16 md:h-20 items-center gap-4 border-b bg-white px-4 md:px-8 z-50 justify-between shadow-sm">
@@ -388,13 +405,7 @@ export default function AdminDashboardPage() {
                     isSidebarOpen ? "translate-x-0" : "-translate-x-full"
                 )}>
                     <nav className="space-y-1">
-                        {[
-                          { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-                          { id: 'users', label: 'User Registry', icon: Users },
-                          { id: 'confirm', label: 'Confirmation', icon: CheckCircle2 },
-                          { id: 'withdrawals', label: 'Withdrawals', icon: Landmark },
-                          { id: 'server', label: 'Payment Nodes', icon: Server },
-                        ].map(item => (
+                        {sidebarItems.map(item => (
                           <button 
                             key={item.id}
                             className={cn(
@@ -544,44 +555,46 @@ export default function AdminDashboardPage() {
                             </div>
                         </TabsContent>
 
-                        <TabsContent value="server" className="space-y-4">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">Active Payment Nodes</h2>
-                                <Button onClick={() => setIsAddPMOpen(true)} className="rounded-xl h-11 btn-gradient uppercase font-black text-[10px] tracking-widest px-6"><Plus className="mr-2 h-4 w-4" /> Add Node</Button>
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {paymentMethods.map(pm => (
-                                    <Card key={pm.id} className="border-none shadow-sm rounded-[32px] bg-white overflow-hidden relative group">
-                                        <div className={cn("h-1.5 w-full", pm.type === 'usdt' ? "bg-amber-500" : "bg-blue-600")} />
-                                        <CardContent className="p-6">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center">
-                                                        {pm.type === 'usdt' ? <Zap className="h-5 w-5 text-amber-500" /> : <CreditCard className="h-5 w-5 text-blue-600" />}
+                        {isFullAdmin && (
+                            <TabsContent value="server" className="space-y-4">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">Active Payment Nodes</h2>
+                                    <Button onClick={() => setIsAddPMOpen(true)} className="rounded-xl h-11 btn-gradient uppercase font-black text-[10px] tracking-widest px-6"><Plus className="mr-2 h-4 w-4" /> Add Node</Button>
+                                </div>
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    {paymentMethods.map(pm => (
+                                        <Card key={pm.id} className="border-none shadow-sm rounded-[32px] bg-white overflow-hidden relative group">
+                                            <div className={cn("h-1.5 w-full", pm.type === 'usdt' ? "bg-amber-500" : "bg-blue-600")} />
+                                            <CardContent className="p-6">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center">
+                                                            {pm.type === 'usdt' ? <Zap className="h-5 w-5 text-amber-500" /> : <CreditCard className="h-5 w-5 text-blue-600" />}
+                                                        </div>
+                                                        <span className="font-black text-xs uppercase text-slate-800">{pm.type} Node</span>
                                                     </div>
-                                                    <span className="font-black text-xs uppercase text-slate-800">{pm.type} Node</span>
+                                                    <Button onClick={() => handleDeletePaymentMethod(pm.id)} variant="ghost" size="icon" className="text-red-400 h-8 w-8 hover:bg-red-50 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></Button>
                                                 </div>
-                                                <Button onClick={() => handleDeletePaymentMethod(pm.id)} variant="ghost" size="icon" className="text-red-400 h-8 w-8 hover:bg-red-50 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></Button>
-                                            </div>
-                                            <div className="space-y-2">
-                                                {pm.type === 'usdt' ? (
-                                                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">TRC20 Wallet</p>
-                                                        <p className="text-[11px] font-black text-slate-800 truncate mt-1">{pm.usdtWalletAddress}</p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Access ID</p>
-                                                        <p className="text-[11px] font-black text-slate-800 mt-1">{pm.upiId}</p>
-                                                        <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">{pm.upiHolderName}</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                            </div>
-                        </TabsContent>
+                                                <div className="space-y-2">
+                                                    {pm.type === 'usdt' ? (
+                                                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">TRC20 Wallet</p>
+                                                            <p className="text-[11px] font-black text-slate-800 truncate mt-1">{pm.usdtWalletAddress}</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Access ID</p>
+                                                            <p className="text-[11px] font-black text-slate-800 mt-1">{pm.upiId}</p>
+                                                            <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">{pm.upiHolderName}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </TabsContent>
+                        )}
                     </Tabs>
                 </main>
             </div>

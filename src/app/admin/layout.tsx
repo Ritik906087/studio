@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -20,7 +21,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         if (sessionStr) {
           try {
             const session = JSON.parse(sessionStr);
-            const ALLOWED_ADMINS = ['9955557336', '9060873927'];
+            const ALLOWED_ADMINS = ['9955557336', '9060873927', '7307081891', '9199604613'];
             if (session.authenticated && ALLOWED_ADMINS.includes(session.masterId) && session.expires > Date.now()) {
               setIsAdmin(true);
             } else {

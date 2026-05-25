@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,7 +24,9 @@ import { Logo } from "@/components/logo";
 
 const ADMIN_CREDENTIALS: Record<string, string> = {
   '9955557336': 'Satyam7890',
-  '9060873927': 'Ritik@9060'
+  '9060873927': 'Ritik@9060',
+  '7307081891': 'Anand8090',
+  '9199604613': 'ritik@123'
 };
 
 const formSchema = z.object({

@@ -1,6 +1,7 @@
+
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Card,
@@ -55,7 +56,8 @@ import {
 } from "@/components/ui/dialog";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
-const ALLOWED_ADMINS = ['9955557336', '9060873927'];
+const ALLOWED_ADMINS = ['9955557336', '9060873927', '7307081891', '9199604613'];
+const FULL_ACCESS_ADMINS = ['9955557336', '9060873927'];
 
 const providerLogos: Record<string, string> = {
   PhonePe: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(4).png",
@@ -136,6 +138,7 @@ export default function UserDetailsPage() {
     const [amount, setAmount] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [currentAdminId, setAdminId] = useState<string>('');
 
     // Edit states
     const [isUidEditOpen, setIsUidEditOpen] = useState(false);
@@ -145,6 +148,9 @@ export default function UserDetailsPage() {
     const [editMethodData, setEditMethodData] = useState<any>(null);
     const [isEditMethodOpen, setIsEditMethodOpen] = useState(false);
 
+    // Permission check for balance adjustments
+    const isFullAdmin = useMemo(() => FULL_ACCESS_ADMINS.includes(currentAdminId), [currentAdminId]);
+
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
         if (sessionStr) {
@@ -152,6 +158,7 @@ export default function UserDetailsPage() {
                 const session = JSON.parse(sessionStr);
                 if (session.authenticated && ALLOWED_ADMINS.includes(session.masterId) && session.expires > Date.now()) {
                     setIsAdmin(true);
+                    setAdminId(session.masterId);
                 } else { router.replace('/admin/key'); return; }
             } catch (e) { router.replace('/admin/key'); return; }
         } else { router.replace('/admin/key'); return; }
@@ -167,6 +174,10 @@ export default function UserDetailsPage() {
     }, [firestore, userId, router]);
 
     const handleUpdateBalance = async (type: 'add' | 'deduct') => {
+        if (!isFullAdmin) {
+            toast({ variant: 'destructive', title: "Permission Denied", description: "Your role does not allow balance adjustments." });
+            return;
+        }
         const val = parseFloat(amount);
         if (!val || val <= 0 || isNaN(val)) return;
         if (!firestore || !user) return;
@@ -280,7 +291,7 @@ export default function UserDetailsPage() {
                 <Card className="border-none shadow-sm rounded-3xl bg-slate-900 text-white overflow-hidden relative">
                     <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none"><Wallet className="h-32 w-32" /></div>
                     <CardContent className="p-0 grid grid-cols-1 lg:grid-cols-12 lg:divide-x divide-white/5">
-                        <div className="lg:col-span-7 p-6 md:p-10 flex flex-col justify-center">
+                        <div className={cn("p-6 md:p-10 flex flex-col justify-center", isFullAdmin ? "lg:col-span-7" : "lg:col-span-12")}>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
                                 <div className="space-y-1">
                                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Available Assets</p>
@@ -296,28 +307,30 @@ export default function UserDetailsPage() {
                                 </div>
                             </div>
                         </div>
-                        <div className="lg:col-span-5 p-6 md:p-10 space-y-4 bg-white/5">
-                            <div className="flex gap-3">
-                                <div className="relative flex-1">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-black">₹</div>
-                                    <Input 
-                                        type="number" 
-                                        placeholder="Amount..." 
-                                        value={amount} 
-                                        onChange={e => setAmount(e.target.value)}
-                                        className="h-12 md:h-16 pl-10 bg-black/40 border-slate-700 text-white placeholder:text-slate-600 rounded-xl focus:border-primary text-base md:text-xl font-black"
-                                    />
-                                </div>
-                                <div className="flex gap-2 shrink-0">
-                                    <Button className="h-12 w-12 md:h-16 md:w-16 bg-green-600 hover:bg-green-700 rounded-xl p-0" onClick={() => handleUpdateBalance('add')} disabled={isUpdating}>
-                                        {isUpdating ? <Loader size="xs" /> : <ArrowUpRight className="h-6 w-6" />}
-                                    </Button>
-                                    <Button className="h-12 w-12 md:h-16 md:w-16 bg-red-600 hover:bg-red-700 rounded-xl p-0" onClick={() => handleUpdateBalance('deduct')} disabled={isUpdating}>
-                                        {isUpdating ? <Loader size="xs" /> : <ArrowDownLeft className="h-6 w-6" />}
-                                    </Button>
+                        {isFullAdmin && (
+                            <div className="lg:col-span-5 p-6 md:p-10 space-y-4 bg-white/5">
+                                <div className="flex gap-3">
+                                    <div className="relative flex-1">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-black">₹</div>
+                                        <Input 
+                                            type="number" 
+                                            placeholder="Amount..." 
+                                            value={amount} 
+                                            onChange={e => setAmount(e.target.value)}
+                                            className="h-12 md:h-16 pl-10 bg-black/40 border-slate-700 text-white placeholder:text-slate-600 rounded-xl focus:border-primary text-base md:text-xl font-black"
+                                        />
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        <Button className="h-12 w-12 md:h-16 md:w-16 bg-green-600 hover:bg-green-700 rounded-xl p-0" onClick={() => handleUpdateBalance('add')} disabled={isUpdating}>
+                                            {isUpdating ? <Loader size="xs" /> : <ArrowUpRight className="h-6 w-6" />}
+                                        </Button>
+                                        <Button className="h-12 w-12 md:h-16 md:w-16 bg-red-600 hover:bg-red-700 rounded-xl p-0" onClick={() => handleUpdateBalance('deduct')} disabled={isUpdating}>
+                                            {isUpdating ? <Loader size="xs" /> : <ArrowDownLeft className="h-6 w-6" />}
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -394,7 +407,7 @@ export default function UserDetailsPage() {
                                 colorClass="text-amber-500" 
                                 isCopyable 
                                 isMono 
-                                onEdit={() => { setNewUid(user.numericId); setIsUidEditOpen(true); }}
+                                onEdit={isFullAdmin ? () => { setNewUid(user.numericId); setIsUidEditOpen(true); } : undefined}
                             />
                             <DataRow icon={Clock} label="Joined" value={user.createdAt ? new Date(user.createdAt.seconds * 1000).toLocaleString() : 'N/A'} colorClass="text-slate-400" />
                         </CardContent>
@@ -409,14 +422,16 @@ export default function UserDetailsPage() {
                         {paymentMethods.length > 0 ? (
                             paymentMethods.map((method: any, idx: number) => (
                                 <Card key={idx} className="border-none shadow-sm rounded-3xl bg-white overflow-hidden group relative">
-                                    <Button 
-                                        variant="ghost" 
-                                        size="sm" 
-                                        className="absolute top-4 right-4 h-8 px-2 rounded-lg bg-slate-50 text-[10px] font-black text-blue-600 hover:bg-blue-50"
-                                        onClick={() => handleOpenEditMethod(method, idx)}
-                                    >
-                                        <Edit3 className="h-3 w-3 mr-1" /> Admin Edit
-                                    </Button>
+                                    {isFullAdmin && (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="absolute top-4 right-4 h-8 px-2 rounded-lg bg-slate-50 text-[10px] font-black text-blue-600 hover:bg-blue-50"
+                                            onClick={() => handleOpenEditMethod(method, idx)}
+                                        >
+                                            <Edit3 className="h-3 w-3 mr-1" /> Admin Edit
+                                        </Button>
+                                    )}
                                     <CardHeader className="p-0">
                                         <div className="h-2 w-full" style={{ backgroundColor: providerLogos[method.name] ? 'transparent' : '#cbd5e1' }} />
                                     </CardHeader>
