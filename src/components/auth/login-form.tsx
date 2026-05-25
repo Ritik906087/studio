@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,12 +21,16 @@ import { useRouter } from "next/navigation";
 import { useAuth, useFirestore } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
+import { Turnstile } from "./turnstile";
+import { Loader } from "@/components/ui/loader";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
 
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  
   const { translations } = useLanguage();
   const { toast } = useToast();
   const router = useRouter();
@@ -49,15 +52,34 @@ export function LoginForm() {
       toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
       return;
     }
+    
+    if (!turnstileToken) {
+      toast({ variant: "destructive", title: "Verification Required", description: "Please complete the captcha." });
+      return;
+    }
+
     if (!auth || !firestore) return;
     setIsLoading(true);
 
     try {
+      // 1. Backend Verification of Turnstile Token
+      const verifyRes = await fetch('/api/verify-turnstile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: turnstileToken }),
+      });
+
+      const verifyData = await verifyRes.json();
+      if (!verifyData.success) {
+        throw new Error(verifyData.error || "Captcha verification failed");
+      }
+
+      // 2. Firebase Sign In
       const email = `91${values.phone}@lgpay.app`;
       const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
       const user = userCredential.user;
 
-      // Update sessionId to enforce single device login
+      // 3. Session Enforcement
       const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       await updateDoc(doc(firestore, 'users', user.uid), {
         sessionId: newSessionId
@@ -69,10 +91,12 @@ export function LoginForm() {
       console.error("Login error:", error);
       toast({ 
         variant: "destructive", 
-        title: "Login Failed", 
-        description: "Invalid login details" 
+        title: "Access Denied", 
+        description: error.message === "Captcha verification failed" ? error.message : "Invalid login details" 
       });
       setIsLoading(false);
+      // Reset turnstile on failure to force new verification
+      setTurnstileToken(null);
     }
   }
 
@@ -134,8 +158,26 @@ export function LoginForm() {
           )}
         />
         
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20 uppercase tracking-widest" disabled={isLoading}>
-          {isLoading ? translations.loggingIn : translations.login}
+        <Turnstile 
+          onVerify={(token) => setTurnstileToken(token)} 
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => {
+            setTurnstileToken(null);
+            toast({ variant: "destructive", title: "Security Error", description: "Captcha failed to load. Refresh page." });
+          }}
+        />
+        
+        <Button 
+          type="submit" 
+          className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20 uppercase tracking-widest" 
+          disabled={isLoading || !turnstileToken}
+        >
+          {isLoading ? (
+            <div className="flex items-center gap-2">
+              <Loader size="xs" className="h-4 w-4" />
+              <span>{translations.loggingIn}</span>
+            </div>
+          ) : translations.login}
         </Button>
       </form>
     </Form>

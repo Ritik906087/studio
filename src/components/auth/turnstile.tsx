@@ -40,7 +40,7 @@ export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: Turns
       if (window.turnstile && containerRef.current && !isRendered.current) {
         try {
           const id = window.turnstile.render(containerRef.current, {
-            sitekey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x0000000000000000000000000000000AA',
+            sitekey: '0x4AAAAAADV2Z7AKshcMID_Z',
             callback: (token: string) => {
               onVerify(token);
             },
@@ -74,16 +74,14 @@ export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: Turns
 
     return () => {
       if (interval) clearInterval(interval);
+      if (widgetIdRef.current && window.turnstile) {
+        // window.turnstile.remove(widgetIdRef.current);
+      }
     };
   }, [onVerify, onExpire, onError, theme]);
 
   return (
     <div className="flex justify-center my-4 min-h-[65px]">
-      {/* 
-        This wrapper is height-constrained to 65px with overflow-hidden 
-        to specifically mask the "For testing only" banner that Cloudflare 
-        injects at the bottom of the widget when using the public testing key.
-      */}
       <div 
         className="rounded-xl overflow-hidden shadow-sm ring-1 ring-slate-100 max-h-[65px]"
         style={{ width: '300px' }}

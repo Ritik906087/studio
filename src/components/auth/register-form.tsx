@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,12 +22,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useFirestore } from "@/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs, limit, serverTimestamp } from "firebase/firestore";
+import { Turnstile } from "./turnstile";
+import { Loader } from "@/components/ui/loader";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
 export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  
   const { toast } = useToast();
   const { translations } = useLanguage();
   const router = useRouter();
@@ -59,10 +62,6 @@ export function RegisterForm() {
     }
   }, [invitationCodeFromUrl, form]);
 
-  /**
-   * Generates a deep hardware fingerprint that is resistant to browser changes,
-   * clones, and WebViews (like Telegram).
-   */
   const generateHardwareFingerprint = () => {
     let gpuInfo = "Unknown";
     try {
@@ -74,51 +73,60 @@ export function RegisterForm() {
         }
     } catch (e) {}
 
-    // Combine multiple hardware entropy sources
     const components = [
-        navigator.hardwareConcurrency || 0, // CPU Cores
-        (navigator as any).deviceMemory || 0, // RAM (approx)
-        gpuInfo, // Physical GPU
+        navigator.hardwareConcurrency || 0,
+        (navigator as any).deviceMemory || 0,
+        gpuInfo,
         window.screen.width,
         window.screen.height,
         window.screen.colorDepth,
         navigator.platform,
         navigator.maxTouchPoints || 0,
-        new Date().getTimezoneOffset(), // Locale hint
+        new Date().getTimezoneOffset(),
         navigator.language
     ];
 
     const raw = components.join('|');
-    // Strong hashing to create a 32-char unique device ID
     return btoa(raw).replace(/[/+=]/g, '').slice(0, 32).toUpperCase();
   };
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
+    if (!turnstileToken) {
+      toast({ variant: "destructive", title: "Security Check", description: "Please complete the human verification." });
+      return;
+    }
+
     if (!auth || !firestore) return;
     setIsLoading(true);
-    try {
-        // 1. Generate Deep Hardware Fingerprint
-        const fingerprint = generateHardwareFingerprint();
 
-        // 2. CHECK: Does this hardware ID already exist in our network?
-        const fingerprintQuery = query(
-            collection(firestore, 'users'), 
-            where('hardwareFingerprint', '==', fingerprint), 
-            limit(1)
-        );
+    try {
+        // 1. Backend Verification of Turnstile Token
+        const verifyRes = await fetch('/api/verify-turnstile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: turnstileToken }),
+        });
+
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) {
+          throw new Error(verifyData.error || "Security verification failed");
+        }
+
+        // 2. Hardware Fingerprint Check
+        const fingerprint = generateHardwareFingerprint();
+        const fingerprintQuery = query(collection(firestore, 'users'), where('hardwareFingerprint', '==', fingerprint), limit(1));
         const fingerprintSnap = await getDocs(fingerprintQuery);
         
         if (!fingerprintSnap.empty) {
           throw new Error("Already account created by this device please login");
         }
 
-        // 3. CHECK: Phone number uniqueness
-        const email = `91${values.phone}@lgpay.app`;
+        // 3. Phone uniqueness check
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
         if (!phoneCheckSnap.empty) throw new Error("This phone number is already registered.");
 
-        // 4. CHECK: Invitation code validity
+        // 4. Invitation code check
         let inviterUid = null;
         const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
         const inviterSnap = await getDocs(inviterQuery);
@@ -126,15 +134,13 @@ export function RegisterForm() {
         if (inviterSnap.empty) throw new Error("Invalid invitation code.");
         inviterUid = inviterSnap.docs[0].id;
 
-        // 5. CREATE AUTH: Create Firebase Auth account
+        // 5. Registration
+        const email = `91${values.phone}@lgpay.app`;
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
+        const newSessionId = Math.random().toString(36).substring(2, 15);
 
-        // Unique session ID for single-device enforcement
-        const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
-        // 6. SAVE PROFILE: Store hardware fingerprint permanently
         await setDoc(doc(firestore, 'users', user.uid), {
             uid: user.uid,
             email: email,
@@ -146,15 +152,14 @@ export function RegisterForm() {
             balance: 0,
             holdBalance: 0,
             paymentMethods: [],
-            upiIds: [], // Technical field to track linked UPIs for cross-account uniqueness
+            upiIds: [],
             claimedUserRewards: [],
-            hardwareFingerprint: fingerprint, // LOCK THE DEVICE
+            hardwareFingerprint: fingerprint,
             sessionId: newSessionId,
             createdAt: serverTimestamp(),
         });
 
         localStorage.setItem(`session_${user.uid}`, newSessionId);
-
         toast({ title: "Welcome!", description: "Registration successful." });
         router.push("/login");
     } catch (error: any) {
@@ -165,6 +170,7 @@ export function RegisterForm() {
         description: error.message 
       });
       setIsLoading(false);
+      setTurnstileToken(null);
     }
   }
 
@@ -252,6 +258,12 @@ export function RegisterForm() {
           )}
         />
 
+        <Turnstile 
+          onVerify={(token) => setTurnstileToken(token)} 
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+        />
+
         <div className="flex items-center space-x-2 py-2">
           <Checkbox id="agreement" onCheckedChange={(checked) => form.setValue("agreement", checked === true)} checked={form.watch("agreement")} />
           <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium leading-none cursor-pointer">
@@ -259,8 +271,17 @@ export function RegisterForm() {
           </label>
         </div>
 
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1 uppercase tracking-widest" disabled={isLoading}>
-            {isLoading ? "SECURING..." : "REGISTER"}
+        <Button 
+          type="submit" 
+          className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1 uppercase tracking-widest" 
+          disabled={isLoading || !turnstileToken}
+        >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader size="xs" className="h-4 w-4" />
+                <span>SECURING...</span>
+              </div>
+            ) : "REGISTER"}
         </Button>
       </form>
     </Form>
