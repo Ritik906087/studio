@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect } from 'react';
@@ -5,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, ShieldCheck, QrCode, Copy, ChevronRight } from 'lucide-react';
+import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, ShieldCheck, QrCode, Copy, ChevronRight, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc } from '@/firebase';
@@ -128,7 +129,7 @@ function ConfirmPageContent() {
     const handleCancelOrder = async () => {
         const finalReason = selectedReason === "Other" ? customReason : selectedReason;
         if (!order || !user || !firestore || !finalReason.trim()) {
-            toast({ variant: 'destructive', title: 'Reason required', description: 'Please provide a cancellation reason.' });
+            toast({ variant: 'destructive', title: 'Reason required' });
             return;
         }
         
@@ -177,11 +178,11 @@ function ConfirmPageContent() {
 
     const handleConfirmSubmit = async () => {
         if (!utr || utr.length < 10) {
-            toast({ variant: 'destructive', title: 'Invalid UTR', description: 'Please enter a valid reference number.' });
+            toast({ variant: 'destructive', title: 'Invalid proof', description: 'Enter full TXID or UTR.' });
             return;
         }
         if (!screenshotFile) {
-            toast({ variant: 'destructive', title: 'Screenshot Required', description: 'Please upload payment proof.' });
+            toast({ variant: 'destructive', title: 'Receipt Required' });
             return;
         }
         if (!user || !profile || !firestore || !order) return;
@@ -225,10 +226,10 @@ function ConfirmPageContent() {
                 utr: utr
             });
 
-            toast({ title: 'Submitted Successfully' });
+            toast({ title: 'Submitted for Audit' });
             router.push(`/order/${orderId}`);
         } catch (e: any) {
-            toast({ variant: 'destructive', title: 'Submission Failed', description: e.message });
+            toast({ variant: 'destructive', title: 'Submission Failed' });
             setIsSubmitting(false);
         }
     };
@@ -236,26 +237,29 @@ function ConfirmPageContent() {
     if (loading) return <Loader fullscreen={true} />;
     if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400 pt-32">Order Expired</div>;
 
+    const isUsdt = order.paymentType === 'usdt';
     const details = order.sellerWithdrawalDetails;
     const isSystemOrder = order.sellerId === 'SYSTEM_VAULT' || !order.matchedSellOrderId;
 
     let qrData = "";
-    if (isSystemOrder) {
+    if (isUsdt) {
+        qrData = details?.walletAddress || "";
+    } else if (isSystemOrder) {
         qrData = details?.upiId || "";
     } else {
-        qrData = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Flex User')}&am=${order.baseAmount.toFixed(2)}&tr=${order.orderId}&cu=INR`;
+        qrData = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Flex Member')}&am=${order.baseAmount.toFixed(2)}&tr=${order.orderId}&cu=INR`;
     }
 
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(qrData)}`;
 
     return (
         <div className="flex flex-col min-h-screen bg-white font-body">
-            <header className="flex items-center justify-between p-4 border-b bg-white sticky top-0 z-50">
-                <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
-                    <ChevronLeft className="h-6 w-6 text-slate-800" />
+            <header className="flex items-center justify-between p-4 border-b bg-white sticky top-0 z-50 shadow-sm">
+                <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-9 w-9 rounded-full bg-slate-50">
+                    <ChevronLeft className="h-5 w-5 text-slate-800" />
                 </Button>
-                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">
-                    {isSystemOrder ? "System Checkout" : "P2P Settlement"}
+                <h1 className="text-xs font-black uppercase tracking-widest text-slate-800">
+                    {isUsdt ? "USDT Gateway" : "Secure Payment"}
                 </h1>
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
@@ -263,7 +267,7 @@ function ConfirmPageContent() {
             <div className="bg-red-50 px-4 py-3 flex items-center gap-3 text-red-500 border-b border-red-100">
                 <Clock className="h-5 w-5" />
                 <span className="font-mono font-black text-base">{formatTime(timeLeft)}</span>
-                <span className="text-[10px] font-black uppercase tracking-tight ml-1">Session Active</span>
+                <span className="text-[10px] font-black uppercase tracking-tight ml-auto bg-red-500 text-white px-2 py-0.5 rounded">Session Active</span>
             </div>
 
             <main className="flex-1 p-4 overflow-y-auto no-scrollbar pb-32">
@@ -274,44 +278,52 @@ function ConfirmPageContent() {
                                 <div className="relative h-48 w-48 overflow-hidden rounded-2xl">
                                     <Image src={qrUrl} alt="QR Code" fill className="object-contain" unoptimized />
                                 </div>
-                                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-1 rounded-full shadow-lg flex items-center gap-1.5">
+                                <div className={cn("absolute -bottom-3 left-1/2 -translate-x-1/2 text-white px-4 py-1 rounded-full shadow-lg flex items-center gap-1.5", isUsdt ? "bg-amber-500" : "bg-blue-600")}>
                                     <QrCode className="h-3 w-3" />
-                                    <span className="text-[9px] font-black uppercase">Scan to Pay</span>
+                                    <span className="text-[9px] font-black uppercase">{isUsdt ? "Scan Wallet" : "Scan to Pay"}</span>
                                 </div>
                             </div>
                             <div className="text-center space-y-1 pt-2">
                                 <p className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">
-                                    {isSystemOrder ? "Authorized QR Node" : "P2P Member Scan"}
+                                    {isUsdt ? "TRC20 Wallet Node" : (isSystemOrder ? "Authorized QR Node" : "P2P Settlement")}
                                 </p>
                                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic">
-                                    Verified Channel
+                                    Identity Verified
                                 </p>
                             </div>
                         </div>
 
-                        <div className="space-y-1 bg-slate-50 p-3 rounded-[28px] border border-slate-100 shadow-inner">
-                            <CopyRow label="Receiver" value={details?.name || 'Authorized Member'} />
-                            <CopyRow label="Amount" value={`₹${order.baseAmount.toFixed(2)}`} />
-                            <CopyRow label="Order ID" value={order.orderId} />
-                            
-                            {!isSystemOrder ? (
-                                <CopyRow label="UPI ID" value={details?.upiId} />
+                        <div className="space-y-1 bg-slate-50 p-4 rounded-[28px] border border-slate-100 shadow-inner">
+                            {isUsdt ? (
+                                <>
+                                    <CopyRow label="Address" value={details?.walletAddress} />
+                                    <div className="flex justify-between items-center py-3.5 border-b border-slate-100">
+                                        <span className="text-[11px] font-black uppercase text-slate-400">Network</span>
+                                        <span className="font-black text-amber-600 text-xs uppercase tracking-widest">TRC-20</span>
+                                    </div>
+                                    <div className="flex justify-between items-center py-3.5">
+                                        <span className="text-[11px] font-black uppercase text-slate-400">USDT Amt</span>
+                                        <span className="font-black text-slate-800 text-xs">{details?.usdtAmount || '...'} USDT</span>
+                                    </div>
+                                </>
                             ) : (
-                                <div className="flex items-center justify-between py-3.5 border-t border-slate-100/50 px-2">
-                                    <span className="text-[11px] font-black uppercase text-slate-400 w-20">Identity</span>
-                                    <span className="flex-1 text-[10px] font-black text-blue-600/50 text-right uppercase tracking-[0.2em]">QR Only Mode</span>
-                                </div>
+                                <>
+                                    <CopyRow label="Receiver" value={details?.name || 'Flex System'} />
+                                    <CopyRow label="Amount" value={`₹${order.baseAmount.toFixed(2)}`} />
+                                    <CopyRow label="Order ID" value={order.orderId} />
+                                    {!isSystemOrder && <CopyRow label="UPI ID" value={details?.upiId} />}
+                                </>
                             )}
                         </div>
 
                         <div className={cn(
                             "p-4 rounded-2xl border flex gap-3 items-center",
-                            isSystemOrder ? "bg-amber-50 border-amber-100" : "bg-blue-50 border-blue-100"
+                            isUsdt ? "bg-amber-50 border-amber-100" : "bg-blue-50 border-blue-100"
                         )}>
-                            <ShieldCheck className={cn("h-6 w-6 shrink-0", isSystemOrder ? "text-amber-500" : "text-blue-500")} />
-                            <p className={cn("text-[9px] font-bold uppercase leading-relaxed", isSystemOrder ? "text-amber-700" : "text-blue-700")}>
-                                {isSystemOrder 
-                                    ? "Manual identifier copy is disabled for this node. Use the QR code to verify details in your payment app."
+                            {isUsdt ? <AlertCircle className="h-6 w-6 text-amber-600 shrink-0" /> : <ShieldCheck className="h-6 w-6 text-blue-500 shrink-0" />}
+                            <p className={cn("text-[9px] font-bold uppercase leading-relaxed", isUsdt ? "text-amber-700" : "text-blue-700")}>
+                                {isUsdt 
+                                    ? "WARNING: Send ONLY USDT to this address via TRC20 network. Other tokens or networks will be permanently lost."
                                     : "P2P Settlement active. Please pay the exact amount shown above to ensure instant asset release."
                                 }
                             </p>
@@ -319,35 +331,35 @@ function ConfirmPageContent() {
                     </div>
                 ) : (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                        <div className="p-5 bg-blue-600 text-white rounded-[24px]">
+                        <div className="p-5 bg-slate-900 text-white rounded-[24px]">
                             <div className="flex items-center gap-3 mb-2">
-                                <AlertCircle className="h-6 w-6" />
+                                <Zap className="h-6 w-6 text-blue-400" />
                                 <h3 className="font-black text-sm uppercase">Audit Submission</h3>
                             </div>
-                            <p className="text-[10px] font-bold leading-relaxed uppercase">
-                                Please ensure the 12-digit UTR and screenshot are correct. Mismatch will result in rejection.
+                            <p className="text-[10px] font-bold leading-relaxed uppercase opacity-70">
+                                Enter the 12-digit UTR or Transaction ID (TXID) accurately. Wrong input will delay or fail the audit.
                             </p>
                         </div>
 
                         <div className="space-y-5">
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">UTR / Reference Number</Label>
-                                <Input placeholder="12-Digit Ref ID" value={utr} onChange={(e) => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))} className="h-14 rounded-2xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black" />
+                                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Ref ID / TXID</Label>
+                                <Input placeholder={isUsdt ? "Enter Transaction Hash" : "12-Digit Reference Number"} value={utr} onChange={(e) => setUtr(e.target.value)} className="h-14 rounded-2xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black" />
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Payment Screenshot</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Payment Proof Screenshot</Label>
                                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
                                 <div onClick={() => fileInputRef.current?.click()} className={cn("w-full h-44 border-2 border-dashed rounded-[32px] flex flex-col items-center justify-center cursor-pointer transition-all", screenshotFile ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-slate-50 border-slate-200 text-slate-300")}>
                                     {screenshotFile ? (
                                         <div className="text-center space-y-2">
-                                            <div className="h-10 w-10 bg-teal-100 rounded-full flex items-center justify-center mx-auto"><Upload className="h-5 w-5" /></div>
-                                            <p className="text-[10px] font-black uppercase">Proof Attached ✓</p>
+                                            <div className="h-12 w-12 bg-teal-100 rounded-full flex items-center justify-center mx-auto shadow-sm"><Upload className="h-6 w-6" /></div>
+                                            <p className="text-[10px] font-black uppercase">Receipt Attached ✓</p>
                                         </div>
                                     ) : (
                                         <div className="text-center space-y-2">
                                             <Upload className="h-8 w-8 mx-auto opacity-30" />
-                                            <p className="text-[9px] font-black uppercase opacity-40">Tap to Upload Receipt</p>
+                                            <p className="text-[9px] font-black uppercase opacity-40">Tap to Upload Screenshot</p>
                                         </div>
                                     )}
                                 </div>
@@ -365,38 +377,37 @@ function ConfirmPageContent() {
                 {view === 'info' ? (
                     <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase">Submit Proof</Button>
                 ) : (
-                    <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 10 || !screenshotFile}>
-                        {isSubmitting ? "SUBMITTING..." : "CONFIRM"}
+                    <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 8 || !screenshotFile}>
+                        {isSubmitting ? "UPLOADING..." : "CONFIRM"}
                     </Button>
                 )}
             </footer>
 
             <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
-                <DialogContent className="max-w-[340px] rounded-[32px] p-6 bg-white overflow-hidden border-none shadow-2xl animate-in zoom-in-95 duration-300">
+                <DialogContent className="max-w-[340px] rounded-[32px] p-6 bg-white overflow-hidden border-none shadow-2xl">
                     <DialogHeader className="text-center mb-4">
-                        <DialogTitle className="text-xl font-black uppercase tracking-tight text-slate-800">Cancel Order?</DialogTitle>
-                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Select the reason for termination</DialogDescription>
+                        <DialogTitle className="text-xl font-black uppercase tracking-tight text-slate-800">Stop Payment?</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Select cancellation reason</DialogDescription>
                     </DialogHeader>
                     
                     <RadioGroup value={selectedReason} onValueChange={setSelectedReason} className="space-y-2 mb-4">
                         {cancelReasons.map((reason) => (
                             <div key={reason} className={cn(
                                 "flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer",
-                                selectedReason === reason ? "bg-blue-50 border-blue-200 ring-1 ring-blue-200" : "bg-slate-50 border-slate-100"
+                                selectedReason === reason ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-50"
                             )} onClick={() => setSelectedReason(reason)}>
                                 <div className="flex items-center gap-3">
                                     <RadioGroupItem value={reason} id={reason} className="h-4 w-4" />
                                     <Label htmlFor={reason} className="text-[11px] font-bold text-slate-700 cursor-pointer">{reason}</Label>
                                 </div>
-                                {selectedReason === reason && <ChevronRight className="h-4 w-4 text-blue-500" />}
                             </div>
                         ))}
                     </RadioGroup>
 
                     {selectedReason === "Other" && (
-                        <div className="mb-4 animate-in slide-in-from-top-2 duration-200">
+                        <div className="mb-4 animate-in slide-in-from-top-2">
                             <Input 
-                                placeholder="Type your reason here..." 
+                                placeholder="Type reason..." 
                                 className="h-12 bg-slate-100 border-none rounded-xl text-xs font-bold px-4"
                                 value={customReason}
                                 onChange={(e) => setCustomReason(e.target.value)}
@@ -405,13 +416,13 @@ function ConfirmPageContent() {
                     )}
 
                     <DialogFooter className="flex-row gap-3 mt-2">
-                        <Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase text-slate-400" onClick={() => { setIsCancelDialogOpen(false); setSelectedReason(""); setCustomReason(""); }}>Go Back</Button>
+                        <Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase text-slate-400" onClick={() => { setIsCancelDialogOpen(false); }}>Close</Button>
                         <Button 
-                            className="flex-[1.5] bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-red-200" 
-                            disabled={isCancelling || !selectedReason || (selectedReason === "Other" && !customReason.trim())} 
+                            className="flex-[1.5] bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase" 
+                            disabled={isCancelling || !selectedReason} 
                             onClick={handleCancelOrder}
                         >
-                            {isCancelling ? "CANCELLING..." : "Confirm Cancel"}
+                            {isCancelling ? "STOPPING..." : "Cancel Order"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

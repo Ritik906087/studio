@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -37,16 +38,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
-const providerLogos: Record<string, string> = {
-  PhonePe: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(4).png",
-  Paytm: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(5).png",
-  MobiKwik: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png",
-  Freecharge: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(3).png",
-  Airtel: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(2).png",
-  Binance: "https://cdn-icons-png.flaticon.com/128/6682/6682016.png",
-  TrustWallet: "https://cdn-icons-png.flaticon.com/128/11488/11488057.png"
-};
-
 export default function AdminDashboardPage() {
     const router = useRouter();
     const firestore = useFirestore();
@@ -64,7 +55,6 @@ export default function AdminDashboardPage() {
     
     // Search States
     const [userSearch, setUserSearch] = useState('');
-    const [sellSearch, setSellSearch] = useState('');
     const [confirmSearch, setConfirmSearch] = useState('');
 
     const [adminId, setAdminId] = useState<string>('SYSTEM');
@@ -127,11 +117,9 @@ export default function AdminDashboardPage() {
     useEffect(() => {
         if (!firestore) return;
         
-        // Fetch snapshot data immediately for performance
         fetchUsers();
         fetchConfirmations();
 
-        // Listen for live updates only where strictly needed
         const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), orderBy('createdAt', 'desc'), limit(150)), (snap) => {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
@@ -148,15 +136,6 @@ export default function AdminDashboardPage() {
         return allUsers.filter(u => u.numericId?.includes(s) || u.phoneNumber?.includes(s) || u.displayName?.toLowerCase().includes(s));
     }, [allUsers, userSearch]);
 
-    const filteredSellOrders = useMemo(() => {
-        const s = sellSearch.toLowerCase();
-        const activeStatuses = ['pending', 'partially_filled', 'processing'];
-        return sellOrders.filter(o => 
-            activeStatuses.includes(o.status) &&
-            (o.userNumericId?.includes(s) || o.orderId?.toLowerCase().includes(s) || o.status?.toLowerCase().includes(s))
-        );
-    }, [sellOrders, sellSearch]);
-
     const filteredConfirmOrders = useMemo(() => {
         const s = confirmSearch.toLowerCase();
         return pendingBuyOrders.filter(o => o.userNumericId?.includes(s) || o.utr?.toLowerCase().includes(s) || o.amount?.toString().includes(s));
@@ -165,6 +144,32 @@ export default function AdminDashboardPage() {
     const handleLogout = () => {
         localStorage.removeItem('flex_admin_session');
         router.replace('/admin/key');
+    };
+
+    const handleAddPaymentMethod = async () => {
+        if (!firestore) return;
+        setIsActionLoading(true);
+        try {
+            await addDoc(collection(firestore, 'paymentMethods'), {
+                ...newPM,
+                createdAt: serverTimestamp()
+            });
+            toast({ title: "Payment Node Added" });
+            setIsAddPMOpen(false);
+            setNewPM({ type: 'upi', upiId: '', upiHolderName: '', usdtWalletAddress: '', bankName: '', accountNumber: '', ifscCode: '', accountHolderName: '' });
+        } catch (e) {
+            toast({ variant: 'destructive', title: "Failed to add" });
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleDeletePaymentMethod = async (id: string) => {
+        if (!firestore) return;
+        try {
+            await deleteDoc(doc(firestore, 'paymentMethods', id));
+            toast({ title: "Node Removed" });
+        } catch (e) {}
     };
 
     const handleApproveBuy = async (order: any) => {
@@ -176,61 +181,54 @@ export default function AdminDashboardPage() {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 
                 const buyerSnap = await transaction.get(buyerRef);
-                const currentOrderSnap = await transaction.get(orderRef);
-
                 if (!buyerSnap.exists()) throw new Error("Buyer missing");
-                if (currentOrderSnap.data()?.status === 'completed') throw new Error("Already Approved");
 
                 const buyerData = buyerSnap.data();
                 const purchaseAmount = order.baseAmount || order.amount;
 
-                // READ ALL INVITERS
-                let l1Snap = null, l1Ref = null, l2Snap = null, l2Ref = null;
-                if (buyerData.inviterUid) {
-                    l1Ref = doc(firestore, 'users', buyerData.inviterUid);
-                    l1Snap = await transaction.get(l1Ref);
-                    if (l1Snap.exists() && l1Snap.data().inviterUid) {
-                        l2Ref = doc(firestore, 'users', l1Snap.data().inviterUid);
-                        l2Snap = await transaction.get(l2Ref);
-                    }
-                }
-
-                // READ SELLER
-                let sellOrderRef = null, sellerProfileRef = null, sellSnap = null, sellerSnap = null;
-                if (order.matchedSellOrderId && order.sellerId && !['ADMIN', 'SYSTEM_VAULT'].includes(order.sellerId)) {
-                    sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    sellerProfileRef = doc(firestore, 'users', order.sellerId);
-                    sellSnap = await transaction.get(sellOrderRef);
-                    sellerSnap = await transaction.get(sellerProfileRef);
-                }
-
-                // WRITES
                 transaction.update(buyerRef, { balance: (buyerData.balance || 0) + order.amount });
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
                 
-                if (l1Ref && l1Snap?.exists()) {
-                    const bonus = purchaseAmount * 0.01;
-                    transaction.update(l1Ref, { balance: (l1Snap.data().balance || 0) + bonus });
-                    transaction.set(doc(collection(firestore, 'users', l1Ref.id, 'transactions')), {
-                        userId: l1Ref.id, amount: bonus, type: 'team_bonus', description: `L1 Commission: Buyer ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C1_${order.id}`
-                    });
-                }
-                if (l2Ref && l2Snap?.exists()) {
-                    const bonus = purchaseAmount * 0.008;
-                    transaction.update(l2Ref, { balance: (l2Snap.data().balance || 0) + bonus });
-                    transaction.set(doc(collection(firestore, 'users', l2Ref.id, 'transactions')), {
-                        userId: l2Ref.id, amount: bonus, type: 'team_bonus', description: `L2 Commission: Buyer ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C2_${order.id}`
-                    });
+                // Commision Logic (L1: 1%, L2: 0.8%)
+                if (buyerData.inviterUid) {
+                    const l1Ref = doc(firestore, 'users', buyerData.inviterUid);
+                    const l1Snap = await transaction.get(l1Ref);
+                    if (l1Snap.exists()) {
+                        const bonus = purchaseAmount * 0.01;
+                        transaction.update(l1Ref, { balance: (l1Snap.data().balance || 0) + bonus });
+                        transaction.set(doc(collection(firestore, 'users', l1Ref.id, 'transactions')), {
+                            userId: l1Ref.id, amount: bonus, type: 'team_bonus', description: `L1 Commission: UID ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C1_${order.id}`
+                        });
+
+                        if (l1Snap.data().inviterUid) {
+                            const l2Ref = doc(firestore, 'users', l1Snap.data().inviterUid);
+                            const l2Snap = await transaction.get(l2Ref);
+                            if (l2Snap.exists()) {
+                                const b2 = purchaseAmount * 0.008;
+                                transaction.update(l2Ref, { balance: (l2Snap.data().balance || 0) + b2 });
+                                transaction.set(doc(collection(firestore, 'users', l2Ref.id, 'transactions')), {
+                                    userId: l2Ref.id, amount: b2, type: 'team_bonus', description: `L2 Commission: UID ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C2_${order.id}`
+                                });
+                            }
+                        }
+                    }
                 }
 
-                if (sellSnap?.exists() && sellOrderRef) {
-                    const matches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => 
-                        m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
-                    );
-                    transaction.update(sellOrderRef, { matchedBuyOrders: matches, status: matches.every((m: any) => m.status === 'completed' || m.status === 'failed') ? 'completed' : 'processing' });
-                }
-                if (sellerSnap?.exists() && sellerProfileRef) {
-                    transaction.update(sellerProfileRef, { holdBalance: Math.max(0, (sellerSnap.data().holdBalance || 0) - purchaseAmount) });
+                if (order.matchedSellOrderId && order.sellerId && !['ADMIN', 'SYSTEM_VAULT'].includes(order.sellerId)) {
+                    const sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    const sellerProfileRef = doc(firestore, 'users', order.sellerId);
+                    const sellSnap = await transaction.get(sellOrderRef);
+                    const sellerSnap = await transaction.get(sellerProfileRef);
+
+                    if (sellSnap.exists()) {
+                        const matches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => 
+                            m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
+                        );
+                        transaction.update(sellOrderRef, { matchedBuyOrders: matches, status: matches.every((m: any) => m.status === 'completed' || m.status === 'failed') ? 'completed' : 'processing' });
+                    }
+                    if (sellerSnap.exists()) {
+                        transaction.update(sellerProfileRef, { holdBalance: Math.max(0, (sellerSnap.data().holdBalance || 0) - purchaseAmount) });
+                    }
                 }
             });
             toast({ title: "Approved" });
@@ -246,7 +244,7 @@ export default function AdminDashboardPage() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
-                transaction.update(orderRef, { status: 'failed', rejectionReason: 'Invalid proof or UTR mismatch', rejectedBy: adminId, rejectedAt: serverTimestamp() });
+                transaction.update(orderRef, { status: 'failed', rejectionReason: 'Verification failed or UTR mismatch', rejectedBy: adminId, rejectedAt: serverTimestamp() });
                 
                 if (order.matchedSellOrderId && order.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(order.sellerId)) {
                     const sRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
@@ -262,9 +260,9 @@ export default function AdminDashboardPage() {
                     }
                 }
             });
-            toast({ title: "Rejected & Liquidity Restored" });
+            toast({ title: "Rejected" });
             fetchConfirmations();
-        } catch (e: any) { toast({ variant: "destructive", title: "Action Failed" }); } finally { setIsActionLoading(false); }
+        } catch (e) { toast({ variant: "destructive", title: "Action Failed" }); } finally { setIsActionLoading(false); }
     };
 
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
@@ -279,6 +277,9 @@ export default function AdminDashboardPage() {
                     <Logo className="text-xl" />
                 </div>
                 <div className="flex items-center gap-4">
+                    <div className="hidden sm:flex items-center gap-2 text-xs font-black uppercase text-blue-600">
+                        <Zap className="h-4 w-4" /> System: {adminId}
+                    </div>
                     <Button onClick={handleLogout} variant="outline" size="sm" className="rounded-xl font-bold h-9">
                         <LogOut className="mr-2 h-4 w-4" /> Logout
                     </Button>
@@ -294,9 +295,8 @@ export default function AdminDashboardPage() {
                         {[
                           { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
                           { id: 'users', label: 'User Registry', icon: Users },
-                          { id: 'withdrawal', label: 'Withdrawal', icon: TrendingDown },
                           { id: 'confirm', label: 'Confirmation', icon: CheckCircle2 },
-                          { id: 'server', label: 'Payment Server', icon: Server },
+                          { id: 'server', label: 'Payment Nodes', icon: Server },
                         ].map(item => (
                           <button 
                             key={item.id}
@@ -315,7 +315,7 @@ export default function AdminDashboardPage() {
                 <main className="flex-1 p-4 md:p-8 max-w-full overflow-x-hidden">
                     <Tabs value={activeTab} className="w-full">
                         <TabsContent value="dashboard" className="space-y-6">
-                            <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                                 <Card className="border-none shadow-sm rounded-3xl p-6 bg-white">
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Members</p>
                                     <div className="text-3xl font-black text-slate-900 mt-2">{allUsers.length}</div>
@@ -331,45 +331,146 @@ export default function AdminDashboardPage() {
                             <div className="flex items-center gap-3">
                                 <div className="relative flex-1">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                    <Input 
-                                        placeholder="Search UID, Name..." 
-                                        className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
-                                        value={userSearch}
-                                        onChange={e => setUserSearch(e.target.value)}
-                                    />
+                                    <Input placeholder="Search UID, Name..." className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
                                 </div>
                                 <Button onClick={fetchUsers} size="icon" variant="outline" className="rounded-xl h-11 w-11"><RefreshCw className={cn("h-4 w-4", usersLoading && "animate-spin")} /></Button>
                             </div>
                             <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader className="bg-slate-50/50">
-                                            <TableRow>
-                                                <TableHead className="font-black text-[10px] uppercase pl-6 py-4">UID</TableHead>
-                                                <TableHead className="font-black text-[10px] uppercase">User Info</TableHead>
-                                                <TableHead className="font-black text-[10px] uppercase">Balance</TableHead>
-                                                <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
+                                <Table>
+                                    <TableHeader className="bg-slate-50/50">
+                                        <TableRow>
+                                            <TableHead className="font-black text-[10px] uppercase pl-6 py-4">Identity</TableHead>
+                                            <TableHead className="font-black text-[10px] uppercase">Balance</TableHead>
+                                            <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredUsers.map(u => (
+                                            <TableRow key={u.id}>
+                                                <TableCell className="pl-6"><div className="flex flex-col"><span className="font-black text-xs text-blue-600">UID: {u.numericId}</span><span className="text-[10px] font-bold text-slate-400">{u.displayName}</span></div></TableCell>
+                                                <TableCell className="font-black text-xs">₹{u.balance?.toFixed(2)}</TableCell>
+                                                <TableCell className="text-right pr-6"><Button asChild size="sm" variant="ghost" className="h-8 w-8"><Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link></Button></TableCell>
                                             </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {filteredUsers.map(u => (
-                                                <TableRow key={u.id}>
-                                                    <TableCell className="font-mono text-xs font-black text-blue-600 pl-6">{u.numericId}</TableCell>
-                                                    <TableCell><div className="flex flex-col"><span className="font-bold text-xs">{u.displayName}</span><span className="text-[9px] text-slate-400">+91 {u.phoneNumber}</span></div></TableCell>
-                                                    <TableCell className="font-black text-xs">₹{u.balance?.toFixed(2)}</TableCell>
-                                                    <TableCell className="text-right pr-6"><Button asChild size="sm" variant="ghost" className="h-8 w-8"><Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link></Button></TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </Card>
                         </TabsContent>
 
-                        {/* Additional Tab Contents... Withdrawal, Confirm, Server as before */}
+                        <TabsContent value="confirm" className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <Input placeholder="Search Amount, UTR..." className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" value={confirmSearch} onChange={e => setConfirmSearch(e.target.value)} />
+                                </div>
+                                <Button onClick={fetchConfirmations} size="icon" variant="outline" className="rounded-xl h-11 w-11"><RefreshCw className="h-4 w-4" /></Button>
+                            </div>
+                            <div className="grid gap-4">
+                                {filteredConfirmOrders.map(order => (
+                                    <Card key={order.id} className="border-none shadow-sm rounded-3xl bg-white p-5 group hover:shadow-md transition-all">
+                                        <div className="flex flex-col md:flex-row justify-between gap-4">
+                                            <div className="flex items-start gap-4">
+                                                <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                                                    {order.paymentType === 'usdt' ? <Zap className="h-6 w-6 text-amber-500" /> : <Wallet className="h-6 w-6" />}
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline" className="text-[9px] uppercase font-black">{order.paymentType}</Badge>
+                                                        <span className="text-xs font-black text-slate-800">UID: {order.userNumericId}</span>
+                                                    </div>
+                                                    <p className="text-lg font-black text-slate-900">₹{order.baseAmount || order.amount}</p>
+                                                    <p className="text-[10px] font-mono font-bold text-slate-400">UTR/TXID: {order.utr}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Dialog>
+                                                    <DialogTrigger asChild><Button variant="outline" className="rounded-xl h-11"><ImageIcon className="mr-2 h-4 w-4" /> Proof</Button></DialogTrigger>
+                                                    <DialogContent className="max-w-md rounded-3xl"><div className="relative aspect-auto max-h-[70vh] overflow-hidden rounded-xl"><img src={order.screenshotURL} alt="Proof" className="w-full h-full object-contain" /></div></DialogContent>
+                                                </Dialog>
+                                                <Button onClick={() => handleApproveBuy(order)} className="bg-green-600 hover:bg-green-700 h-11 rounded-xl font-black px-6"><Check className="mr-2 h-4 w-4" /> Approve</Button>
+                                                <Button onClick={() => handleRejectBuy(order)} variant="destructive" className="h-11 rounded-xl font-black px-6"><X className="mr-2 h-4 w-4" /> Reject</Button>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                ))}
+                                {filteredConfirmOrders.length === 0 && <div className="text-center py-24 opacity-30 font-black uppercase text-[10px] tracking-widest">No pending audits</div>}
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="server" className="space-y-4">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">Active Payment Nodes</h2>
+                                <Button onClick={() => setIsAddPMOpen(true)} className="rounded-xl h-11 btn-gradient uppercase font-black text-[10px] tracking-widest px-6"><Plus className="mr-2 h-4 w-4" /> Add Node</Button>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {paymentMethods.map(pm => (
+                                    <Card key={pm.id} className="border-none shadow-sm rounded-[32px] bg-white overflow-hidden relative group">
+                                        <div className={cn("h-1.5 w-full", pm.type === 'usdt' ? "bg-amber-500" : "bg-blue-600")} />
+                                        <CardContent className="p-6">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center">
+                                                        {pm.type === 'usdt' ? <Zap className="h-5 w-5 text-amber-500" /> : <CreditCard className="h-5 w-5 text-blue-600" />}
+                                                    </div>
+                                                    <span className="font-black text-xs uppercase text-slate-800">{pm.type} Node</span>
+                                                </div>
+                                                <Button onClick={() => handleDeletePaymentMethod(pm.id)} variant="ghost" size="icon" className="text-red-400 h-8 w-8 hover:bg-red-50 hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></Button>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {pm.type === 'usdt' ? (
+                                                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">TRC20 Wallet</p>
+                                                        <p className="text-[11px] font-black text-slate-800 truncate mt-1">{pm.usdtWalletAddress}</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Access ID</p>
+                                                        <p className="text-[11px] font-black text-slate-800 mt-1">{pm.upiId}</p>
+                                                        <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">{pm.upiHolderName}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        </TabsContent>
                     </Tabs>
                 </main>
             </div>
+
+            <Dialog open={isAddPMOpen} onOpenChange={setIsAddPMOpen}>
+                <DialogContent className="rounded-[32px] max-w-sm">
+                    <DialogHeader><DialogTitle className="text-xl font-black uppercase tracking-tight">Register Node</DialogTitle><DialogDescription className="text-[10px] font-bold uppercase text-slate-400">Add secure payment entry point</DialogDescription></DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-[9px] font-black uppercase text-slate-400">Node Type</Label>
+                            <Select value={newPM.type} onValueChange={(v) => setNewPM({ ...newPM, type: v })}>
+                                <SelectTrigger className="rounded-xl h-12 bg-slate-50 border-none font-bold"><SelectValue /></SelectTrigger>
+                                <SelectContent className="rounded-xl"><SelectItem value="upi">UPI / Local QR</SelectItem><SelectItem value="usdt">USDT (TRC-20)</SelectItem><SelectItem value="bank">Bank Transfer</SelectItem></SelectContent>
+                            </Select>
+                        </div>
+                        {newPM.type === 'usdt' ? (
+                            <div className="space-y-1.5">
+                                <Label className="text-[9px] font-black uppercase text-slate-400">TRC20 Address</Label>
+                                <Input value={newPM.usdtWalletAddress} onChange={e => setNewPM({ ...newPM, usdtWalletAddress: e.target.value })} className="h-12 rounded-xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono text-xs" placeholder="T..." />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] font-black uppercase text-slate-400">Access ID / Text</Label>
+                                    <Input value={newPM.upiId} onChange={e => setNewPM({ ...newPM, upiId: e.target.value })} className="h-12 rounded-xl bg-slate-50 border-none ring-1 ring-slate-100 font-black" placeholder="Identifier" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] font-black uppercase text-slate-400">Holder Identity</Label>
+                                    <Input value={newPM.upiHolderName} onChange={e => setNewPM({ ...newPM, upiHolderName: e.target.value })} className="h-12 rounded-xl bg-slate-50 border-none ring-1 ring-slate-100 font-black uppercase" placeholder="Verified Name" />
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    <DialogFooter><Button onClick={handleAddPaymentMethod} className="w-full h-12 btn-gradient rounded-xl uppercase font-black text-[10px] tracking-widest shadow-blue-500/20" disabled={isActionLoading}>{isActionLoading ? "Syncing..." : "Inject Node"}</Button></DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

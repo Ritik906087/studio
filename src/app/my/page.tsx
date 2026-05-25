@@ -17,9 +17,9 @@ import {
   BadgeCheck,
   CreditCard,
   Trophy,
-  Flag,
   KeyRound,
-  Send
+  Send,
+  HelpCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
@@ -139,11 +139,10 @@ export default function MyPage() {
 
         <div className="bg-white shadow-sm rounded-[20px] overflow-hidden border border-blue-50 divide-y divide-slate-50">
           <ServiceTile icon={Send} title="Help Center" subtitle="24/7 Telegram Support" href="/help" iconColor="bg-sky-50 text-sky-500" />
+          <ServiceTile icon={HelpCircle} title="FAQ & Guide" subtitle="How to use Flex Pay" href="/my/faq" iconColor="bg-teal-50 text-teal-600" />
           <ServiceTile icon={CreditCard} title="Account" subtitle="Linked Payment IDs" href="/my/collection" iconColor="bg-blue-50 text-blue-500" />
           <ServiceTile icon={KeyRound} title="Security" subtitle="Update Login Password" href="/my/change-password" iconColor="bg-sky-50 text-sky-600" />
-          <ServiceTile icon={Lock} title="Reset Access" subtitle="Forgot Login Password" href="/forgot-password" iconColor="bg-indigo-50 text-indigo-500" />
           <ServiceTile icon={Trophy} title="Missions" subtitle="Newbie starter rewards" href="/my/new-user-rewards" iconColor="bg-orange-50 text-orange-500" />
-          <ServiceTile icon={Flag} title="Audit Support" subtitle="Report a payment problem" href="/my/report-problem" iconColor="bg-red-50 text-red-500" />
         </div>
 
         <div className="pt-4 pb-12">

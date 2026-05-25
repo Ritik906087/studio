@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -14,6 +15,7 @@ import {
     CheckCircle2, 
     ChevronUp, 
     ChevronDown,
+    ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -122,6 +124,7 @@ export default function BuyPage() {
         }
     }).catch(() => {});
 
+    // Fetch USDT address from admin settings
     const usdtQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'usdt'), limit(1));
     getDocs(usdtQuery).then(snap => {
         if (!snap.empty) {
@@ -147,8 +150,8 @@ export default function BuyPage() {
   const handleBuyClick = (amount: number) => {
     if (activePaymentOrder) { 
         toast({ 
-          title: "Complete Previous Order", 
-          description: "You have an order pending payment.", 
+          title: "Pending Session", 
+          description: "Please complete your active order first.", 
           variant: "destructive" 
         }); 
         router.push(`/buy/confirm/${activePaymentOrder.id}`);
@@ -160,7 +163,7 @@ export default function BuyPage() {
 
   const handleCreateOrder = async (amountInInr: number, type: 'upi' | 'usdt' = 'upi', usdtValue?: number, buyerMethod?: any) => {
     if (!user || !profile || !firestore) {
-        toast({ title: "Session Expired", description: "Please login again.", variant: "destructive" });
+        toast({ title: "Session Error", description: "Try again.", variant: "destructive" });
         return;
     }
 
@@ -176,8 +179,8 @@ export default function BuyPage() {
         const buyOrderRef = doc(firestore, 'users', user.uid, 'orders', rawOrderId);
 
         if (type === 'usdt') {
-            if (!usdtAddress) throw new Error("System error. Try again later.");
-            if (!usdtValue || usdtValue < MIN_USDT) throw new Error(`Minimum deposit is ${MIN_USDT} USDT`);
+            if (!usdtAddress) throw new Error("USDT Gateway currently offline.");
+            if (!usdtValue || usdtValue < MIN_USDT) throw new Error(`Minimum ${MIN_USDT} USDT required`);
             
             await runTransaction(firestore, async (transaction) => {
                 transaction.set(buyOrderRef, {
@@ -191,7 +194,7 @@ export default function BuyPage() {
                     bonusPercentage: bonusPercent,
                     flatBonus: flatBonus,
                     paymentType: 'usdt',
-                    paymentProvider: 'CRYPTO',
+                    paymentProvider: 'BINANCE/CRYPTO',
                     status: 'pending_payment',
                     sellerId: 'SYSTEM_VAULT',
                     sellerWithdrawalDetails: {
@@ -202,7 +205,7 @@ export default function BuyPage() {
                     createdAt: serverTimestamp(),
                 });
             });
-            toast({ title: "Order Created Successfully!" });
+            toast({ title: "USDT Order Created" });
             router.push(`/buy/confirm/${rawOrderId}`);
             return;
         }
@@ -228,7 +231,7 @@ export default function BuyPage() {
         if (!sellerDoc) {
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
-            if (adminPMSnap.empty) throw new Error("Service currently busy. Try again later.");
+            if (adminPMSnap.empty) throw new Error("Service busy. Try USDT or check back later.");
 
             const adminMethod = adminPMSnap.docs[0].data();
 
@@ -250,7 +253,7 @@ export default function BuyPage() {
                     buyerSelectedProvider: buyerMethod?.name || 'N/A',
                     sellerWithdrawalDetails: {
                         type: 'upi',
-                        name: adminMethod.upiHolderName || 'System Verified',
+                        name: adminMethod.upiHolderName || 'Flex System',
                         upiId: adminMethod.upiId
                     },
                     createdAt: serverTimestamp(),
@@ -267,7 +270,7 @@ export default function BuyPage() {
             const freshSellerData = freshSellerSnap.data();
 
             if (!freshSellerData || freshSellerData.remainingAmount < amountInInr || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
-                throw new Error("Order expired. Please try again.");
+                throw new Error("Pool updated. Please refresh.");
             }
 
             const newRemaining = freshSellerData.remainingAmount - amountInInr;
@@ -319,7 +322,7 @@ export default function BuyPage() {
         router.push(`/buy/confirm/${rawOrderId}`);
 
     } catch (e: any) {
-        toast({ title: "Failed to Create Order", description: e.message, variant: "destructive" });
+        toast({ title: "Creation Failed", description: e.message, variant: "destructive" });
     } finally {
         setIsMatching(false);
     }
@@ -330,75 +333,70 @@ export default function BuyPage() {
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-white">
-      <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-[60] border-b">
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-          <Link href="/home"><ChevronLeft className="h-6 w-6 text-slate-500" /></Link>
+    <div className="flex flex-col min-h-screen bg-[#F5F7FB]">
+      <header className="flex items-center justify-between p-4 bg-white sticky top-0 z-[60] border-b shadow-sm">
+        <Button asChild variant="ghost" size="icon" className="h-9 w-9 rounded-full bg-slate-50">
+          <Link href="/home"><ChevronLeft className="h-5 w-5 text-slate-800" /></Link>
         </Button>
-        <h1 className="text-lg font-medium text-slate-700">Buy</h1>
-        <div className="w-8"></div>
+        <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Market Place</h1>
+        <div className="w-9"></div>
       </header>
 
       <main className="flex-1 flex flex-col">
         <Tabs defaultValue="upi" className="w-full">
-            <div className="bg-white border-b px-4">
-                <TabsList className="grid grid-cols-2 bg-transparent h-12 w-full p-0">
-                    <TabsTrigger value="upi" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary font-bold text-slate-400">UPI</TabsTrigger>
-                    <TabsTrigger value="usdt" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary font-bold text-slate-400">USDT</TabsTrigger>
+            <div className="bg-white px-4">
+                <TabsList className="grid grid-cols-2 bg-slate-100/50 rounded-xl h-11 p-1 mt-2 mb-2">
+                    <TabsTrigger value="upi" className="rounded-lg font-black text-[10px] uppercase data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm">UPI Payment</TabsTrigger>
+                    <TabsTrigger value="usdt" className="rounded-lg font-black text-[10px] uppercase data-[state=active]:bg-white data-[state=active]:text-amber-500 data-[state=active]:shadow-sm">USDT Node</TabsTrigger>
                 </TabsList>
             </div>
 
             <TabsContent value="upi" className="m-0">
-                <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 border-b">
+                <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-t mt-1">
                     <div className="flex items-center gap-2">
-                        <button onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="p-1 text-primary">
-                            {sortOrder === 'asc' ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                        <button onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="p-1.5 bg-blue-50 rounded-lg text-primary border border-blue-100">
+                            {sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         </button>
-                        <div className="flex items-center gap-1.5 ml-2">
-                            <span className="text-[11px] font-bold text-slate-400">Min</span>
-                            <input value={minFilter} onChange={(e) => setMinFilter(e.target.value)} className="w-12 bg-transparent border-none font-bold text-[13px] focus:ring-0 p-0" />
+                        <div className="flex items-center gap-1.5 ml-1">
+                            <span className="text-[10px] font-black text-slate-400 uppercase">Min:</span>
+                            <input value={minFilter} onChange={(e) => setMinFilter(e.target.value)} className="w-12 bg-transparent border-none font-black text-xs focus:ring-0 p-0 text-slate-800" />
                         </div>
-                        <div className="flex items-center gap-1.5 ml-4">
-                            <span className="text-[11px] font-bold text-slate-400">Max</span>
-                            <input value={maxFilter} onChange={(e) => setMaxFilter(e.target.value)} className="w-16 bg-transparent border-none font-bold text-[13px] focus:ring-0 p-0" />
+                        <div className="flex items-center gap-1.5 ml-3">
+                            <span className="text-[10px] font-black text-slate-400 uppercase">Max:</span>
+                            <input value={maxFilter} onChange={(e) => setMaxFilter(e.target.value)} className="w-16 bg-transparent border-none font-black text-xs focus:ring-0 p-0 text-slate-800" />
                         </div>
                     </div>
-                    <Search className="h-5 w-5 text-orange-400" />
+                    <Search className="h-4 w-4 text-slate-300" />
                 </div>
 
-                <div className="divide-y divide-slate-100 pb-24">
+                <div className="divide-y divide-slate-50 pb-24">
                     {filteredOptions.map((opt) => {
                         const reward = (opt.amount * 0.06) + 5;
                         const total = opt.amount + reward;
                         return (
-                            <div key={opt.id} className="p-4 flex flex-col gap-3 group active:bg-slate-50 transition-colors">
+                            <div key={opt.id} className="p-4 flex flex-col gap-3 bg-white active:bg-slate-50 transition-colors">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-1.5">
                                         <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Order ID: {opt.id}</span>
+                                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Hash: {opt.id}</span>
                                     </div>
-                                    <span className="text-[11px] text-blue-500 font-black uppercase tracking-tight">Bonus 6.0%+₹5</span>
+                                    <span className="text-[10px] text-blue-500 font-black uppercase tracking-tight bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">Bonus 6%+₹5</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <div className="flex flex-col">
-                                            <span className="text-[11px] text-red-500 font-bold uppercase">Price</span>
-                                            <span className="text-base font-bold text-red-500">₹ {opt.amount.toLocaleString()}</span>
+                                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-tighter">Amount</span>
+                                            <span className="text-base font-black text-slate-900">₹{opt.amount.toLocaleString()}</span>
                                         </div>
-                                        <span className="text-slate-300 mx-1 font-light text-xl">+</span>
+                                        <ArrowRight className="h-4 w-4 text-slate-100" />
                                         <div className="flex flex-col">
-                                            <span className="text-[11px] text-slate-500 font-bold uppercase">Bonus</span>
-                                            <span className="text-base font-bold text-slate-800">{reward.toFixed(1)}</span>
-                                        </div>
-                                        <span className="text-slate-300 mx-1 font-light text-xl">=</span>
-                                        <div className="flex flex-col">
-                                            <span className="text-[11px] text-blue-600 font-black uppercase tracking-tighter">Receive</span>
-                                            <span className="text-base font-black text-blue-600 tabular-nums">{total.toFixed(2)}</span>
+                                            <span className="text-[10px] text-teal-500 font-black uppercase tracking-tighter">Receive</span>
+                                            <span className="text-base font-black text-teal-600 tabular-nums">₹{total.toFixed(2)}</span>
                                         </div>
                                     </div>
                                     <Button 
                                         onClick={() => handleBuyClick(opt.amount)}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white rounded-md h-9 px-6 text-sm font-black uppercase shadow-sm active:scale-95 transition-all"
+                                        className="btn-gradient rounded-xl h-10 px-6 text-[11px] font-black uppercase tracking-widest shadow-blue-500/20"
                                     >
                                         Buy
                                     </Button>
@@ -410,81 +408,93 @@ export default function BuyPage() {
             </TabsContent>
 
             <TabsContent value="usdt" className="p-4">
-                <Card className="border-none bg-white rounded-2xl shadow-lg ring-1 ring-slate-100 overflow-hidden">
-                    <CardContent className="p-5 space-y-5">
-                        <div className="space-y-3">
+                <Card className="border-none bg-white rounded-[28px] shadow-lg ring-1 ring-slate-100 overflow-hidden">
+                    <CardContent className="p-6 space-y-6">
+                        <div className="space-y-4">
                             <div className="space-y-1.5">
-                                <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">USDT Amount</Label>
+                                <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Deposit USDT</Label>
                                 <div className="relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500 font-black">$</div>
-                                    <Input type="number" placeholder="Min 5 USDT" value={usdtInput} onChange={(e) => setUsdtInput(e.target.value)} className="h-12 pl-8 bg-slate-50 border-none ring-1 ring-slate-200 rounded-xl text-lg font-black" />
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500 font-black text-lg">$</div>
+                                    <Input type="number" placeholder="Min 5 USDT" value={usdtInput} onChange={(e) => setUsdtInput(e.target.value)} className="h-14 pl-10 bg-slate-50 border-none ring-1 ring-slate-100 rounded-[18px] text-xl font-black" />
                                 </div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase ml-1">Rate: ₹{USDT_RATE}/USDT</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase ml-1 tracking-tight">Protocol Rate: ₹{USDT_RATE}/USDT</p>
                             </div>
-                            <div className="p-4 bg-primary text-white rounded-xl flex items-center justify-between">
+                            <div className="p-5 balance-gradient text-white rounded-[22px] flex items-center justify-between shadow-lg shadow-blue-500/20">
                                 <div className="space-y-0.5">
-                                    <p className="text-[10px] font-black uppercase opacity-60">You Receive</p>
-                                    <p className="text-xl font-black tabular-nums">₹{(Number(usdtInput) * USDT_RATE).toLocaleString()}</p>
+                                    <p className="text-[9px] font-black uppercase opacity-70 tracking-widest">Credits Received</p>
+                                    <p className="text-2xl font-black tabular-nums tracking-tighter">₹{(Number(usdtInput) * USDT_RATE).toLocaleString()}</p>
                                 </div>
-                                <Wallet className="h-6 w-6 text-white/30" />
+                                <div className="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center border border-white/10">
+                                    <Zap className="h-5 w-5 text-yellow-300" />
+                                </div>
                             </div>
                         </div>
-                        <Button onClick={() => handleCreateOrder(Number(usdtInput) * USDT_RATE, 'usdt', Number(usdtInput))} className="w-full h-12 btn-gradient rounded-xl font-black text-sm" disabled={isMatching || Number(usdtInput) < MIN_USDT}>
-                            {isMatching ? <Loader size="xs" /> : "DEPOSIT USDT"}
+                        <Button onClick={() => handleCreateOrder(Number(usdtInput) * USDT_RATE, 'usdt', Number(usdtInput))} className="w-full h-14 btn-gradient rounded-[18px] font-black text-sm uppercase shadow-blue-500/30" disabled={isMatching || Number(usdtInput) < MIN_USDT}>
+                            {isMatching ? <Loader size="xs" /> : "PROCEED USDT DEPOSIT"}
                         </Button>
+                        <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex gap-3">
+                             <CheckCircle2 className="h-5 w-5 text-amber-500 shrink-0" />
+                             <p className="text-[9px] text-amber-800 font-bold uppercase leading-relaxed">ONLY TRC20 NETWORK SUPPORTED. WRONG NETWORK TRANSFERS CANNOT BE RECOVERED.</p>
+                        </div>
                     </CardContent>
                 </Card>
             </TabsContent>
         </Tabs>
 
         {isMatching && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[100] flex items-center justify-center p-6 text-center">
-                 <Card className="w-full max-w-xs p-8 rounded-[32px] border-none shadow-2xl bg-white">
-                     <div className="relative w-16 h-16 mx-auto mb-4">
-                        <Loader2 className="w-16 h-16 text-primary animate-spin" />
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 text-center">
+                 <Card className="w-full max-w-xs p-10 rounded-[32px] border-none shadow-2xl bg-white animate-in zoom-in-95">
+                     <div className="relative w-20 h-20 mx-auto mb-6">
+                        <Loader2 className="w-20 h-20 text-primary animate-spin" />
                      </div>
-                     <h3 className="font-black text-base text-slate-800 uppercase tracking-tight">Creating Order</h3>
-                     <p className="text-[9px] text-slate-400 mt-1 font-bold uppercase tracking-widest leading-relaxed">Please wait while we process your request...</p>
+                     <h3 className="font-black text-lg text-slate-800 uppercase tracking-tight">Creating Order</h3>
+                     <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest leading-relaxed">Syncing with secure payment node...</p>
                  </Card>
             </div>
         )}
 
         <Sheet open={isMethodSheetOpen} onOpenChange={setIsMethodSheetOpen}>
-            <SheetContent side="bottom" className="rounded-t-[32px] px-5 pb-10 pt-6 border-none shadow-2xl bg-[#F5F7FB] max-h-[70vh] overflow-y-auto no-scrollbar">
-                <SheetHeader className="text-center mb-6">
-                    <SheetTitle className="text-xl font-black tracking-tight uppercase">Select Payment App</SheetTitle>
-                    <SheetDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Choose your linked verified wallet
+            <SheetContent side="bottom" className="rounded-t-[32px] px-6 pb-12 pt-8 border-none shadow-2xl bg-[#F8FAFC] max-h-[80vh] overflow-y-auto no-scrollbar">
+                <SheetHeader className="text-center mb-8">
+                    <SheetTitle className="text-xl font-black tracking-tight uppercase text-slate-800">Verify Account</SheetTitle>
+                    <SheetDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
+                        Select your linked wallet for settlement
                     </SheetDescription>
                 </SheetHeader>
                 <div className="space-y-3">
                     {filteredMethods.length > 0 ? (
                         filteredMethods.map((m: any, idx: number) => (
-                            <div key={idx} className={cn("p-4 rounded-[22px] bg-white border border-slate-100 shadow-sm flex items-center justify-between cursor-pointer active:scale-[0.98]", selectedBuyerMethod?.upiId === m.upiId ? "ring-2 ring-primary" : "")} onClick={() => setSelectedBuyerMethod(m)}>
-                                <div className="flex items-center gap-3">
-                                    <div className="h-11 w-11 rounded-xl bg-slate-50 flex items-center justify-center p-2">
-                                        {PROVIDER_LOGOS[m.name] && <Image src={PROVIDER_LOGOS[m.name]} alt={m.name} width={32} height={32} className="object-contain" />}
+                            <div key={idx} className={cn("p-5 rounded-[22px] bg-white border border-slate-100 shadow-sm flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all", selectedBuyerMethod?.upiId === m.upiId ? "ring-2 ring-primary border-transparent" : "")} onClick={() => setSelectedBuyerMethod(m)}>
+                                <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 rounded-xl bg-slate-50 flex items-center justify-center p-2 shadow-inner">
+                                        {PROVIDER_LOGOS[m.name] && <Image src={PROVIDER_LOGOS[m.name]} alt={m.name} width={36} height={36} className="object-contain" />}
                                     </div>
                                     <div>
-                                        <p className="font-black text-slate-800 text-xs uppercase">{m.name}</p>
-                                        <p className="text-[9px] font-mono font-bold text-slate-400 mt-0.5">{m.upiId}</p>
+                                        <p className="font-black text-slate-800 text-xs uppercase tracking-tight">{m.name}</p>
+                                        <p className="text-[10px] font-mono font-bold text-slate-400 mt-0.5">{m.upiId}</p>
                                     </div>
                                 </div>
-                                {selectedBuyerMethod?.upiId === m.upiId ? <CheckCircle2 className="h-6 w-6 text-primary" /> : <div className="h-6 w-6 rounded-full border-2 border-slate-100" />}
+                                {selectedBuyerMethod?.upiId === m.upiId ? (
+                                    <div className="h-6 w-6 bg-primary rounded-full flex items-center justify-center shadow-md"><CheckCircle2 className="h-4 w-4 text-white" /></div>
+                                ) : (
+                                    <div className="h-6 w-6 rounded-full border-2 border-slate-100" />
+                                )}
                             </div>
                         ))
                     ) : (
-                        <div className="py-10 text-center space-y-4">
-                            <Wallet className="h-10 w-10 mx-auto text-slate-200" />
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No Verified Accounts Linked</p>
-                            <Button asChild className="btn-gradient rounded-xl px-6 h-10 text-[9px] font-black uppercase">
-                                <Link href="/my/collection/add">Link Account</Link>
+                        <div className="py-12 text-center space-y-5">
+                            <div className="h-16 w-16 bg-slate-100 rounded-[22px] flex items-center justify-center mx-auto opacity-40">
+                                <Wallet className="h-8 w-8 text-slate-400" />
+                            </div>
+                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">No Verified Accounts Linked</p>
+                            <Button asChild className="btn-gradient rounded-xl px-8 h-12 text-[10px] font-black uppercase tracking-widest shadow-blue-500/20">
+                                <Link href="/my/collection/add">Link Verified Account</Link>
                             </Button>
                         </div>
                     )}
                     {filteredMethods.length > 0 && (
-                        <Button className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase mt-4" disabled={!selectedBuyerMethod || !pendingPurchaseAmount} onClick={() => pendingPurchaseAmount && handleCreateOrder(pendingPurchaseAmount, 'upi', undefined, selectedBuyerMethod)}>
-                            CREATE ORDER
+                        <Button className="w-full h-14 btn-gradient rounded-[20px] font-black text-sm uppercase mt-6 shadow-blue-500/30" disabled={!selectedBuyerMethod || !pendingPurchaseAmount} onClick={() => pendingPurchaseAmount && handleCreateOrder(pendingPurchaseAmount, 'upi', undefined, selectedBuyerMethod)}>
+                            INITIALIZE SETTLEMENT
                         </Button>
                     )}
                 </div>

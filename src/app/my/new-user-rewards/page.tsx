@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -25,7 +26,7 @@ const MK_LOGO = "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/publ
 
 const newbieTasksList = [
     { id: 'nb_telegram', title: 'Subscribe Official', desc: 'Join telegram channel', icon: <TelegramIcon />, action: "go", href: "https://t.me/+oC2LaqBPdrg0NGM1" },
-    { id: 'nb_tutorial', title: 'Beginner Guide', desc: 'Watch tutorial video', icon: <PlaySquare className="h-4 w-4 text-blue-500" />, action: "go", href: "/my/tutorial" },
+    { id: 'nb_tutorial', title: 'Beginner Guide', desc: 'Read FAQ & Tutorial', icon: <PlaySquare className="h-4 w-4 text-blue-500" />, action: "go", href: "/my/faq" },
     { id: 'nb_upi', title: 'Payment Binding', desc: 'Link verified wallet', icon: <div className="h-5 w-5 rounded-lg bg-white p-0.5 shadow-sm border border-slate-50 flex items-center justify-center overflow-hidden">{MK_LOGO && <Image src={MK_LOGO} alt="MK" width={18} height={18} />}</div>, action: "go", href: "/my/collection/add" },
     { id: 'nb_purchase', title: 'Trade Milestone', desc: 'Total trade reached 1500', icon: <CircleDollarSign className="h-4 w-4 text-orange-500" />, action: 'go', href: '/buy', goal: 1500 },
 ];
@@ -117,7 +118,7 @@ export default function NewbieRewardsPage() {
                     userId: user.uid, 
                     amount: FINAL_REWARD_AMOUNT, 
                     type: 'new_user_reward',
-                    description: 'Newbie Mission Completion Reward', 
+                    description: 'Newbie Reward Mission Completion', 
                     createdAt: serverTimestamp(), 
                     orderId: `MISSION${Date.now()}`
                 });
@@ -132,13 +133,13 @@ export default function NewbieRewardsPage() {
                         userId: data?.inviterUid,
                         amount: INVITER_BONUS_AMOUNT,
                         type: 'team_bonus',
-                        description: `Mission Bonus (L1): Member UID ${data?.numericId} completed tasks`,
+                        description: `Member Reward Bonus: UID ${data?.numericId} completed missions`,
                         createdAt: serverTimestamp(),
                         orderId: `INV_BONUS_${Date.now()}`
                     });
                 }
             });
-            toast({ title: `₹${FINAL_REWARD_AMOUNT} Credited!` });
+            toast({ title: `₹${FINAL_REWARD_AMOUNT} Newbie Reward Credited!` });
         } catch (error: any) {
              toast({ variant: 'destructive', title: 'Claim Failed', description: error.message });
              setIsClaimingFinal(false);
@@ -156,7 +157,7 @@ export default function NewbieRewardsPage() {
               <Link href="/my"><ChevronLeft className="h-4 w-4 text-slate-800" /></Link>
             </Button>
             <div className="flex flex-col">
-                <h1 className="text-xs font-black text-slate-900 uppercase tracking-tight">Mission Center</h1>
+                <h1 className="text-xs font-black text-slate-900 uppercase tracking-tight">Newbie Reward</h1>
                 <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest leading-none">Incentive Registry</p>
             </div>
           </header>
@@ -178,7 +179,7 @@ export default function NewbieRewardsPage() {
                                  <Sparkles className="h-4 w-4 text-yellow-300" />
                             </div>
                             <div className="text-right">
-                                 <p className="text-[7px] font-black uppercase tracking-[0.2em] text-blue-100/70">Reward Voucher</p>
+                                 <p className="text-[7px] font-black uppercase tracking-[0.2em] text-blue-100/70">Starter Pack</p>
                                  <span className="text-[7px] font-black uppercase tracking-widest text-green-300">Active</span>
                             </div>
                         </div>
@@ -225,7 +226,7 @@ export default function NewbieRewardsPage() {
             
             <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
-                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Registry</h3>
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tasks</h3>
                     <div className="flex items-center gap-1 bg-blue-50 px-1.5 py-0.5 rounded-full">
                         <ShieldCheck className="h-2 w-2 text-blue-600" />
                         <span className="text-[7px] font-black text-blue-600 uppercase">Verified</span>
@@ -257,7 +258,7 @@ export default function NewbieRewardsPage() {
                                                     <div className="h-0.5 w-12 bg-slate-100 rounded-full">
                                                         <div className="h-full bg-blue-500" style={{ width: `${Math.min(((taskProgress[task.id] || 0) / task.goal) * 100, 100)}%` }} />
                                                     </div>
-                                                    <span className="text-[6px] font-black text-slate-400 uppercase">Target: ₹{task.goal}</span>
+                                                    <span className="text-[6px] font-black text-slate-400 uppercase">Goal: ₹{task.goal}</span>
                                                 </div>
                                             )}
                                         </div>
@@ -288,16 +289,16 @@ export default function NewbieRewardsPage() {
                     <Trophy className="h-3 w-3 text-orange-600" />
                 </div>
                 <div className="space-y-0.5">
-                    <p className="text-[8px] font-black text-orange-800 uppercase tracking-widest">Protocol Rules</p>
+                    <p className="text-[8px] font-black text-orange-800 uppercase tracking-widest">Incentive injection</p>
                     <p className="text-[7px] font-bold text-orange-700/70 uppercase leading-tight tracking-tight">
-                        Complete all verification nodes to trigger the ₹300 incentive injection. System tracks buy activity across all networks.
+                        Complete newbie mission milestones to trigger the ₹300 reward injection. Your inviter also receives ₹100 upon your mission completion.
                     </p>
                 </div>
             </div>
             
             <div className="text-center pb-8 opacity-20 mt-2">
                 <Zap className="h-3 w-3 mx-auto mb-1" />
-                <p className="text-[6px] font-black uppercase tracking-[0.4em]">Node-to-Node Encrypted Data</p>
+                <p className="text-[6px] font-black uppercase tracking-[0.4em]">Node Network Data</p>
             </div>
           </main>
         </div>

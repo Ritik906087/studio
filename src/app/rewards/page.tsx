@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { useUser, useFirestore } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { doc, collection, query, where, Timestamp, runTransaction, getDocs, arrayUnion, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, where, Timestamp, runTransaction, getDocs, arrayUnion, getDoc, serverTimestamp, increment } from 'firebase/firestore';
 
 const orderCountTasks = [
     { id: 'oc1', title: 'Mini Milestone', desc: 'Complete 1 order', reward: 2, goal: 1 },
@@ -74,7 +74,7 @@ const TaskItem = ({ title, desc, reward, progress, goal, buttonState = 'default'
                 
                 {isClaimed ? (
                     <div className="w-full h-9 rounded-xl bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-300 uppercase tracking-widest border border-dashed">
-                        Injected into Balance
+                        Credited to Balance
                     </div>
                 ) : isClaimable ? (
                     <Button 
@@ -95,7 +95,7 @@ const TaskItem = ({ title, desc, reward, progress, goal, buttonState = 'default'
 };
 
 export default function RewardsPage() {
-    const { user } = useUser();
+    const { user, profile } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
 
@@ -118,7 +118,6 @@ export default function RewardsPage() {
         const todayTimestamp = Timestamp.fromDate(today);
 
         try {
-            // 1. Fetch Today's Completed Orders
             const ordersQuery = query(
                 collection(firestore, 'users', user.uid, 'orders'),
                 where('createdAt', '>=', todayTimestamp),
@@ -135,7 +134,6 @@ export default function RewardsPage() {
             });
             setStats({ count: orderCount, maxAmount });
 
-            // 2. Fetch already claimed tasks for today
             const rewardDocRef = doc(firestore, 'users', user.uid, 'dailyRewards', getTodayDateString());
             const rewardDoc = await getDoc(rewardDocRef);
             if (rewardDoc.exists()) {
@@ -163,41 +161,37 @@ export default function RewardsPage() {
 
         try {
             await runTransaction(firestore, async (transaction) => {
-                // Must do all reads first in a transaction
                 const userDoc = await transaction.get(userRef);
-                if (!userDoc.exists()) throw new Error("User profile not found.");
+                if (!userDoc.exists()) throw new Error("Profile not found.");
 
                 const rewardDoc = await transaction.get(rewardDocRef); 
                 const alreadyClaimed = rewardDoc.exists() && (rewardDoc.data().claimedTaskIds || []).includes(taskId);
-                if (alreadyClaimed) throw new Error("Reward already claimed for today.");
+                if (alreadyClaimed) throw new Error("Already claimed for today.");
 
-                // Verified: Update balance
-                transaction.update(userRef, { balance: (userDoc.data().balance || 0) + reward });
+                transaction.update(userRef, { balance: increment(reward) });
 
-                // Update claimed tasks record
                 if (rewardDoc.exists()) {
                     transaction.update(rewardDocRef, { claimedTaskIds: arrayUnion(taskId) });
                 } else {
                     transaction.set(rewardDocRef, { claimedTaskIds: [taskId], date: getTodayDateString() });
                 }
 
-                // Add to ledger
                 const txRef = doc(collection(firestore, 'users', user.uid, 'transactions'));
                 transaction.set(txRef, {
                     userId: user.uid,
                     amount: reward,
-                    description: `Daily Milestone: ${taskTitle}`,
+                    description: `Daily Reward: ${taskTitle}`,
                     createdAt: serverTimestamp(),
                     type: 'daily_task',
                     orderId: `DTASK_${Date.now()}`
                 });
             });
 
-            toast({ title: `₹${reward} Added!`, description: "Reward injected into your balance." });
-            await fetchData(); // Refresh state
+            toast({ title: `₹${reward} Bonus Claimed!` });
+            await fetchData(); 
         } catch (error: any) {
-            console.error("Reward claim error:", error);
-            toast({ variant: 'destructive', title: "Claim Failed", description: error.message || "Please try again." });
+            console.error("Claim error:", error);
+            toast({ variant: 'destructive', title: "Claim Failed", description: error.message });
         } finally {
             setClaimingTaskId(null);
         }
@@ -213,7 +207,7 @@ export default function RewardsPage() {
                 <Button asChild variant="ghost" size="icon" className="h-8 w-8 -ml-2 rounded-full">
                     <Link href="/my"><ChevronLeft className="h-5 w-5 text-slate-800" /></Link>
                 </Button>
-                <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Mission Hub</h1>
+                <h1 className="text-sm font-black text-slate-800 uppercase tracking-tight">Reward Mission</h1>
             </header>
 
             <main className="p-3 space-y-4">
@@ -221,17 +215,17 @@ export default function RewardsPage() {
                     <CardContent className="p-6 relative z-10">
                         <div className="flex justify-between items-start">
                             <div>
-                                <p className="text-white/60 text-[10px] font-black uppercase tracking-[0.2em]">Daily Potential</p>
+                                <p className="text-white/60 text-[10px] font-black uppercase tracking-[0.2em]">Today's Pool</p>
                                 <div className="flex items-baseline gap-1 mt-1">
                                     <span className="text-3xl font-black tabular-nums tracking-tighter">₹{totalPotential}</span>
-                                    <span className="text-[10px] font-bold bg-white/20 px-1.5 py-0.5 rounded uppercase">Pool</span>
+                                    <span className="text-[10px] font-bold bg-white/20 px-1.5 py-0.5 rounded uppercase">INR</span>
                                 </div>
                             </div>
                         </div>
                         <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
-                            <p className="text-[9px] font-bold uppercase tracking-widest">Tasks Reset: 00:00 AM</p>
+                            <p className="text-[9px] font-bold uppercase tracking-widest opacity-60">Reset at 00:00</p>
                             <div className="flex items-center gap-1.5 bg-black/20 px-2 py-0.5 rounded-full text-[8px] font-black uppercase">
-                                <Zap className="h-2.5 w-2.5 text-yellow-400 fill-yellow-400" /> Live
+                                <Zap className="h-2.5 w-2.5 text-yellow-400 fill-yellow-400" /> Active
                             </div>
                         </div>
                     </CardContent>
@@ -239,8 +233,8 @@ export default function RewardsPage() {
 
                 <div className="space-y-4">
                     <section className="space-y-2.5">
-                        <h3 className="px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                             Activity Rewards
+                        <h3 className="px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                             Quantity Milestones
                         </h3>
                         <div className="grid gap-2.5">
                             {orderCountTasks.map(task => {
@@ -263,7 +257,7 @@ export default function RewardsPage() {
                     </section>
 
                     <section className="space-y-2.5">
-                        <h3 className="px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <h3 className="px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">
                              Transaction Value Tier
                         </h3>
                         <div className="grid gap-2.5">
@@ -287,8 +281,8 @@ export default function RewardsPage() {
                     </section>
                 </div>
 
-                <div className="p-6 text-center opacity-30">
-                    <p className="text-[9px] font-black uppercase tracking-[0.3em]">Network Rewards Verified</p>
+                <div className="p-6 text-center opacity-30 mt-4">
+                    <p className="text-[9px] font-black uppercase tracking-[0.3em]">Authorized Network Rewards</p>
                 </div>
             </main>
         </div>
