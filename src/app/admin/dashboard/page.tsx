@@ -9,7 +9,7 @@ import {
   LogOut, Users, LayoutDashboard, Server, 
   Eye, Wallet, Check, RefreshCw,
   Search, ImageIcon, Clock, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap,
-  Banknote, History, CheckCircle2, X, Menu, ArrowUpRight
+  Banknote, History, CheckCircle2, X, Menu, ArrowUpRight, Copy
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -165,6 +165,12 @@ export default function AdminDashboardPage() {
     const handleLogout = () => {
         localStorage.removeItem('flex_admin_session');
         router.replace('/admin/key');
+    };
+
+    const handleCopy = (text: string) => {
+        if (!text) return;
+        navigator.clipboard.writeText(text);
+        toast({ title: "Copied: " + text });
     };
 
     const handleAddPaymentMethod = async () => {
@@ -473,7 +479,15 @@ export default function AdminDashboardPage() {
                                     <TableBody>
                                         {filteredUsers.map(u => (
                                             <TableRow key={u.id}>
-                                                <TableCell className="pl-6"><div className="flex flex-col"><span className="font-black text-xs text-blue-600">UID: {u.numericId}</span><span className="text-[10px] font-bold text-slate-400">{u.displayName}</span></div></TableCell>
+                                                <TableCell className="pl-6">
+                                                  <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="font-black text-xs text-blue-600">UID: {u.numericId}</span>
+                                                      <button onClick={() => handleCopy(u.numericId)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-slate-400">{u.displayName}</span>
+                                                  </div>
+                                                </TableCell>
                                                 <TableCell className="font-black text-xs">₹{u.balance?.toFixed(2)}</TableCell>
                                                 <TableCell className="text-right pr-6"><Button asChild size="sm" variant="ghost" className="h-8 w-8"><Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link></Button></TableCell>
                                             </TableRow>
@@ -502,10 +516,16 @@ export default function AdminDashboardPage() {
                                                 <div className="space-y-1">
                                                     <div className="flex items-center gap-2">
                                                         <Badge variant="outline" className="text-[9px] uppercase font-black">{order.paymentType}</Badge>
-                                                        <span className="text-xs font-black text-slate-800">UID: {order.userNumericId}</span>
+                                                        <div className="flex items-center gap-1.5">
+                                                          <span className="text-xs font-black text-slate-800">UID: {order.userNumericId}</span>
+                                                          <button onClick={() => handleCopy(order.userNumericId)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                        </div>
                                                     </div>
                                                     <p className="text-lg font-black text-slate-900">₹{order.baseAmount || order.amount}</p>
-                                                    <p className="text-[10px] font-mono font-bold text-slate-400">UTR/TXID: {order.utr}</p>
+                                                    <div className="flex items-center gap-2">
+                                                      <p className="text-[10px] font-mono font-bold text-slate-400">UTR/TXID: {order.utr}</p>
+                                                      <button onClick={() => handleCopy(order.utr)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -544,13 +564,19 @@ export default function AdminDashboardPage() {
                                                             <Badge variant="outline" className={cn("text-[9px] uppercase font-black", order.status === 'completed' ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600")}>
                                                                 {order.status}
                                                             </Badge>
-                                                            <span className="text-xs font-black text-slate-800">UID: {order.userNumericId}</span>
+                                                            <div className="flex items-center gap-1.5">
+                                                              <span className="text-xs font-black text-slate-800">UID: {order.userNumericId}</span>
+                                                              <button onClick={() => handleCopy(order.userNumericId)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                            </div>
                                                         </div>
                                                         <p className="text-lg font-black text-slate-900">₹{order.amount}</p>
                                                         <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[10px] space-y-1">
                                                             <p className="font-black text-slate-400 uppercase">Target Node</p>
                                                             <p className="font-bold text-slate-800">App: {order.withdrawalMethod?.name}</p>
-                                                            <p className="font-mono text-blue-600 font-black">{order.withdrawalMethod?.upiId || order.withdrawalMethod?.accountNumber}</p>
+                                                            <div className="flex items-center gap-2">
+                                                              <p className="font-mono text-blue-600 font-black">{order.withdrawalMethod?.upiId || order.withdrawalMethod?.accountNumber}</p>
+                                                              <button onClick={() => handleCopy(order.withdrawalMethod?.upiId || order.withdrawalMethod?.accountNumber)} className="text-slate-300 hover:text-blue-500"><Copy className="h-2.5 w-2.5" /></button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -570,7 +596,10 @@ export default function AdminDashboardPage() {
                                                             <div key={idx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
                                                                 <div>
                                                                     <p className="text-[8px] font-black text-slate-400">₹{m.amount}</p>
-                                                                    <p className="text-[10px] font-bold text-slate-700">Buyer ID: {m.buyerId?.slice(-6)}</p>
+                                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                                      <p className="text-[10px] font-bold text-slate-700 uppercase">Buyer: {m.buyerNumericId || m.buyerId?.slice(-6)}</p>
+                                                                      <button onClick={() => handleCopy(m.buyerNumericId || m.buyerId)} className="text-slate-300 hover:text-blue-500"><Copy className="h-2 w-2" /></button>
+                                                                    </div>
                                                                 </div>
                                                                 <Badge variant="outline" className={cn("text-[7px] h-4 uppercase", 
                                                                     m.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'
@@ -613,12 +642,18 @@ export default function AdminDashboardPage() {
                                                     {pm.type === 'usdt' ? (
                                                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
                                                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">TRC20 Wallet</p>
-                                                            <p className="text-[11px] font-black text-slate-800 truncate mt-1">{pm.usdtWalletAddress}</p>
+                                                            <div className="flex items-center justify-between mt-1">
+                                                              <p className="text-[11px] font-black text-slate-800 truncate max-w-[80%]">{pm.usdtWalletAddress}</p>
+                                                              <button onClick={() => handleCopy(pm.usdtWalletAddress)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                            </div>
                                                         </div>
                                                     ) : (
                                                         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
                                                             <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Access ID</p>
-                                                            <p className="text-[11px] font-black text-slate-800 mt-1">{pm.upiId}</p>
+                                                            <div className="flex items-center justify-between mt-1">
+                                                              <p className="text-[11px] font-black text-slate-800">{pm.upiId}</p>
+                                                              <button onClick={() => handleCopy(pm.upiId)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                            </div>
                                                             <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">{pm.upiHolderName}</p>
                                                         </div>
                                                     )}

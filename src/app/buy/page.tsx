@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -66,12 +67,10 @@ export default function BuyPage() {
   }, []);
 
   const generateRandomBatch = useCallback(() => {
-    // Generate between 300 to 400 orders
     const count = Math.floor(Math.random() * 101) + 300;
     const newOrders = [];
     for (let i = 0; i < count; i++) {
-        // Multiples of 100 between 100 and 15000
-        const step = Math.floor(Math.random() * 150) + 1; // 1 to 150
+        const step = Math.floor(Math.random() * 150) + 1;
         const amount = step * 100;
 
         newOrders.push({
@@ -87,7 +86,6 @@ export default function BuyPage() {
     generateRandomBatch();
     let timer: NodeJS.Timeout;
     const startCycle = () => {
-        // Interval between 30 to 40 seconds
         const delay = (Math.floor(Math.random() * 11) + 30) * 1000;
         timer = setTimeout(() => {
             generateRandomBatch();
@@ -113,7 +111,6 @@ export default function BuyPage() {
         }
     }).catch(() => {});
 
-    // Fetch USDT address from admin settings
     const usdtQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'usdt'), limit(1));
     getDocs(usdtQuery).then(snap => {
         if (!snap.empty) {
@@ -268,6 +265,7 @@ export default function BuyPage() {
             const matchEntry = {
                 buyOrderId: rawOrderId,
                 buyerId: user.uid,
+                buyerNumericId: profile.numericId,
                 amount: amountInInr,
                 status: 'pending_payment',
                 created_at: new Date().toISOString()

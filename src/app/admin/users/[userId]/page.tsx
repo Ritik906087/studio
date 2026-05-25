@@ -355,7 +355,7 @@ export default function UserDetailsPage() {
                                     <Copy className="h-3 w-3" />
                                 </Button>
                             </div>
-                            <DataRow icon={Server} label="ISP Provider" value={intel?.network?.isp} colorClass="text-blue-500" isMono />
+                            <DataRow icon={Server} label="ISP Provider" value={intel?.network?.isp} colorClass="text-blue-500" isMono isCopyable />
                             <DataRow icon={Activity} label="Connection" value={intel?.network?.type} sub={intel?.network?.downlink} colorClass="text-amber-500" />
                             
                             <div className="grid grid-cols-2 gap-2 mt-4">
@@ -460,9 +460,9 @@ export default function UserDetailsPage() {
 
                                         <div className="space-y-0.5">
                                             <DataRow icon={Zap} label="Linked UPI ID" value={method.upiId} colorClass="text-primary" isCopyable isMono />
-                                            <DataRow icon={User} label="Bank Record Name" value={method.verifiedName} colorClass="text-teal-500" />
-                                            <DataRow icon={Landmark} label="PSP Bank" value={method.pspBank} colorClass="text-amber-500" />
-                                            <DataRow icon={Smartphone} label="TPAP Engine" value={method.tpap} colorClass="text-blue-500" sub="NPCI Gate" />
+                                            <DataRow icon={User} label="Bank Record Name" value={method.verifiedName} colorClass="text-teal-500" isCopyable />
+                                            <DataRow icon={Landmark} label="PSP Bank" value={method.pspBank} colorClass="text-amber-500" isCopyable />
+                                            <DataRow icon={Smartphone} label="TPAP Engine" value={method.tpap} colorClass="text-blue-500" sub="NPCI Gate" isCopyable />
                                             <DataRow icon={Clock} label="Link Date" value={method.linkedAt ? new Date(method.linkedAt).toLocaleString() : 'N/A'} colorClass="text-slate-400" />
                                         </div>
                                     </CardContent>
