@@ -1,10 +1,10 @@
-
 'use client';
 
 import { useEffect, useState, createContext, useContext, ReactNode, useRef } from 'react';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { useAuth, useFirestore } from '@/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { useRouter, usePathname } from 'next/navigation';
 
 export type AuthState = {
   user: User | null;
@@ -21,39 +21,51 @@ const AuthContext = createContext<AuthState>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const firestore = useFirestore();
+  const router = useRouter();
+  const pathname = usePathname();
+  
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  
   const isMounted = useRef(true);
+  const unsubscribeProfileRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     isMounted.current = true;
-    const globalTimeout = setTimeout(() => {
-      if (isMounted.current && loading) {
-        setLoading(false);
-      }
-    }, 8000);
+    return () => { isMounted.current = false; };
+  }, []);
 
-    return () => {
-      isMounted.current = false;
-      clearTimeout(globalTimeout);
-    };
-  }, [loading]);
+  // Root redirect and public route protection
+  useEffect(() => {
+    if (loading) return;
+
+    const publicRoutes = ['/login', '/register', '/forgot-password', '/terms', '/privacy', '/download'];
+    const isAdminRoute = pathname.startsWith('/admin');
+    const isPublicRoute = publicRoutes.includes(pathname);
+
+    if (!user && !isPublicRoute && !isAdminRoute) {
+      router.replace('/login');
+    } else if (user && isPublicRoute) {
+      router.replace('/home');
+    }
+  }, [user, loading, pathname, router]);
 
   useEffect(() => {
-    if (!auth) {
-      const timer = setTimeout(() => {
-        if (!auth && isMounted.current) setLoading(false);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
+    if (!auth) return;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       if (!isMounted.current) return;
+      
       setUser(firebaseUser);
+      
       if (!firebaseUser) {
         setProfile(null);
         setLoading(false);
+        if (unsubscribeProfileRef.current) {
+          unsubscribeProfileRef.current();
+          unsubscribeProfileRef.current = null;
+        }
       }
     });
 
@@ -61,27 +73,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   useEffect(() => {
-    if (!user || !firestore || !auth) {
-      if (!user && !loading && isMounted.current) setLoading(false);
-      return;
-    };
+    if (!user || !firestore || !auth) return;
 
-    const unsubscribeProfile = onSnapshot(
+    // Clean up previous profile listener if it exists
+    if (unsubscribeProfileRef.current) {
+      unsubscribeProfileRef.current();
+    }
+
+    unsubscribeProfileRef.current = onSnapshot(
       doc(firestore, 'users', user.uid),
       (snapshot) => {
         if (!isMounted.current) return;
+        
         if (snapshot.exists()) {
           const data = snapshot.data();
           setProfile(data);
 
           // SINGLE DEVICE ENFORCEMENT
-          // Check if server sessionId matches local sessionId
           const localSessionId = localStorage.getItem(`session_${user.uid}`);
           if (data.sessionId && localSessionId && data.sessionId !== localSessionId) {
-            console.warn("Session invalidated. Logged in on another device.");
-            signOut(auth);
-            localStorage.removeItem(`session_${user.uid}`);
-            window.location.href = '/login';
+            console.warn("Session conflict detected. Logging out.");
+            signOut(auth).then(() => {
+              localStorage.removeItem(`session_${user.uid}`);
+              router.replace('/login');
+            });
           }
         } else {
           setProfile(null);
@@ -89,13 +104,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       },
       (error) => {
-        if (!isMounted.current) return;
-        setLoading(false);
+        console.error("Profile listener error:", error);
+        if (isMounted.current) setLoading(false);
       }
     );
 
-    return () => unsubscribeProfile();
-  }, [user, firestore, auth, loading]);
+    return () => {
+      if (unsubscribeProfileRef.current) {
+        unsubscribeProfileRef.current();
+        unsubscribeProfileRef.current = null;
+      }
+    };
+  }, [user, firestore, auth, router]);
 
   const value = {
     user,

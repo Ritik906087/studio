@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { Button } from '@/components/ui/button';
@@ -21,11 +21,12 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { useFirestore } from '@/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function HomePage() {
   const plugin = React.useRef(Autoplay({ delay: 4000, stopOnInteraction: false }));
-  const { user, profile } = useUser();
+  const { user, profile, loading: authLoading } = useUser();
   const firestore = useFirestore();
 
   const [stats, setStats] = useState({ 
@@ -34,6 +35,7 @@ export default function HomePage() {
     todaySell: 0, 
     totalIncome: 0 
   });
+  const [loading, setLoading] = useState(true);
 
   const formatValue = (val: number) => {
     if (val >= 1000000) return (val / 1000000).toFixed(2) + 'M';
@@ -41,68 +43,72 @@ export default function HomePage() {
     return val.toFixed(2);
   };
 
-  useEffect(() => {
+  const fetchStats = useCallback(async () => {
     if (!user || !firestore) return;
 
-    async function fetchStats() {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayMs = today.getTime();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
 
-        try {
-            // 1. Fetch ALL completed Buy Orders
-            const buyQ = query(collection(firestore, 'users', user.uid, 'orders'), where('status', '==', 'completed'));
-            const buySnap = await getDocs(buyQ);
-            
-            // Filter today's orders for quantity and amount stats
-            const todayBuyDocs = buySnap.docs
-                .map(d => d.data())
-                .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs);
-            
-            const buyQuantity = todayBuyDocs.length;
-            const todayBuy = todayBuyDocs.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
+    try {
+        // Parallel execution for high performance
+        const [buySnap, sellSnap, rewardSnap] = await Promise.all([
+            getDocs(query(collection(firestore, 'users', user.uid, 'orders'), where('status', '==', 'completed'))),
+            getDocs(query(collection(firestore, 'users', user.uid, 'sellOrders'), where('status', '==', 'completed'))),
+            getDocs(query(collection(firestore, 'users', user.uid, 'transactions'), where('type', 'in', ['team_bonus', 'daily_task', 'new_user_reward', 'system_adjustment'])))
+        ]);
 
-            // 2. Fetch today's completed Sell Orders
-            const sellQ = query(collection(firestore, 'users', user.uid, 'sellOrders'), where('status', '==', 'completed'));
-            const sellSnap = await getDocs(sellQ);
-            const todaySell = sellSnap.docs
-                .map(d => d.data())
-                .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs)
-                .reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
+        // Filter and calculate buy stats
+        const buyDocs = buySnap.docs.map(d => d.data());
+        const todayBuyDocs = buyDocs.filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs);
+        
+        const buyQuantity = todayBuyDocs.length;
+        const todayBuy = todayBuyDocs.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
 
-            // 3. Calculate TOTAL REVENUE (Profit ONLY: Amount Credited - Base Price Paid)
-            const totalBuyProfit = buySnap.docs.reduce((acc, d) => {
-                const data = d.data();
-                const amountCredited = Number(data.amount) || 0;
-                // Important: baseAmount is what user paid. If missing, assume 0 profit for that specific record.
-                const basePaid = data.baseAmount !== undefined ? Number(data.baseAmount) : amountCredited;
-                const profit = amountCredited - basePaid;
-                return acc + (profit > 0 ? profit : 0);
-            }, 0);
+        // Calculate today's sell
+        const todaySell = sellSnap.docs
+            .map(d => d.data())
+            .filter(d => (d.createdAt?.toMillis ? d.createdAt.toMillis() : 0) >= todayMs)
+            .reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
 
-            // 4. Add all other income sources (Team Bonus, Rewards, System Adjustments)
-            const incomeQ = query(
-              collection(firestore, 'users', user.uid, 'transactions'), 
-              where('type', 'in', ['team_bonus', 'daily_task', 'new_user_reward', 'system_adjustment'])
-            );
-            const incomeSnap = await getDocs(incomeQ);
-            const totalRewards = incomeSnap.docs.reduce((acc, d) => acc + (Number(d.data().amount) || 0), 0);
+        // Calculate total income (Profit + Rewards)
+        const totalBuyProfit = buyDocs.reduce((acc, d) => {
+            const amountCredited = Number(d.amount) || 0;
+            const basePaid = d.baseAmount !== undefined ? Number(d.baseAmount) : amountCredited;
+            const profit = amountCredited - basePaid;
+            return acc + (profit > 0 ? profit : 0);
+        }, 0);
 
-            setStats({ 
-                buyQuantity, 
-                todayBuy, 
-                todaySell, 
-                totalIncome: totalBuyProfit + totalRewards 
-            });
-        } catch (e) {
-            console.error("Home stats calculation failed:", e);
-        }
+        const totalRewards = rewardSnap.docs.reduce((acc, d) => acc + (Number(d.data().amount) || 0), 0);
+
+        setStats({ 
+            buyQuantity, 
+            todayBuy, 
+            todaySell, 
+            totalIncome: totalBuyProfit + totalRewards 
+        });
+    } catch (e) {
+        console.error("Home stats error:", e);
+    } finally {
+        setLoading(false);
     }
-
-    fetchStats();
   }, [user, firestore]);
 
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
   const banners = PlaceHolderImages.filter(img => img.id.startsWith('banner-'));
+
+  if (authLoading || loading) {
+    return (
+      <div className="p-3 space-y-4 animate-pulse">
+        <Skeleton className="h-28 w-full rounded-[24px]" />
+        <Skeleton className="h-44 w-full rounded-[20px]" />
+        <Skeleton className="h-64 w-full rounded-[28px]" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col text-foreground bg-[#F5F7FB] min-h-full pb-20">
@@ -143,6 +149,7 @@ export default function HomePage() {
                             className="object-cover" 
                             data-ai-hint={banner.imageHint}
                             priority
+                            unoptimized
                             />
                         )}
                         </div>
@@ -153,7 +160,7 @@ export default function HomePage() {
         </div>
 
         {/* OPERATIONS CENTER */}
-        <Card className="border-none bg-white rounded-[28px] shadow-lg shadow-blue-500/5 overflow-hidden ring-1 ring-slate-100 animate-in fade-in slide-in-from-bottom-3 duration-500">
+        <Card className="border-none bg-white rounded-[28px] shadow-lg shadow-blue-500/5 overflow-hidden ring-1 ring-slate-100">
             <CardContent className="p-0">
                 <div className="p-6 pb-4">
                     <div className="grid grid-cols-2 gap-y-6">
@@ -190,13 +197,13 @@ export default function HomePage() {
 
                 <div className="p-4 pt-0 grid grid-cols-2 gap-3 pb-6">
                     <Button asChild className="h-14 btn-gradient rounded-[18px] flex flex-col items-center justify-center gap-1 shadow-blue-500/20 active:scale-95 transition-all">
-                        <Link href="/buy">
+                        <Link href="/buy" prefetch={true}>
                             <ArrowUpToLine className="h-5 w-5" />
                             <span className="text-[11px] font-black uppercase tracking-tight">Buy</span>
                         </Link>
                     </Button>
                     <Button asChild variant="outline" className="h-14 border-2 border-emerald-100 bg-emerald-50/30 text-emerald-600 rounded-[18px] flex flex-col items-center justify-center gap-1 hover:bg-emerald-50 hover:text-emerald-700 active:scale-95 transition-all">
-                        <Link href="/sell">
+                        <Link href="/sell" prefetch={true}>
                             <ArrowDownToLine className="h-5 w-5" />
                             <span className="text-[11px] font-black uppercase tracking-tight">Sell</span>
                         </Link>
