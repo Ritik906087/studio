@@ -10,16 +10,17 @@ import {
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
   Search, ImageIcon, User as UserIcon,
-  Clock, ArrowUpRight, ArrowDownLeft
+  Clock, ArrowUpRight, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, doc, setDoc, updateDoc, deleteDoc, collectionGroup, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
@@ -31,7 +32,9 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogDescription,
+  DialogFooter
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
 
@@ -65,9 +68,12 @@ export default function AdminDashboardPage() {
     const [sellSearch, setSellSearch] = useState('');
     const [confirmSearch, setConfirmSearch] = useState('');
 
-    const [editingPayment, setEditingPayment] = useState<string | null>(null);
     const [adminId, setAdminId] = useState<string>('SYSTEM');
     const [isActionLoading, setIsActionLoading] = useState(false);
+
+    // Payment Method Form State
+    const [isAddPMOpen, setIsAddPMOpen] = useState(false);
+    const [newPM, setNewPM] = useState<any>({ type: 'upi', upiId: '', upiHolderName: '', usdtWalletAddress: '', bankName: '', accountNumber: '', ifscCode: '', accountHolderName: '' });
 
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
@@ -125,7 +131,7 @@ export default function AdminDashboardPage() {
         fetchUsers();
         fetchConfirmations();
 
-        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), where('status', 'in', ['pending', 'partially_filled', 'processing']), limit(100)), (snap) => {
+        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), orderBy('createdAt', 'desc'), limit(150)), (snap) => {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
@@ -143,7 +149,7 @@ export default function AdminDashboardPage() {
 
     const filteredSellOrders = useMemo(() => {
         const s = sellSearch.toLowerCase();
-        return sellOrders.filter(o => o.userNumericId?.includes(s) || o.orderId?.toLowerCase().includes(s));
+        return sellOrders.filter(o => o.userNumericId?.includes(s) || o.orderId?.toLowerCase().includes(s) || o.status?.toLowerCase().includes(s));
     }, [sellOrders, sellSearch]);
 
     const filteredConfirmOrders = useMemo(() => {
@@ -247,6 +253,42 @@ export default function AdminDashboardPage() {
         } catch (e: any) { toast({ variant: "destructive", title: "Failed" }); } finally { setIsActionLoading(false); }
     };
 
+    const handleAddPaymentMethod = async () => {
+        if (!firestore) return;
+        setIsActionLoading(true);
+        try {
+            await addDoc(collection(firestore, 'paymentMethods'), newPM);
+            toast({ title: "Payment Method Added" });
+            setIsAddPMOpen(false);
+            setNewPM({ type: 'upi', upiId: '', upiHolderName: '', usdtWalletAddress: '', bankName: '', accountNumber: '', ifscCode: '', accountHolderName: '' });
+        } catch (e) {
+            toast({ variant: 'destructive', title: 'Failed to add' });
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleDeletePaymentMethod = async (id: string) => {
+        if (!firestore) return;
+        try {
+            await deleteDoc(doc(firestore, 'paymentMethods', id));
+            toast({ title: "Deleted" });
+        } catch (e) {
+            toast({ variant: 'destructive', title: 'Failed to delete' });
+        }
+    };
+
+    const handleUpdateSellOrderStatus = async (order: any, newStatus: string) => {
+        if(!firestore) return;
+        try {
+            await updateDoc(doc(firestore, 'sellOrders', order.id), { status: newStatus });
+            await updateDoc(doc(firestore, 'users', order.userId, 'sellOrders', order.id), { status: newStatus });
+            toast({ title: "Status Updated" });
+        } catch (e) {
+            toast({ variant: 'destructive', title: 'Failed to update' });
+        }
+    };
+
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
 
     return (
@@ -347,6 +389,73 @@ export default function AdminDashboardPage() {
                             </Card>
                         </TabsContent>
 
+                        <TabsContent value="withdrawal" className="space-y-4">
+                             <div className="flex items-center gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <Input 
+                                        placeholder="Search UID, Status..." 
+                                        className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
+                                        value={sellSearch}
+                                        onChange={e => setSellSearch(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader className="bg-slate-50/50">
+                                            <TableRow>
+                                                <TableHead className="font-black text-[10px] uppercase pl-6 py-4">Order ID & UID</TableHead>
+                                                <TableHead className="font-black text-[10px] uppercase">Amount</TableHead>
+                                                <TableHead className="font-black text-[10px] uppercase">Status</TableHead>
+                                                <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {filteredSellOrders.map(o => (
+                                                <TableRow key={o.id}>
+                                                    <TableCell className="pl-6 py-4">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-black text-xs text-slate-800">{o.orderId}</span>
+                                                            <span className="text-[9px] font-bold text-blue-600 uppercase">UID: {o.userNumericId}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-black text-sm text-slate-900">₹{o.amount.toFixed(2)}</span>
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase">Remaining: ₹{o.remainingAmount?.toFixed(2)}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className={cn("text-[8px] font-black uppercase rounded-md", 
+                                                            o.status === 'completed' ? 'bg-green-50 text-green-600 border-green-100' : 
+                                                            o.status === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-blue-50 text-blue-600'
+                                                        )}>
+                                                            {o.status}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right pr-6">
+                                                        <Select onValueChange={(v) => handleUpdateSellOrderStatus(o, v)}>
+                                                            <SelectTrigger className="h-8 w-24 text-[9px] font-black rounded-lg">
+                                                                <SelectValue placeholder="Update" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="pending">Pending</SelectItem>
+                                                                <SelectItem value="processing">Processing</SelectItem>
+                                                                <SelectItem value="completed">Completed</SelectItem>
+                                                                <SelectItem value="failed">Failed</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </Card>
+                        </TabsContent>
+
                         <TabsContent value="confirm" className="space-y-4">
                              <div className="flex items-center gap-3">
                                 <div className="relative flex-1">
@@ -429,9 +538,76 @@ export default function AdminDashboardPage() {
                         </TabsContent>
 
                         <TabsContent value="server" className="space-y-6">
-                            <Card className="border-none shadow-sm rounded-3xl bg-white p-8">
-                                <p className="text-slate-400 font-bold text-sm">System Payment Master IDs are configured here.</p>
-                            </Card>
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">System Payment Nodes</h2>
+                                <Dialog open={isAddPMOpen} onOpenChange={setIsAddPMOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button className="rounded-xl h-11 btn-gradient font-black text-[10px] uppercase tracking-widest"><Plus className="mr-2 h-4 w-4" /> Add Master ID</Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="rounded-[32px] max-w-md">
+                                        <DialogHeader><DialogTitle>New Payment Account</DialogTitle><DialogDescription>Configure system master details.</DialogDescription></DialogHeader>
+                                        <div className="space-y-4 py-4">
+                                            <div className="space-y-1.5">
+                                                <Label>Account Type</Label>
+                                                <Select onValueChange={(v) => setNewPM({ ...newPM, type: v })} defaultValue={newPM.type}>
+                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="upi">UPI ID</SelectItem>
+                                                        <SelectItem value="usdt">USDT Wallet (TRC20)</SelectItem>
+                                                        <SelectItem value="bank">Bank Account</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {newPM.type === 'upi' && (
+                                                <div className="space-y-4">
+                                                    <div className="space-y-1.5"><Label>UPI ID</Label><Input placeholder="master@upi" value={newPM.upiId} onChange={e => setNewPM({...newPM, upiId: e.target.value})} /></div>
+                                                    <div className="space-y-1.5"><Label>Holder Name</Label><Input placeholder="Master Name" value={newPM.upiHolderName} onChange={e => setNewPM({...newPM, upiHolderName: e.target.value})} /></div>
+                                                </div>
+                                            )}
+
+                                            {newPM.type === 'usdt' && (
+                                                <div className="space-y-1.5"><Label>TRC20 Wallet Address</Label><Input placeholder="T..." value={newPM.usdtWalletAddress} onChange={e => setNewPM({...newPM, usdtWalletAddress: e.target.value})} /></div>
+                                            )}
+
+                                            {newPM.type === 'bank' && (
+                                                <div className="space-y-3">
+                                                    <Input placeholder="Bank Name" value={newPM.bankName} onChange={e => setNewPM({...newPM, bankName: e.target.value})} />
+                                                    <Input placeholder="Account Holder" value={newPM.accountHolderName} onChange={e => setNewPM({...newPM, accountHolderName: e.target.value})} />
+                                                    <Input placeholder="Account Number" value={newPM.accountNumber} onChange={e => setNewPM({...newPM, accountNumber: e.target.value})} />
+                                                    <Input placeholder="IFSC Code" value={newPM.ifscCode} onChange={e => setNewPM({...newPM, ifscCode: e.target.value})} />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <DialogFooter><Button onClick={handleAddPaymentMethod} className="w-full h-12 rounded-xl font-black uppercase" disabled={isActionLoading}>Register Node</Button></DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {paymentMethods.map(m => (
+                                    <Card key={m.id} className="border-none shadow-sm rounded-[24px] bg-white overflow-hidden group">
+                                        <div className={cn("h-1.5 w-full", m.type === 'upi' ? 'bg-purple-500' : m.type === 'usdt' ? 'bg-amber-500' : 'bg-blue-500')} />
+                                        <CardContent className="p-6">
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center">
+                                                    {m.type === 'upi' ? <Zap className="h-5 w-5 text-purple-600" /> : m.type === 'usdt' ? <Wallet className="h-5 w-5 text-amber-600" /> : <Landmark className="h-5 w-5 text-blue-600" />}
+                                                </div>
+                                                <Button onClick={() => handleDeletePaymentMethod(m.id)} variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.type} ID / Account</p>
+                                                <p className="font-mono text-xs font-black text-slate-800 break-all">{m.upiId || m.usdtWalletAddress || m.accountNumber}</p>
+                                                {m.upiHolderName && <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">Name: {m.upiHolderName}</p>}
+                                                {m.bankName && <p className="text-[9px] font-bold text-slate-500 uppercase">{m.bankName} - {m.accountHolderName}</p>}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                                {paymentMethods.length === 0 && (
+                                    <div className="col-span-full py-20 text-center opacity-20"><Server className="h-12 w-12 mx-auto mb-4" /><p className="font-black uppercase tracking-widest text-xs">No Payment Nodes Configured</p></div>
+                                )}
+                            </div>
                         </TabsContent>
                     </Tabs>
                 </main>
