@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect } from 'react';
@@ -106,7 +105,6 @@ function ConfirmPageContent() {
             if (diff <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                // Handle expiry on-the-fly if needed or let status page handle it
             } else {
                 setTimeLeft(diff);
             }
@@ -222,7 +220,7 @@ function ConfirmPageContent() {
     if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400 pt-32">Order Expired</div>;
 
     const details = order.sellerWithdrawalDetails;
-    const upiLink = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Verified Node')}&am=${order.baseAmount}&tr=${order.orderId}&cu=INR`;
+    const upiLink = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Verified User')}&am=${order.baseAmount}&tr=${order.orderId}&cu=INR`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiLink)}`;
 
     return (
@@ -231,7 +229,7 @@ function ConfirmPageContent() {
                 <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
                     <ChevronLeft className="h-6 w-6 text-slate-800" />
                 </Button>
-                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">Waiting For Payment</h1>
+                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">Payment Details</h1>
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
 
@@ -247,32 +245,32 @@ function ConfirmPageContent() {
                         <div className="flex flex-col items-center justify-center space-y-4">
                             <div className="relative p-4 bg-white rounded-3xl shadow-xl ring-1 ring-slate-100">
                                 <div className="relative h-48 w-48 overflow-hidden rounded-xl">
-                                    <Image src={qrUrl} alt="UPI QR Code" fill className="object-contain" unoptimized />
+                                    <Image src={qrUrl} alt="QR Code" fill className="object-contain" unoptimized />
                                 </div>
                             </div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scan with MobiKwik / Freecharge</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scan QR to pay</p>
                         </div>
 
                         <div className="space-y-1 bg-slate-50 p-2 rounded-[24px] border border-slate-100 shadow-inner">
-                            <CopyRow label="Receiver" value={details?.name || 'Verified Node'} />
+                            <CopyRow label="Receiver" value={details?.name || 'Verified User'} />
                             <CopyRow label="UPI ID" value={details?.upiId} />
                             <CopyRow label="Amount" value={`₹${order.baseAmount.toFixed(2)}`} />
-                            <CopyRow label="Token ID" value={order.orderId} />
+                            <CopyRow label="Order ID" value={order.orderId} />
                         </div>
 
                         <div className="space-y-3 pt-2 text-center">
-                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Unable to pay? Cancel Order</button>
+                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Cancel Order</button>
                         </div>
                     </div>
                 ) : (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                        <div className="p-5 bg-red-600 text-white rounded-[24px]">
+                        <div className="p-5 bg-blue-600 text-white rounded-[24px]">
                             <div className="flex items-center gap-3 mb-2">
                                 <AlertCircle className="h-6 w-6" />
-                                <h3 className="font-black text-sm uppercase">Verification Audit</h3>
+                                <h3 className="font-black text-sm uppercase">Secure Submission</h3>
                             </div>
                             <p className="text-[10px] font-bold leading-relaxed uppercase">
-                                Incorrect UTR or fake screenshots will lead to permanent account suspension. Flex Pay is an end-to-end encrypted network.
+                                Please ensure the UTR and screenshot are correct. All submissions are audited by the system.
                             </p>
                         </div>
 
@@ -296,14 +294,14 @@ function ConfirmPageContent() {
 
             <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-xl border-t grid grid-cols-2 gap-3 z-50">
                 <Button variant="outline" className="h-14 rounded-2xl text-slate-500 font-black text-xs uppercase" onClick={() => view === 'prove' ? setView('info') : router.push('/buy')}>
-                    {view === 'info' ? "Back" : "Back"}
+                    Back
                 </Button>
 
                 {view === 'info' ? (
                     <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase">Submit Proof</Button>
                 ) : (
                     <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 10 || !screenshotFile}>
-                        {isSubmitting ? "SYNCING..." : "I HAVE PAID"}
+                        {isSubmitting ? "SUBMITTING..." : "CONFIRM"}
                     </Button>
                 )}
             </footer>
@@ -311,16 +309,16 @@ function ConfirmPageContent() {
             <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
                 <DialogContent className="max-w-[320px] rounded-[28px] p-6">
                     <DialogHeader>
-                        <DialogTitle className="text-lg font-black uppercase tracking-tight">Stop Transaction?</DialogTitle>
-                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400">State reason for termination</DialogDescription>
+                        <DialogTitle className="text-lg font-black uppercase tracking-tight">Cancel Order?</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400">Please provide a reason</DialogDescription>
                     </DialogHeader>
                     <div className="py-4">
-                        <Input placeholder="e.g. Bank node busy, Changed mind" className="h-12 bg-slate-50 border-none rounded-xl text-xs font-bold" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
+                        <Input placeholder="Reason for cancellation" className="h-12 bg-slate-50 border-none rounded-xl text-xs font-bold" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
                     </div>
                     <DialogFooter className="flex-row gap-2">
                         <Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase" onClick={() => setIsCancelDialogOpen(false)}>No</Button>
                         <Button className="flex-1 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase" disabled={isCancelling || !cancelReason.trim()} onClick={handleCancelOrder}>
-                            {isCancelling ? "STOPPING..." : "Confirm"}
+                            {isCancelling ? "CANCELING..." : "Confirm"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

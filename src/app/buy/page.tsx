@@ -10,12 +10,10 @@ import {
     ChevronLeft, 
     Loader2, 
     Search, 
-    ArrowRight, 
     Wallet, 
     CheckCircle2, 
     ChevronUp, 
     ChevronDown,
-    Filter
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -47,20 +45,16 @@ export default function BuyPage() {
   const [usdtAddress, setUsdtAddress] = useState<string | null>(null);
   const [usdtInput, setUsdtInput] = useState<string>('5');
   
-  // Dynamic Orders State
   const [dynamicOrders, setDynamicOrders] = useState<any[]>([]);
   
-  // Filter States
   const [minFilter, setMinFilter] = useState('100');
   const [maxFilter, setMaxFilter] = useState('15000');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  // Method Selection State
   const [isMethodSheetOpen, setIsMethodSheetOpen] = useState(false);
   const [pendingPurchaseAmount, setPendingPurchaseAmount] = useState<number | null>(null);
   const [selectedBuyerMethod, setSelectedBuyerMethod] = useState<any>(null);
 
-  // Helper to generate a 15-digit random numeric string
   const generateNodeId = () => {
     let result = '';
     for (let i = 0; i < 15; i++) {
@@ -69,26 +63,21 @@ export default function BuyPage() {
     return result;
   };
 
-  // Helper to generate a batch of random orders (200-300 orders)
   const generateRandomBatch = useCallback(() => {
-    const count = Math.floor(Math.random() * 101) + 200; // 200-300 orders
+    const count = Math.floor(Math.random() * 101) + 200;
     const newOrders = [];
     for (let i = 0; i < count; i++) {
         let amount = 0;
         const rand = Math.random();
         
         if (rand < 0.6) {
-            // 60% chance for small amounts (100-1500)
             amount = Math.floor(Math.random() * 1401) + 100;
         } else if (rand < 0.9) {
-            // 30% chance for mid amounts (1501-8000)
             amount = Math.floor(Math.random() * 6500) + 1501;
         } else {
-            // 10% chance for large amounts (8001-15000)
             amount = Math.floor(Math.random() * 7000) + 8001;
         }
 
-        // Round to nearest 10 for realism, occasionally adding small offsets
         if (Math.random() > 0.3) {
             amount = Math.round(amount / 10) * 10;
         }
@@ -104,32 +93,27 @@ export default function BuyPage() {
     setDynamicOrders(newOrders);
   }, []);
 
-  // Effect to generate and cycle orders every 40-50 seconds
   useEffect(() => {
     generateRandomBatch();
-    
     let timer: NodeJS.Timeout;
     const startCycle = () => {
-        const delay = (Math.floor(Math.random() * 10) + 40) * 1000; // 40-50 seconds
+        const delay = (Math.floor(Math.random() * 10) + 40) * 1000;
         timer = setTimeout(() => {
             generateRandomBatch();
             startCycle();
         }, delay);
     };
-
     startCycle();
     return () => clearTimeout(timer);
   }, [generateRandomBatch]);
 
   useEffect(() => {
     if (!user || !firestore) return;
-    
     const q = query(
       collection(firestore, 'users', user.uid, 'orders'), 
       where('status', '==', 'pending_payment'), 
       limit(1)
     );
-    
     getDocs(q).then(snap => { 
         if (!snap.empty) {
             setActivePaymentOrder({ id: snap.docs[0].id, ...snap.docs[0].data() }); 
@@ -151,11 +135,8 @@ export default function BuyPage() {
     let result = [...dynamicOrders];
     const minVal = parseInt(minFilter) || 0;
     const maxVal = parseInt(maxFilter) || Infinity;
-
     result = result.filter(opt => opt.amount >= minVal && opt.amount <= maxVal);
-
     result.sort((a, b) => sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount);
-
     return result;
   }, [dynamicOrders, minFilter, maxFilter, sortOrder]);
 
@@ -177,7 +158,7 @@ export default function BuyPage() {
     setIsMethodSheetOpen(true);
   };
 
-  const handleP2PMatch = async (amountInInr: number, type: 'upi' | 'usdt' = 'upi', usdtValue?: number, buyerMethod?: any) => {
+  const handleCreateOrder = async (amountInInr: number, type: 'upi' | 'usdt' = 'upi', usdtValue?: number, buyerMethod?: any) => {
     if (!user || !profile || !firestore) {
         toast({ title: "Session Expired", description: "Please login again.", variant: "destructive" });
         return;
@@ -189,16 +170,13 @@ export default function BuyPage() {
     try {
         const rawOrderId = generateRawOrderId();
         const displayOrderId = "#" + rawOrderId;
-        
-        // 6% + ₹5 logic
         const bonusPercent = 6;
         const flatBonus = 5;
         const totalAmount = amountInInr + (amountInInr * bonusPercent / 100) + flatBonus;
-        
         const buyOrderRef = doc(firestore, 'users', user.uid, 'orders', rawOrderId);
 
         if (type === 'usdt') {
-            if (!usdtAddress) throw new Error("USDT System Server is offline.");
+            if (!usdtAddress) throw new Error("System error. Try again later.");
             if (!usdtValue || usdtValue < MIN_USDT) throw new Error(`Minimum deposit is ${MIN_USDT} USDT`);
             
             await runTransaction(firestore, async (transaction) => {
@@ -213,7 +191,7 @@ export default function BuyPage() {
                     bonusPercentage: bonusPercent,
                     flatBonus: flatBonus,
                     paymentType: 'usdt',
-                    paymentProvider: 'CRYPTO_NODE',
+                    paymentProvider: 'CRYPTO',
                     status: 'pending_payment',
                     sellerId: 'SYSTEM_VAULT',
                     sellerWithdrawalDetails: {
@@ -224,11 +202,11 @@ export default function BuyPage() {
                     createdAt: serverTimestamp(),
                 });
             });
+            toast({ title: "Order Created Successfully!" });
             router.push(`/buy/confirm/${rawOrderId}`);
             return;
         }
 
-        // --- DYNAMIC ROTATION ENGINE ---
         const sellOrdersQuery = query(
             collection(firestore, 'sellOrders'),
             where('status', 'in', ['pending', 'partially_filled']),
@@ -250,7 +228,7 @@ export default function BuyPage() {
         if (!sellerDoc) {
             const adminPMQuery = query(collection(firestore, 'paymentMethods'), where('type', '==', 'upi'), limit(1));
             const adminPMSnap = await getDocs(adminPMQuery);
-            if (adminPMSnap.empty) throw new Error("Liquidity Pool Busy. Try again in 5 mins.");
+            if (adminPMSnap.empty) throw new Error("Service currently busy. Try again later.");
 
             const adminMethod = adminPMSnap.docs[0].data();
 
@@ -265,19 +243,20 @@ export default function BuyPage() {
                     bonusPercentage: bonusPercent,
                     flatBonus: flatBonus,
                     paymentType: 'system_transfer',
-                    paymentProvider: 'SYSTEM_NODE',
+                    paymentProvider: 'SYSTEM',
                     status: 'pending_payment',
                     sellerId: 'SYSTEM_VAULT',
                     buyerSelectedUpi: buyerMethod?.upiId || 'N/A',
                     buyerSelectedProvider: buyerMethod?.name || 'N/A',
                     sellerWithdrawalDetails: {
                         type: 'upi',
-                        name: adminMethod.upiHolderName || 'System Master Channel',
+                        name: adminMethod.upiHolderName || 'System Verified',
                         upiId: adminMethod.upiId
                     },
                     createdAt: serverTimestamp(),
                 });
             });
+            toast({ title: "Order Created Successfully!" });
             router.push(`/buy/confirm/${rawOrderId}`);
             return;
         }
@@ -288,7 +267,7 @@ export default function BuyPage() {
             const freshSellerData = freshSellerSnap.data();
 
             if (!freshSellerData || freshSellerData.remainingAmount < amountInInr || !['pending', 'partially_filled'].includes(freshSellerData.status)) {
-                throw new Error("Channel expired. Retrying...");
+                throw new Error("Order expired. Please try again.");
             }
 
             const newRemaining = freshSellerData.remainingAmount - amountInInr;
@@ -324,8 +303,8 @@ export default function BuyPage() {
                 baseAmount: amountInInr,
                 bonusPercentage: bonusPercent,
                 flatBonus: flatBonus,
-                paymentType: 'rotation_upi',
-                paymentProvider: 'Verified-Node',
+                paymentType: 'upi_transfer',
+                paymentProvider: 'Verified',
                 status: 'pending_payment',
                 sellerId: freshSellerData.userId,
                 buyerSelectedUpi: buyerMethod?.upiId || 'N/A',
@@ -336,11 +315,11 @@ export default function BuyPage() {
             });
         });
 
-        toast({ title: "Node Sync Success!" });
+        toast({ title: "Order Created Successfully!" });
         router.push(`/buy/confirm/${rawOrderId}`);
 
     } catch (e: any) {
-        toast({ title: "Sync Failed", description: e.message, variant: "destructive" });
+        toast({ title: "Failed to Create Order", description: e.message, variant: "destructive" });
     } finally {
         setIsMatching(false);
     }
@@ -370,48 +349,35 @@ export default function BuyPage() {
             </div>
 
             <TabsContent value="upi" className="m-0">
-                {/* Filter Bar */}
                 <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 border-b">
                     <div className="flex items-center gap-2">
-                        <button 
-                            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-                            className="p-1 text-primary"
-                        >
+                        <button onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="p-1 text-primary">
                             {sortOrder === 'asc' ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                         </button>
                         <div className="flex items-center gap-1.5 ml-2">
                             <span className="text-[11px] font-bold text-slate-400">Min</span>
-                            <input 
-                                value={minFilter}
-                                onChange={(e) => setMinFilter(e.target.value)}
-                                className="w-12 bg-transparent border-none font-bold text-[13px] focus:ring-0 p-0"
-                            />
+                            <input value={minFilter} onChange={(e) => setMinFilter(e.target.value)} className="w-12 bg-transparent border-none font-bold text-[13px] focus:ring-0 p-0" />
                         </div>
                         <div className="flex items-center gap-1.5 ml-4">
                             <span className="text-[11px] font-bold text-slate-400">Max</span>
-                            <input 
-                                value={maxFilter}
-                                onChange={(e) => setMaxFilter(e.target.value)}
-                                className="w-16 bg-transparent border-none font-bold text-[13px] focus:ring-0 p-0"
-                            />
+                            <input value={maxFilter} onChange={(e) => setMaxFilter(e.target.value)} className="w-16 bg-transparent border-none font-bold text-[13px] focus:ring-0 p-0" />
                         </div>
                     </div>
                     <Search className="h-5 w-5 text-orange-400" />
                 </div>
 
-                {/* Dynamic Buy List */}
                 <div className="divide-y divide-slate-100 pb-24">
                     {filteredOptions.map((opt) => {
                         const reward = (opt.amount * 0.06) + 5;
                         const total = opt.amount + reward;
                         return (
-                            <div key={opt.id} className="p-4 flex flex-col gap-3 group active:bg-slate-50 transition-colors animate-in fade-in duration-500">
+                            <div key={opt.id} className="p-4 flex flex-col gap-3 group active:bg-slate-50 transition-colors">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-1.5">
                                         <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">#{opt.nodeId}</span>
+                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Order ID: {opt.id}</span>
                                     </div>
-                                    <span className="text-[11px] text-blue-500 font-black uppercase tracking-tight">Reward 6.0%+₹5</span>
+                                    <span className="text-[11px] text-blue-500 font-black uppercase tracking-tight">Bonus 6.0%+₹5</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
@@ -421,12 +387,12 @@ export default function BuyPage() {
                                         </div>
                                         <span className="text-slate-300 mx-1 font-light text-xl">+</span>
                                         <div className="flex flex-col">
-                                            <span className="text-[11px] text-slate-500 font-bold uppercase">Reward</span>
+                                            <span className="text-[11px] text-slate-500 font-bold uppercase">Bonus</span>
                                             <span className="text-base font-bold text-slate-800">{reward.toFixed(1)}</span>
                                         </div>
                                         <span className="text-slate-300 mx-1 font-light text-xl">=</span>
                                         <div className="flex flex-col">
-                                            <span className="text-[11px] text-blue-600 font-black uppercase tracking-tighter">Total FP</span>
+                                            <span className="text-[11px] text-blue-600 font-black uppercase tracking-tighter">Receive</span>
                                             <span className="text-base font-black text-blue-600 tabular-nums">{total.toFixed(2)}</span>
                                         </div>
                                     </div>
@@ -440,15 +406,10 @@ export default function BuyPage() {
                             </div>
                         );
                     })}
-                    {filteredOptions.length === 0 && (
-                        <div className="p-20 text-center text-slate-300 font-bold text-xs uppercase tracking-widest">
-                            No orders matching filters
-                        </div>
-                    )}
                 </div>
             </TabsContent>
 
-            <TabsContent value="usdt" className="p-4 animate-in fade-in duration-300">
+            <TabsContent value="usdt" className="p-4">
                 <Card className="border-none bg-white rounded-2xl shadow-lg ring-1 ring-slate-100 overflow-hidden">
                     <CardContent className="p-5 space-y-5">
                         <div className="space-y-3">
@@ -456,18 +417,11 @@ export default function BuyPage() {
                                 <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">USDT Amount</Label>
                                 <div className="relative">
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500 font-black">$</div>
-                                    <Input 
-                                        type="number"
-                                        placeholder="Min 5 USDT"
-                                        value={usdtInput}
-                                        onChange={(e) => setUsdtInput(e.target.value)}
-                                        className="h-12 pl-8 bg-slate-50 border-none ring-1 ring-slate-200 rounded-xl text-lg font-black focus-visible:ring-primary/20"
-                                    />
+                                    <Input type="number" placeholder="Min 5 USDT" value={usdtInput} onChange={(e) => setUsdtInput(e.target.value)} className="h-12 pl-8 bg-slate-50 border-none ring-1 ring-slate-200 rounded-xl text-lg font-black" />
                                 </div>
                                 <p className="text-[10px] font-bold text-slate-400 uppercase ml-1">Rate: ₹{USDT_RATE}/USDT</p>
                             </div>
-
-                            <div className="p-4 bg-primary text-white rounded-xl flex items-center justify-between shadow-lg shadow-blue-500/10">
+                            <div className="p-4 bg-primary text-white rounded-xl flex items-center justify-between">
                                 <div className="space-y-0.5">
                                     <p className="text-[10px] font-black uppercase opacity-60">You Receive</p>
                                     <p className="text-xl font-black tabular-nums">₹{(Number(usdtInput) * USDT_RATE).toLocaleString()}</p>
@@ -475,13 +429,8 @@ export default function BuyPage() {
                                 <Wallet className="h-6 w-6 text-white/30" />
                             </div>
                         </div>
-
-                        <Button 
-                            onClick={() => handleP2PMatch(Number(usdtInput) * USDT_RATE, 'usdt', Number(usdtInput))}
-                            className="w-full h-12 btn-gradient rounded-xl font-black text-sm shadow-teal-500/20"
-                            disabled={isMatching || Number(usdtInput) < MIN_USDT}
-                        >
-                            {isMatching ? <Loader size="xs" className="mr-2" /> : "DEPOSIT USDT"}
+                        <Button onClick={() => handleCreateOrder(Number(usdtInput) * USDT_RATE, 'usdt', Number(usdtInput))} className="w-full h-12 btn-gradient rounded-xl font-black text-sm" disabled={isMatching || Number(usdtInput) < MIN_USDT}>
+                            {isMatching ? <Loader size="xs" /> : "DEPOSIT USDT"}
                         </Button>
                     </CardContent>
                 </Card>
@@ -490,15 +439,12 @@ export default function BuyPage() {
 
         {isMatching && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[100] flex items-center justify-center p-6 text-center">
-                 <Card className="w-full max-w-xs animate-in zoom-in-95 duration-200 p-8 rounded-[32px] border-none shadow-2xl bg-white">
+                 <Card className="w-full max-w-xs p-8 rounded-[32px] border-none shadow-2xl bg-white">
                      <div className="relative w-16 h-16 mx-auto mb-4">
                         <Loader2 className="w-16 h-16 text-primary animate-spin" />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <Search className="h-6 w-6 text-primary animate-pulse" />
-                        </div>
                      </div>
-                     <h3 className="font-black text-base text-slate-800 uppercase tracking-tight">Syncing Node</h3>
-                     <p className="text-[9px] text-slate-400 mt-1 font-bold uppercase tracking-widest leading-relaxed">Connecting to verified channel...</p>
+                     <h3 className="font-black text-base text-slate-800 uppercase tracking-tight">Creating Order</h3>
+                     <p className="text-[9px] text-slate-400 mt-1 font-bold uppercase tracking-widest leading-relaxed">Please wait while we process your request...</p>
                  </Card>
             </div>
         )}
@@ -506,58 +452,39 @@ export default function BuyPage() {
         <Sheet open={isMethodSheetOpen} onOpenChange={setIsMethodSheetOpen}>
             <SheetContent side="bottom" className="rounded-t-[32px] px-5 pb-10 pt-6 border-none shadow-2xl bg-[#F5F7FB] max-h-[70vh] overflow-y-auto no-scrollbar">
                 <SheetHeader className="text-center mb-6">
-                    <SheetTitle className="text-xl font-black tracking-tight uppercase">Select Payment Mode</SheetTitle>
+                    <SheetTitle className="text-xl font-black tracking-tight uppercase">Select Payment App</SheetTitle>
                     <SheetDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Choose your linked verified wallet
                     </SheetDescription>
                 </SheetHeader>
-
                 <div className="space-y-3">
                     {filteredMethods.length > 0 ? (
                         filteredMethods.map((m: any, idx: number) => (
-                            <div 
-                                key={idx} 
-                                className={cn(
-                                    "p-4 rounded-[22px] bg-white border border-slate-100 shadow-sm flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all",
-                                    selectedBuyerMethod?.upiId === m.upiId ? "ring-2 ring-primary border-transparent" : ""
-                                )}
-                                onClick={() => setSelectedBuyerMethod(m)}
-                            >
+                            <div key={idx} className={cn("p-4 rounded-[22px] bg-white border border-slate-100 shadow-sm flex items-center justify-between cursor-pointer active:scale-[0.98]", selectedBuyerMethod?.upiId === m.upiId ? "ring-2 ring-primary" : "")} onClick={() => setSelectedBuyerMethod(m)}>
                                 <div className="flex items-center gap-3">
-                                    <div className="h-11 w-11 rounded-xl bg-slate-50 flex items-center justify-center p-2 border border-slate-50">
-                                        {PROVIDER_LOGOS[m.name] && (
-                                            <Image src={PROVIDER_LOGOS[m.name]} alt={m.name} width={32} height={32} className="object-contain" />
-                                        )}
+                                    <div className="h-11 w-11 rounded-xl bg-slate-50 flex items-center justify-center p-2">
+                                        {PROVIDER_LOGOS[m.name] && <Image src={PROVIDER_LOGOS[m.name]} alt={m.name} width={32} height={32} className="object-contain" />}
                                     </div>
                                     <div>
                                         <p className="font-black text-slate-800 text-xs uppercase">{m.name}</p>
-                                        <p className="text-[9px] font-mono font-bold text-slate-400 mt-0.5 tracking-tight">{m.upiId}</p>
+                                        <p className="text-[9px] font-mono font-bold text-slate-400 mt-0.5">{m.upiId}</p>
                                     </div>
                                 </div>
-                                {selectedBuyerMethod?.upiId === m.upiId ? (
-                                    <CheckCircle2 className="h-6 w-6 text-primary" />
-                                ) : (
-                                    <div className="h-6 w-6 rounded-full border-2 border-slate-100" />
-                                )}
+                                {selectedBuyerMethod?.upiId === m.upiId ? <CheckCircle2 className="h-6 w-6 text-primary" /> : <div className="h-6 w-6 rounded-full border-2 border-slate-100" />}
                             </div>
                         ))
                     ) : (
                         <div className="py-10 text-center space-y-4">
                             <Wallet className="h-10 w-10 mx-auto text-slate-200" />
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No MobiKwik or Freecharge Linked</p>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No Verified Accounts Linked</p>
                             <Button asChild className="btn-gradient rounded-xl px-6 h-10 text-[9px] font-black uppercase">
-                                <Link href="/my/collection/add">Link Verified Account</Link>
+                                <Link href="/my/collection/add">Link Account</Link>
                             </Button>
                         </div>
                     )}
-
                     {filteredMethods.length > 0 && (
-                        <Button 
-                            className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase shadow-blue-500/20 mt-4" 
-                            disabled={!selectedBuyerMethod || !pendingPurchaseAmount}
-                            onClick={() => pendingPurchaseAmount && handleP2PMatch(pendingPurchaseAmount, 'upi', undefined, selectedBuyerMethod)}
-                        >
-                            SYNC SECURE NODE
+                        <Button className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase mt-4" disabled={!selectedBuyerMethod || !pendingPurchaseAmount} onClick={() => pendingPurchaseAmount && handleCreateOrder(pendingPurchaseAmount, 'upi', undefined, selectedBuyerMethod)}>
+                            CREATE ORDER
                         </Button>
                     )}
                 </div>

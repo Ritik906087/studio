@@ -83,7 +83,7 @@ export default function SellPage() {
             transaction.set(userSellRef, sellData);
         });
 
-        toast({ title: "Order Listed!", description: "Liquidity rotation engine is matching your order." });
+        toast({ title: "Order Created Successfully!" });
         router.push('/order');
     } catch (e: any) {
         toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -97,7 +97,7 @@ export default function SellPage() {
         <Button asChild variant="ghost" size="icon" className="h-8 w-8">
           <Link href="/home"><ChevronLeft className="h-5 w-5" /></Link>
         </Button>
-        <h1 className="text-lg font-black text-slate-800">Sell Assets</h1>
+        <h1 className="text-lg font-black text-slate-800">Sell</h1>
       </header>
 
       <main className="p-4 space-y-4">
@@ -127,7 +127,7 @@ export default function SellPage() {
                 </div>
                 <div className="flex items-start gap-2 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
                     <Info className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
-                    <p className="text-[9px] font-medium text-blue-600">The amount you sell will be placed in the rotation engine. Multiple buyers will match for faster completion.</p>
+                    <p className="text-[9px] font-medium text-blue-600">Your sale request will be processed. Multiple transactions may occur for faster completion.</p>
                 </div>
             </div>
 
@@ -176,9 +176,9 @@ export default function SellPage() {
                 onClick={handleSell} 
                 disabled={isSelling || !amount || !selectedMethod}
             >
-                {isSelling ? "INITIATING..." : "Initiate P2P Sale"}
+                {isSelling ? "PROCESSING..." : "Sell Now"}
             </Button>
-            <p className="text-center text-[9px] text-slate-400 mt-4 uppercase font-bold tracking-widest">Secured by Liquidity Guard</p>
+            <p className="text-center text-[9px] text-slate-400 mt-4 uppercase font-bold tracking-widest">Secured Payment Network</p>
         </div>
       </main>
     </div>

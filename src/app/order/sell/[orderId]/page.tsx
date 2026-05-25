@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useMemo, Suspense, useState, useCallback, useEffect } from 'react';
@@ -49,7 +48,7 @@ type MatchedBuyOrder = {
 
 const statusMapping: Record<string, { label: string, color: string, bgColor: string, icon: any }> = {
     pending_payment: { 
-        label: "Buyer Paying", 
+        label: "Processing", 
         color: "text-amber-500", 
         bgColor: "bg-amber-50",
         icon: Hourglass
@@ -67,13 +66,13 @@ const statusMapping: Record<string, { label: string, color: string, bgColor: str
         icon: CheckCircle2
     },
     cancelled: { 
-        label: "Timeout/Closed", 
+        label: "Cancelled", 
         color: "text-slate-400", 
         bgColor: "bg-slate-50",
         icon: AlertCircle
     },
     failed: { 
-        label: "Audit Failed", 
+        label: "Failed", 
         color: "text-red-500", 
         bgColor: "bg-red-50",
         icon: AlertCircle
@@ -92,25 +91,25 @@ const MatchedOrderCard = ({ order }: { order: MatchedBuyOrder }) => {
              <div className={cn("p-1 rounded-lg", config.bgColor)}>
                 <Icon className={cn("h-3 w-3", config.color)} />
              </div>
-             <span className="font-black text-[10px] uppercase tracking-tight text-slate-800">Matching node</span>
+             <span className="font-black text-[10px] uppercase tracking-tight text-slate-800">Order Match</span>
           </div>
           <span className={cn("font-black text-[9px] uppercase px-2 py-0.5 rounded-md", config.bgColor + " " + config.color)}>{config.label}</span>
         </div>
         
         <div className="grid grid-cols-2 gap-4 border-t border-dashed pt-3">
             <div>
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Injected amount</p>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Amount</p>
                 <p className="font-black text-slate-800 text-sm">₹{order.amount.toFixed(2)}</p>
             </div>
             <div>
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Network trace</p>
-                <p className="font-mono text-[9px] font-black text-primary truncate uppercase">{order.utr || 'Awaiting proof'}</p>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Status</p>
+                <p className="font-mono text-[9px] font-black text-primary truncate uppercase">{order.utr || 'Awaiting Proof'}</p>
             </div>
         </div>
 
         {order.status === 'pending_confirmation' && (
             <div className="bg-blue-50 p-2 rounded-xl text-center">
-                 <p className="text-[9px] font-bold text-blue-600 uppercase tracking-tight">The system is currently auditing the buyer's submission</p>
+                 <p className="text-[9px] font-bold text-blue-600 uppercase tracking-tight">The system is currently auditing the transaction</p>
             </div>
         )}
       </CardContent>
@@ -148,7 +147,7 @@ function SellOrderStatusContent() {
                 const userSnap = await transaction.get(userRef);
                 const sellSnap = await transaction.get(sellerOrderRef);
 
-                if(!userSnap.exists() || !sellSnap.exists()) throw new Error("Synchronization failure.");
+                if(!userSnap.exists() || !sellSnap.exists()) throw new Error("Sync failed.");
 
                 const refundAmt = sellSnap.data().remainingAmount;
                 
@@ -163,7 +162,7 @@ function SellOrderStatusContent() {
                 transaction.update(sellerOrderRef, { 
                     remainingAmount: 0, 
                     status: finalStatus,
-                    cancellationReason: 'User requested unmatched liquidity refund'
+                    cancellationReason: 'User requested refund'
                 });
                 transaction.update(sellerUserOrderRef, { 
                     remainingAmount: 0, 
@@ -171,9 +170,9 @@ function SellOrderStatusContent() {
                 });
             });
 
-            toast({ title: 'Liquidity injection reset', description: 'Available portion returned to main balance.' });
+            toast({ title: 'Order Updated', description: 'Available assets returned to balance.' });
         } catch (e: any) {
-            toast({ variant: 'destructive', title: 'Termination failed', description: e.message });
+            toast({ variant: 'destructive', title: 'Update failed', description: e.message });
         } finally {
             setIsActionLoading(false);
         }
@@ -195,14 +194,14 @@ function SellOrderStatusContent() {
                 <Button onClick={() => router.push('/order')} variant="ghost" size="icon" className="h-8 w-8">
                      <ChevronLeft className="h-6 w-6 text-muted-foreground" />
                 </Button>
-                <h1 className="text-sm font-black mx-auto pr-8 uppercase tracking-widest">Rotation monitor</h1>
+                <h1 className="text-sm font-black mx-auto pr-8 uppercase tracking-widest">Order Monitor</h1>
             </header>
 
             <main className="p-3 space-y-4 overflow-y-auto no-scrollbar pb-24">
                 <Card className="border-none shadow-sm rounded-[32px] bg-white overflow-hidden">
                     <CardHeader className="pb-2">
                         <div className="flex justify-between items-center">
-                            <CardTitle className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rotation Load</CardTitle>
+                            <CardTitle className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Order Progress</CardTitle>
                             <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-50 text-blue-600">
                                 {sellOrder.status.replace('_', ' ')}
                             </span>
@@ -210,13 +209,13 @@ function SellOrderStatusContent() {
                     </CardHeader>
                     <CardContent className="p-6 space-y-4">
                         <div className="text-center">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Total assets locked</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Total Amount Locked</p>
                             <p className="text-3xl font-black text-slate-800 tracking-tighter">₹{sellOrder.amount.toFixed(2)}</p>
                         </div>
                         <div className="space-y-2">
                             <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-tighter">
-                                <span>In-use: ₹{(sellOrder.amount - sellOrder.remainingAmount).toFixed(2)}</span>
-                                <span>Free: ₹{sellOrder.remainingAmount.toFixed(2)}</span>
+                                <span>Processing: ₹{(sellOrder.amount - sellOrder.remainingAmount).toFixed(2)}</span>
+                                <span>Available: ₹{sellOrder.remainingAmount.toFixed(2)}</span>
                             </div>
                             <Progress value={progress} className="h-2 rounded-full" />
                         </div>
@@ -227,18 +226,18 @@ function SellOrderStatusContent() {
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <Button variant="outline" className="w-full h-12 rounded-2xl text-red-500 border-red-50 font-black text-xs uppercase" disabled={isActionLoading}>
-                                Halt Rotation & Return Free Assets
+                                Stop & Refund Available Assets
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent className="rounded-[32px]">
                             <AlertDialogHeader>
-                                <AlertDialogTitle>Stop further matching?</AlertDialogTitle>
+                                <AlertDialogTitle>Stop further processing?</AlertDialogTitle>
                                 <AlertDialogDescription className="text-xs">
-                                    ₹{sellOrder.remainingAmount.toFixed(2)} will be instantly returned to your available balance. Active matches still have 30 minutes to settle.
+                                    ₹{sellOrder.remainingAmount.toFixed(2)} will be instantly returned to your available balance.
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                                <AlertDialogCancel className="rounded-xl">Keep running</AlertDialogCancel>
+                                <AlertDialogCancel className="rounded-xl">Continue</AlertDialogCancel>
                                 <AlertDialogAction onClick={handleCancelRemaining} className="bg-destructive hover:bg-destructive/90 rounded-xl">Stop now</AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
@@ -246,7 +245,7 @@ function SellOrderStatusContent() {
                 )}
 
                 <div className="space-y-1">
-                    <h3 className="px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">Active matches</h3>
+                    <h3 className="px-1 text-[11px] font-black text-slate-400 uppercase tracking-widest">Active Status</h3>
                     {matchedOrders.length > 0 ? (
                         matchedOrders.map((m) => (
                             <MatchedOrderCard key={m.buyOrderId} order={m} />
@@ -254,7 +253,7 @@ function SellOrderStatusContent() {
                     ) : (
                         <Card className="border-none shadow-sm rounded-2xl bg-white p-12 text-center opacity-30">
                             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                            <p className="text-[10px] font-black uppercase mt-4">Scanning network pool...</p>
+                            <p className="text-[10px] font-black uppercase mt-4">Processing transactions...</p>
                         </Card>
                     )}
                 </div>
@@ -262,7 +261,7 @@ function SellOrderStatusContent() {
                 <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex gap-3">
                      <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
                      <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
-                        Flex Pay performs hardware-level audit on all matches. Locked escrow funds are permanently released only after audit confirmation.
+                        Funds are held securely in escrow until the audit is complete. Released assets will appear in your balance automatically.
                      </p>
                 </div>
             </main>
