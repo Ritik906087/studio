@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -101,7 +102,7 @@ export default function NewbieRewardsPage() {
                 
                 if (data?.claimedUserRewards?.includes(FINAL_REWARD_ID)) throw new Error("Already claimed");
 
-                // 1. Credit Reward to User
+                // 1. Credit Reward to User (300)
                 transaction.update(userRef, {
                     balance: increment(FINAL_REWARD_AMOUNT),
                     claimedUserRewards: arrayUnion(FINAL_REWARD_ID)
@@ -120,19 +121,23 @@ export default function NewbieRewardsPage() {
                 // 2. Credit Reward to direct Inviter (L1 Relationship)
                 if (data?.inviterUid) {
                     const inviterRef = doc(firestore, 'users', data.inviterUid);
-                    transaction.update(inviterRef, {
-                        balance: increment(INVITER_BONUS_AMOUNT)
-                    });
+                    const inviterSnap = await transaction.get(inviterRef);
                     
-                    const inviterTxRef = doc(collection(firestore, 'users', data.inviterUid, 'transactions'));
-                    transaction.set(inviterTxRef, {
-                        userId: data.inviterUid,
-                        amount: INVITER_BONUS_AMOUNT,
-                        type: 'team_bonus',
-                        description: `Mission Bonus (L1): Member UID ${data.numericId} completed tasks`,
-                        createdAt: serverTimestamp(),
-                        orderId: `INV_BONUS_${Date.now()}`
-                    });
+                    if (inviterSnap.exists()) {
+                        transaction.update(inviterRef, {
+                            balance: increment(INVITER_BONUS_AMOUNT)
+                        });
+                        
+                        const inviterTxRef = doc(collection(firestore, 'users', data.inviterUid, 'transactions'));
+                        transaction.set(inviterTxRef, {
+                            userId: data.inviterUid,
+                            amount: INVITER_BONUS_AMOUNT,
+                            type: 'team_bonus',
+                            description: `Mission Bonus (L1): Member UID ${data.numericId} completed tasks`,
+                            createdAt: serverTimestamp(),
+                            orderId: `INV_BONUS_${Date.now()}`
+                        });
+                    }
                 }
             });
             toast({ title: `₹${FINAL_REWARD_AMOUNT} Credited!` });

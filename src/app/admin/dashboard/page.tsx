@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -191,6 +192,9 @@ export default function AdminDashboardPage() {
                 const buyerSnap = await transaction.get(buyerRef);
                 const currentOrderSnap = await transaction.get(orderRef);
 
+                if (!buyerSnap.exists()) throw new Error("Buyer missing");
+                const buyerData = buyerSnap.data();
+
                 if (currentOrderSnap.data()?.status === 'completed') throw new Error("Already Approved");
                 
                 let sellSnap = null;
@@ -207,13 +211,60 @@ export default function AdminDashboardPage() {
                     sellSnap = await transaction.get(sellOrderRef);
                     sellerSnap = await transaction.get(sellerProfileRef);
                 }
-
-                if (!buyerSnap.exists()) throw new Error("Buyer missing");
                 
-                const currentBuyerBalance = buyerSnap.data()?.balance || 0;
+                // --- 1. Credit Buyer ---
+                const currentBuyerBalance = buyerData.balance || 0;
                 transaction.update(buyerRef, { balance: currentBuyerBalance + order.amount });
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
                 
+                // --- 2. Multi-Level Commission Logic (L1: 1%, L2: 0.8%) ---
+                const purchaseAmount = order.baseAmount || order.amount;
+
+                // Level 1 Commission
+                if (buyerData.inviterUid) {
+                    const l1Uid = buyerData.inviterUid;
+                    const l1Ref = doc(firestore, 'users', l1Uid);
+                    const l1Snap = await transaction.get(l1Ref);
+                    if (l1Snap.exists()) {
+                        const l1Data = l1Snap.data();
+                        const l1Bonus = purchaseAmount * 0.01;
+                        transaction.update(l1Ref, { balance: (l1Data.balance || 0) + l1Bonus });
+
+                        const l1TxRef = doc(collection(firestore, 'users', l1Uid, 'transactions'));
+                        transaction.set(l1TxRef, {
+                            userId: l1Uid,
+                            amount: l1Bonus,
+                            type: 'team_bonus',
+                            description: `L1 Trade Commission (1%): Buyer UID ${buyerData.numericId}`,
+                            createdAt: serverTimestamp(),
+                            orderId: `COMM_L1_${order.id}`
+                        });
+
+                        // Level 2 Commission
+                        if (l1Data.inviterUid) {
+                            const l2Uid = l1Data.inviterUid;
+                            const l2Ref = doc(firestore, 'users', l2Uid);
+                            const l2Snap = await transaction.get(l2Ref);
+                            if (l2Snap.exists()) {
+                                const l2Data = l2Snap.data();
+                                const l2Bonus = purchaseAmount * 0.008;
+                                transaction.update(l2Ref, { balance: (l2Data.balance || 0) + l2Bonus });
+
+                                const l2TxRef = doc(collection(firestore, 'users', l2Uid, 'transactions'));
+                                transaction.set(l2TxRef, {
+                                    userId: l2Uid,
+                                    amount: l2Bonus,
+                                    type: 'team_bonus',
+                                    description: `L2 Trade Commission (0.8%): Buyer UID ${buyerData.numericId}`,
+                                    createdAt: serverTimestamp(),
+                                    orderId: `COMM_L2_${order.id}`
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // --- 3. Seller Hold Balance and Order Matching Logic ---
                 if (sellSnap && sellSnap.exists()) {
                     const sellData = sellSnap.data();
                     const updatedMatches = (sellData.matchedBuyOrders || []).map((m: any) => 
@@ -236,7 +287,7 @@ export default function AdminDashboardPage() {
 
                 if (sellerSnap && sellerSnap.exists()) {
                     const currentSellerHold = sellerSnap.data()?.holdBalance || 0;
-                    transaction.update(sellerProfileRef!, { holdBalance: Math.max(0, currentSellerHold - order.baseAmount) });
+                    transaction.update(sellerProfileRef!, { holdBalance: Math.max(0, currentSellerHold - purchaseAmount) });
                 }
             });
             await logAdminAction('APPROVE_ORDER', { orderId: order.orderId, buyer: order.userNumericId });
@@ -267,16 +318,17 @@ export default function AdminDashboardPage() {
                     const sellData = sellSnap.data();
                     const currentRemaining = sellData.remainingAmount || 0;
                     const updatedMatches = (sellData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
-                    
+                    const purchaseAmount = order.baseAmount || order.amount;
+
                     transaction.update(sellOrderRef!, { 
-                        remainingAmount: currentRemaining + order.baseAmount,
+                        remainingAmount: currentRemaining + purchaseAmount,
                         status: 'partially_filled',
                         matchedBuyOrders: updatedMatches
                     });
                     
                     if (sellerUserSellRef) {
                         transaction.update(sellerUserSellRef, { 
-                            remainingAmount: currentRemaining + order.baseAmount,
+                            remainingAmount: currentRemaining + purchaseAmount,
                             status: 'partially_filled',
                             matchedBuyOrders: updatedMatches
                         });
