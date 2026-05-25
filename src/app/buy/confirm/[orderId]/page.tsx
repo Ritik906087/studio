@@ -103,6 +103,49 @@ function ConfirmPageContent() {
 
     const { data: order, loading } = useDoc<Order>(orderRef);
 
+    // --- AUTO-CANCEL TRANSACTION HELPER ---
+    const triggerAutoCancel = async () => {
+        if (!order || !user || !firestore || isCancelling) return;
+        setIsCancelling(true);
+        try {
+            await runTransaction(firestore, async (transaction) => {
+                const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', order.id);
+                
+                if (order.matchedSellOrderId && order.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(order.sellerId)) {
+                    const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    const sellerUserOrderRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
+
+                    const sellerSnap = await transaction.get(sellerOrderRef);
+                    if (sellerSnap.exists()) {
+                        const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
+                        const updatedMatches = matchedOrders.filter((m: any) => m.buyOrderId !== order.id);
+                        const currentRemaining = sellerSnap.data().remainingAmount || 0;
+                        
+                        transaction.update(sellerOrderRef, { 
+                            matchedBuyOrders: updatedMatches,
+                            remainingAmount: currentRemaining + (order.baseAmount || order.amount),
+                            status: 'partially_filled'
+                        });
+                        transaction.update(sellerUserOrderRef, { 
+                            matchedBuyOrders: updatedMatches,
+                            remainingAmount: currentRemaining + (order.baseAmount || order.amount),
+                            status: 'partially_filled'
+                        });
+                    }
+                }
+
+                transaction.update(buyerOrderRef, {
+                    status: 'cancelled',
+                    cancellationReason: 'Session Timeout',
+                    cancelledAt: serverTimestamp()
+                });
+            });
+            router.replace('/home');
+        } catch (e) {
+            console.error("Auto-cancel fail", e);
+        }
+    };
+
     useEffect(() => {
         if (!order) return;
         if (order.status !== 'pending_payment') {
@@ -118,6 +161,7 @@ function ConfirmPageContent() {
             if (diff <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
+                triggerAutoCancel(); // Auto-cancel when timer reaches 0
             } else {
                 setTimeLeft(diff);
             }
@@ -150,12 +194,12 @@ function ConfirmPageContent() {
                         
                         transaction.update(sellerOrderRef, { 
                             matchedBuyOrders: updatedMatches,
-                            remainingAmount: currentRemaining + order.baseAmount,
+                            remainingAmount: currentRemaining + (order.baseAmount || order.amount),
                             status: 'partially_filled'
                         });
                         transaction.update(sellerUserOrderRef, { 
                             matchedBuyOrders: updatedMatches,
-                            remainingAmount: currentRemaining + order.baseAmount,
+                            remainingAmount: currentRemaining + (order.baseAmount || order.amount),
                             status: 'partially_filled'
                         });
                     }
@@ -177,6 +221,10 @@ function ConfirmPageContent() {
     };
 
     const handleConfirmSubmit = async () => {
+        if (timeLeft <= 0) {
+            toast({ variant: 'destructive', title: 'Session Expired', description: 'This order has timed out.' });
+            return;
+        }
         if (!utr || utr.length < 10) {
             toast({ variant: 'destructive', title: 'Invalid proof', description: 'Enter full TXID or UTR.' });
             return;
@@ -218,7 +266,6 @@ function ConfirmPageContent() {
                 });
             });
 
-            // Send Telegram Notification Failsafe
             try {
                 await sendOrderSubmissionToTelegram({
                     orderId: order.orderId,
@@ -382,7 +429,7 @@ function ConfirmPageContent() {
                 {view === 'info' ? (
                     <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase">Submit Proof</Button>
                 ) : (
-                    <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 8 || !screenshotFile}>
+                    <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 8 || !screenshotFile || timeLeft <= 0}>
                         {isSubmitting ? "UPLOADING..." : "CONFIRM"}
                     </Button>
                 )}

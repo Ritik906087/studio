@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
@@ -9,13 +9,13 @@ import {
   LogOut, Users, LayoutDashboard, Server, 
   Eye, Wallet, Check, RefreshCw,
   Search, ImageIcon, Clock, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap,
-  Banknote, History, CheckCircle2, X, Menu, ArrowUpRight, Copy
+  Banknote, History, CheckCircle2, X, Menu, ArrowUpRight, Copy, AlertTriangle
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, collectionGroup, onSnapshot, query, orderBy, where, doc, deleteDoc, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
+import { collection, collectionGroup, onSnapshot, query, orderBy, where, doc, deleteDoc, runTransaction, serverTimestamp, getDocs, limit, addDoc, Timestamp } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -66,6 +66,72 @@ export default function AdminDashboardPage() {
     const [settleUTR, setSettleUTR] = useState('');
     const [settleOrder, setSettleOrder] = useState<any>(null);
 
+    // --- AUTOMATIC CLEANUP LOGIC ---
+    const cleanupExpiredOrders = useCallback(async () => {
+        if (!firestore) return;
+        
+        try {
+            const now = Date.now();
+            const thirtyMinsAgo = new Date(now - 30 * 60 * 1000);
+            const cutoff = Timestamp.fromDate(thirtyMinsAgo);
+
+            // Query for orders that are pending_payment and created more than 30 mins ago
+            const q = query(
+                collectionGroup(firestore, 'orders'),
+                where('status', '==', 'pending_payment'),
+                where('createdAt', '<=', cutoff),
+                limit(20) // Process in small chunks to avoid timeouts
+            );
+
+            const snap = await getDocs(q);
+            if (snap.empty) return;
+
+            console.log(`[AutoCleanup] Found ${snap.size} expired orders.`);
+
+            for (const orderDoc of snap.docs) {
+                const orderData = orderDoc.data();
+                const userId = orderData.userId;
+                
+                await runTransaction(firestore, async (transaction) => {
+                    const buyerOrderRef = doc(firestore, 'users', userId, 'orders', orderDoc.id);
+                    
+                    // If P2P, release seller assets
+                    if (orderData.matchedSellOrderId && orderData.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(orderData.sellerId)) {
+                        const sellerOrderRef = doc(firestore, 'sellOrders', orderData.matchedSellOrderId);
+                        const sellerUserOrderRef = doc(firestore, 'users', orderData.sellerId, 'sellOrders', orderData.matchedSellOrderId);
+
+                        const sellerSnap = await transaction.get(sellerOrderRef);
+                        if (sellerSnap.exists()) {
+                            const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
+                            const updatedMatches = matchedOrders.filter((m: any) => m.buyOrderId !== orderDoc.id);
+                            const currentRemaining = sellerSnap.data().remainingAmount || 0;
+                            const orderBaseAmount = orderData.baseAmount || orderData.amount;
+                            
+                            transaction.update(sellerOrderRef, { 
+                                matchedBuyOrders: updatedMatches,
+                                remainingAmount: currentRemaining + orderBaseAmount,
+                                status: 'partially_filled'
+                            });
+                            transaction.update(sellerUserOrderRef, { 
+                                matchedBuyOrders: updatedMatches,
+                                remainingAmount: currentRemaining + orderBaseAmount,
+                                status: 'partially_filled'
+                            });
+                        }
+                    }
+
+                    transaction.update(buyerOrderRef, {
+                        status: 'cancelled',
+                        cancellationReason: 'System Auto-Cancel: Timeout',
+                        cancelledAt: serverTimestamp()
+                    });
+                });
+            }
+        } catch (e) {
+            console.error("Cleanup error:", e);
+        }
+    }, [firestore]);
+
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
         if (!sessionStr) { router.replace('/admin/key'); return; }
@@ -82,7 +148,12 @@ export default function AdminDashboardPage() {
             localStorage.removeItem('flex_admin_session');
             router.replace('/admin/key');
         }
-    }, [router]);
+
+        // Run cleanup on mount and then every 60 seconds
+        cleanupExpiredOrders();
+        const cleanupInterval = setInterval(cleanupExpiredOrders, 60000);
+        return () => clearInterval(cleanupInterval);
+    }, [router, cleanupExpiredOrders]);
 
     const fetchUsers = useCallback(async () => {
         if (!firestore) return;
@@ -101,7 +172,6 @@ export default function AdminDashboardPage() {
     const fetchConfirmations = useCallback(async () => {
         if (!firestore) return;
         try {
-            // Using collectionGroup to find all pending_confirmation orders across all users
             const pendingQuery = query(
                 collectionGroup(firestore, 'orders'),
                 where('status', '==', 'pending_confirmation')
@@ -455,6 +525,15 @@ export default function AdminDashboardPage() {
                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Pool</p>
                                     <div className="text-3xl font-black text-primary mt-2">₹{totalBalance.toLocaleString()}</div>
                                 </Card>
+                            </div>
+
+                            {/* SYSTEM HEALTH / AUTO-CANCEL INFO */}
+                            <div className="bg-blue-50 border border-blue-100 rounded-[24px] p-4 flex items-center gap-3">
+                                <AlertTriangle className="h-5 w-5 text-blue-500" />
+                                <div className="flex-1">
+                                    <p className="text-[11px] font-black text-blue-800 uppercase tracking-tight">Active Protocol Monitoring</p>
+                                    <p className="text-[10px] text-blue-600 font-bold uppercase mt-0.5">System automatically cancels unpaid orders after 30 minutes to release liquidity.</p>
+                                </div>
                             </div>
                         </TabsContent>
 
