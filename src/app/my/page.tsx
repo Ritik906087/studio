@@ -18,7 +18,6 @@ import {
   CreditCard,
   Trophy,
   Flag,
-  Globe,
   KeyRound
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -143,7 +142,6 @@ export default function MyPage() {
           <ServiceTile icon={Lock} title="Reset Access" subtitle="Forgot Login Password" href="/forgot-password" iconColor="bg-indigo-50 text-indigo-500" />
           <ServiceTile icon={Trophy} title="Missions" subtitle="Newbie starter rewards" href="/my/new-user-rewards" iconColor="bg-orange-50 text-orange-500" />
           <ServiceTile icon={Flag} title="Audit Support" subtitle="Report a payment problem" href="/my/report-problem" iconColor="bg-red-50 text-red-500" />
-          <ServiceTile icon={Globe} title="History" subtitle="Ledger & Activity logs" href="/my/transactions" iconColor="bg-indigo-50 text-indigo-500" />
         </div>
 
         <div className="pt-4 pb-12">
