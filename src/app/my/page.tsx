@@ -115,14 +115,6 @@ export default function MyPage() {
               </div>
               <Wallet className="h-6 w-6 text-white/30" />
             </div>
-
-            <div className="mt-3 flex justify-between items-center border-t border-white/10 pt-3">
-                <div className="flex items-center gap-1.5">
-                  <Lock className="h-3 w-3 text-white/50" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">HOLD: ₹{profile?.holdBalance?.toFixed(2) || '0.00'}</span>
-                </div>
-                <div className="bg-white/10 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter">Secured</div>
-            </div>
           </CardContent>
         </Card>
 

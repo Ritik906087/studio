@@ -66,31 +66,19 @@ export default function BuyPage() {
   };
 
   const generateRandomBatch = useCallback(() => {
-    const count = Math.floor(Math.random() * 101) + 200;
+    // Generate between 300 to 400 orders
+    const count = Math.floor(Math.random() * 101) + 300;
     const newOrders = [];
     for (let i = 0; i < count; i++) {
-        let amount = 0;
-        const rand = Math.random();
-        
-        if (rand < 0.6) {
-            amount = Math.floor(Math.random() * 1401) + 100;
-        } else if (rand < 0.9) {
-            amount = Math.floor(Math.random() * 6500) + 1501;
-        } else {
-            amount = Math.floor(Math.random() * 7000) + 8001;
-        }
+        // Multiples of 100 between 100 and 15000
+        const step = Math.floor(Math.random() * 150) + 1; // 1 to 150
+        const amount = step * 100;
 
-        if (Math.random() > 0.3) {
-            amount = Math.round(amount / 10) * 10;
-        }
-
-        if (amount >= 100 && amount <= 15000) {
-            newOrders.push({
-                id: Math.random().toString(36).substr(2, 9),
-                nodeId: generateNodeId(),
-                amount: amount
-            });
-        }
+        newOrders.push({
+            id: Math.random().toString(36).substr(2, 9).toUpperCase(),
+            nodeId: generateNodeId(),
+            amount: amount
+        });
     }
     setDynamicOrders(newOrders);
   }, []);
@@ -99,7 +87,8 @@ export default function BuyPage() {
     generateRandomBatch();
     let timer: NodeJS.Timeout;
     const startCycle = () => {
-        const delay = (Math.floor(Math.random() * 10) + 40) * 1000;
+        // Interval between 30 to 40 seconds
+        const delay = (Math.floor(Math.random() * 11) + 30) * 1000;
         timer = setTimeout(() => {
             generateRandomBatch();
             startCycle();
