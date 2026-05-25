@@ -80,7 +80,7 @@ function ConfirmPageContent() {
     const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number>(1800);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    fileInputRef = useRef<HTMLInputElement>(null);
 
     const [isCancelling, setIsCancelling] = useState(false);
     const [cancelReason, setCancelReason] = useState("");
@@ -223,13 +223,13 @@ function ConfirmPageContent() {
     if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400 pt-32">Order Expired</div>;
 
     const details = order.sellerWithdrawalDetails;
-    const isSystemOrder = order.sellerId === 'SYSTEM_VAULT';
+    const isSystemOrder = order.sellerId === 'SYSTEM_VAULT' || !order.matchedSellOrderId;
 
     // HYBRID QR LOGIC
     let qrData = "";
     if (isSystemOrder) {
-        // Plain Text QR for System/Admin
-        qrData = `Order: ${order.orderId}\nAmount: ₹${order.baseAmount.toFixed(2)}\nReceiver: ${details?.name}\nID: ${details?.upiId}`;
+        // Plain Text QR for System/Admin - ONLY use the provided ID/Text
+        qrData = details?.upiId || "";
     } else {
         // Standard Payment QR for P2P Users
         qrData = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Flex User')}&am=${order.baseAmount.toFixed(2)}&tr=${order.orderId}&cu=INR`;
