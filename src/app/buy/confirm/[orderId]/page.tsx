@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, ShieldCheck, QrCode, Copy } from 'lucide-react';
+import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, ShieldCheck, QrCode, Copy, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc } from '@/firebase';
@@ -23,6 +23,7 @@ import {
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 type Order = {
     id: string;
@@ -38,6 +39,14 @@ type Order = {
     matchedSellOrderId?: string;
     sellerId?: string;
 };
+
+const cancelReasons = [
+    "Payment app not working",
+    "Incorrect amount selected",
+    "Receiver details mismatch",
+    "No longer wish to buy",
+    "Other"
+];
 
 const formatTime = (seconds: number) => {
     if (seconds <= 0) return '00:00:00';
@@ -82,7 +91,8 @@ function ConfirmPageContent() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [isCancelling, setIsCancelling] = useState(false);
-    const [cancelReason, setCancelReason] = useState("");
+    const [selectedReason, setSelectedReason] = useState("");
+    const [customReason, setCustomReason] = useState("");
     const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
     const orderRef = useMemo(() => {
@@ -116,7 +126,12 @@ function ConfirmPageContent() {
     }, [order, orderId, router]);
 
     const handleCancelOrder = async () => {
-        if (!order || !user || !firestore || !cancelReason.trim()) return;
+        const finalReason = selectedReason === "Other" ? customReason : selectedReason;
+        if (!order || !user || !firestore || !finalReason.trim()) {
+            toast({ variant: 'destructive', title: 'Reason required', description: 'Please provide a cancellation reason.' });
+            return;
+        }
+        
         setIsCancelling(true);
         try {
             await runTransaction(firestore, async (transaction) => {
@@ -147,7 +162,7 @@ function ConfirmPageContent() {
 
                 transaction.update(buyerOrderRef, {
                     status: 'cancelled',
-                    cancellationReason: cancelReason,
+                    cancellationReason: finalReason,
                     cancelledAt: serverTimestamp()
                 });
             });
@@ -224,13 +239,10 @@ function ConfirmPageContent() {
     const details = order.sellerWithdrawalDetails;
     const isSystemOrder = order.sellerId === 'SYSTEM_VAULT' || !order.matchedSellOrderId;
 
-    // HYBRID QR LOGIC
     let qrData = "";
     if (isSystemOrder) {
-        // Plain Text QR for System/Admin - ONLY use the provided ID/Text
         qrData = details?.upiId || "";
     } else {
-        // Standard Payment QR for P2P Users
         qrData = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Flex User')}&am=${order.baseAmount.toFixed(2)}&tr=${order.orderId}&cu=INR`;
     }
 
@@ -243,7 +255,7 @@ function ConfirmPageContent() {
                     <ChevronLeft className="h-6 w-6 text-slate-800" />
                 </Button>
                 <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">
-                    {isSystemOrder ? "System Audit" : "P2P Settlement"}
+                    {isSystemOrder ? "System Checkout" : "P2P Settlement"}
                 </h1>
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
@@ -269,10 +281,10 @@ function ConfirmPageContent() {
                             </div>
                             <div className="text-center space-y-1 pt-2">
                                 <p className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">
-                                    {isSystemOrder ? "Secure Text-to-QR Protocol" : "Instant P2P Network Scan"}
+                                    {isSystemOrder ? "Authorized QR Node" : "P2P Member Scan"}
                                 </p>
                                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic">
-                                    Status: Verified Receiver Active
+                                    Verified Channel
                                 </p>
                             </div>
                         </div>
@@ -282,13 +294,12 @@ function ConfirmPageContent() {
                             <CopyRow label="Amount" value={`₹${order.baseAmount.toFixed(2)}`} />
                             <CopyRow label="Order ID" value={order.orderId} />
                             
-                            {/* Identifier Visibility Logic */}
                             {!isSystemOrder ? (
                                 <CopyRow label="UPI ID" value={details?.upiId} />
                             ) : (
-                                <div className="flex items-center justify-between py-3.5 border-t border-slate-100/50">
+                                <div className="flex items-center justify-between py-3.5 border-t border-slate-100/50 px-2">
                                     <span className="text-[11px] font-black uppercase text-slate-400 w-20">Identity</span>
-                                    <span className="flex-1 text-[10px] font-black text-blue-600/50 text-right uppercase tracking-[0.2em]">Hidden for Security</span>
+                                    <span className="flex-1 text-[10px] font-black text-blue-600/50 text-right uppercase tracking-[0.2em]">QR Only Mode</span>
                                 </div>
                             )}
                         </div>
@@ -300,14 +311,10 @@ function ConfirmPageContent() {
                             <ShieldCheck className={cn("h-6 w-6 shrink-0", isSystemOrder ? "text-amber-500" : "text-blue-500")} />
                             <p className={cn("text-[9px] font-bold uppercase leading-relaxed", isSystemOrder ? "text-amber-700" : "text-blue-700")}>
                                 {isSystemOrder 
-                                    ? "This is a secure system ID. Manual copying is disabled. Use the QR code to verify details in your payment app."
+                                    ? "Manual identifier copy is disabled for this node. Use the QR code to verify details in your payment app."
                                     : "P2P Settlement active. Please pay the exact amount shown above to ensure instant asset release."
                                 }
                             </p>
-                        </div>
-
-                        <div className="space-y-3 pt-2 text-center">
-                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Terminate Order</button>
                         </div>
                     </div>
                 ) : (
@@ -351,8 +358,8 @@ function ConfirmPageContent() {
             </main>
 
             <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-xl border-t grid grid-cols-2 gap-3 z-50">
-                <Button variant="outline" className="h-14 rounded-2xl text-slate-500 font-black text-xs uppercase" onClick={() => view === 'prove' ? setView('info') : router.push('/buy')}>
-                    Back
+                <Button variant="outline" className="h-14 rounded-2xl text-red-500 border-red-100 font-black text-xs uppercase" onClick={() => setIsCancelDialogOpen(true)}>
+                    Cancel
                 </Button>
 
                 {view === 'info' ? (
@@ -365,18 +372,46 @@ function ConfirmPageContent() {
             </footer>
 
             <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
-                <DialogContent className="max-w-[320px] rounded-[28px] p-6">
-                    <DialogHeader>
-                        <DialogTitle className="text-lg font-black uppercase tracking-tight">Cancel Order?</DialogTitle>
-                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400">Please provide a reason</DialogDescription>
+                <DialogContent className="max-w-[340px] rounded-[32px] p-6 bg-white overflow-hidden border-none shadow-2xl animate-in zoom-in-95 duration-300">
+                    <DialogHeader className="text-center mb-4">
+                        <DialogTitle className="text-xl font-black uppercase tracking-tight text-slate-800">Cancel Order?</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Select the reason for termination</DialogDescription>
                     </DialogHeader>
-                    <div className="py-4">
-                        <Input placeholder="Reason for cancellation" className="h-12 bg-slate-50 border-none rounded-xl text-xs font-bold" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
-                    </div>
-                    <DialogFooter className="flex-row gap-2">
-                        <Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase" onClick={() => setIsCancelDialogOpen(false)}>No</Button>
-                        <Button className="flex-1 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase" disabled={isCancelling || !cancelReason.trim()} onClick={handleCancelOrder}>
-                            {isCancelling ? "CANCELING..." : "Confirm"}
+                    
+                    <RadioGroup value={selectedReason} onValueChange={setSelectedReason} className="space-y-2 mb-4">
+                        {cancelReasons.map((reason) => (
+                            <div key={reason} className={cn(
+                                "flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer",
+                                selectedReason === reason ? "bg-blue-50 border-blue-200 ring-1 ring-blue-200" : "bg-slate-50 border-slate-100"
+                            )} onClick={() => setSelectedReason(reason)}>
+                                <div className="flex items-center gap-3">
+                                    <RadioGroupItem value={reason} id={reason} className="h-4 w-4" />
+                                    <Label htmlFor={reason} className="text-[11px] font-bold text-slate-700 cursor-pointer">{reason}</Label>
+                                </div>
+                                {selectedReason === reason && <ChevronRight className="h-4 w-4 text-blue-500" />}
+                            </div>
+                        ))}
+                    </RadioGroup>
+
+                    {selectedReason === "Other" && (
+                        <div className="mb-4 animate-in slide-in-from-top-2 duration-200">
+                            <Input 
+                                placeholder="Type your reason here..." 
+                                className="h-12 bg-slate-100 border-none rounded-xl text-xs font-bold px-4"
+                                value={customReason}
+                                onChange={(e) => setCustomReason(e.target.value)}
+                            />
+                        </div>
+                    )}
+
+                    <DialogFooter className="flex-row gap-3 mt-2">
+                        <Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase text-slate-400" onClick={() => { setIsCancelDialogOpen(false); setSelectedReason(""); setCustomReason(""); }}>Go Back</Button>
+                        <Button 
+                            className="flex-[1.5] bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-red-200" 
+                            disabled={isCancelling || !selectedReason || (selectedReason === "Other" && !customReason.trim())} 
+                            onClick={handleCancelOrder}
+                        >
+                            {isCancelling ? "CANCELLING..." : "Confirm Cancel"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
