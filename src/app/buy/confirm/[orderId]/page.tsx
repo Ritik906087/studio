@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { Suspense, useMemo, useState, useRef, useEffect } from 'react';
@@ -5,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, Info } from 'lucide-react';
+import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc } from '@/firebase';
@@ -105,6 +106,7 @@ function ConfirmPageContent() {
             if (diff <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
+                // Handle expiry on-the-fly if needed or let status page handle it
             } else {
                 setTimeLeft(diff);
             }
@@ -120,7 +122,7 @@ function ConfirmPageContent() {
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', order.id);
                 
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'SYSTEM_VAULT') {
+                if (order.matchedSellOrderId && order.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(order.sellerId)) {
                     const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     const sellerUserOrderRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
 
@@ -177,7 +179,7 @@ function ConfirmPageContent() {
             await runTransaction(firestore, async (transaction) => {
                 const buyerOrderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
                 
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'SYSTEM_VAULT') {
+                if (order.matchedSellOrderId && order.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(order.sellerId)) {
                     const sellerOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     const sellerUserOrderRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
 
@@ -217,7 +219,7 @@ function ConfirmPageContent() {
     };
 
     if (loading) return <Loader fullscreen={true} />;
-    if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400">Order Expired</div>;
+    if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400 pt-32">Order Expired</div>;
 
     const details = order.sellerWithdrawalDetails;
     const upiLink = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Verified Node')}&am=${order.baseAmount}&tr=${order.orderId}&cu=INR`;
@@ -229,14 +231,14 @@ function ConfirmPageContent() {
                 <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
                     <ChevronLeft className="h-6 w-6 text-slate-800" />
                 </Button>
-                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">Buy FP Center</h1>
+                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">Waiting For Payment</h1>
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
 
             <div className="bg-red-50 px-4 py-3 flex items-center gap-3 text-red-500 border-b border-red-100">
                 <Clock className="h-5 w-5" />
                 <span className="font-mono font-black text-base">{formatTime(timeLeft)}</span>
-                <span className="text-[10px] font-black uppercase tracking-tight ml-1">Remaining</span>
+                <span className="text-[10px] font-black uppercase tracking-tight ml-1">Time Remaining</span>
             </div>
 
             <main className="flex-1 p-4 overflow-y-auto no-scrollbar pb-32">
@@ -259,7 +261,7 @@ function ConfirmPageContent() {
                         </div>
 
                         <div className="space-y-3 pt-2 text-center">
-                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Unable to complete payment? Cancel</button>
+                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Unable to pay? Cancel Order</button>
                         </div>
                     </div>
                 ) : (
@@ -267,21 +269,21 @@ function ConfirmPageContent() {
                         <div className="p-5 bg-red-600 text-white rounded-[24px]">
                             <div className="flex items-center gap-3 mb-2">
                                 <AlertCircle className="h-6 w-6" />
-                                <h3 className="font-black text-sm uppercase">Security Protocol</h3>
+                                <h3 className="font-black text-sm uppercase">Verification Audit</h3>
                             </div>
                             <p className="text-[10px] font-bold leading-relaxed uppercase">
-                                Fake screenshots or wrong UTR will lead to permanent ban. Flex Pay is NOT responsible for lost funds.
+                                Incorrect UTR or fake screenshots will lead to permanent account suspension. Flex Pay is an end-to-end encrypted network.
                             </p>
                         </div>
 
                         <div className="space-y-5">
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">UTR / Reference Number</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-400">UTR / Ref Number</Label>
                                 <Input placeholder="12-Digit Reference ID" value={utr} onChange={(e) => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))} className="h-14 rounded-2xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black" />
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Transfer Screenshot</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-400">Payment Screenshot</Label>
                                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
                                 <div onClick={() => fileInputRef.current?.click()} className={cn("w-full h-40 border-2 border-dashed rounded-[28px] flex flex-col items-center justify-center cursor-pointer", screenshotFile ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-white border-slate-200 text-slate-300")}>
                                     {screenshotFile ? <p className="text-xs font-black uppercase">Proof Attached ✓</p> : <Upload className="h-8 w-8 opacity-30" />}
@@ -294,14 +296,14 @@ function ConfirmPageContent() {
 
             <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-xl border-t grid grid-cols-2 gap-3 z-50">
                 <Button variant="outline" className="h-14 rounded-2xl text-slate-500 font-black text-xs uppercase" onClick={() => view === 'prove' ? setView('info') : router.push('/buy')}>
-                    {view === 'info' ? "Back" : "Cancel"}
+                    {view === 'info' ? "Back" : "Back"}
                 </Button>
 
                 {view === 'info' ? (
-                    <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase">Finish Payment</Button>
+                    <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase">Submit Proof</Button>
                 ) : (
                     <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 10 || !screenshotFile}>
-                        {isSubmitting ? "SUBMITTING..." : "I FINISHED"}
+                        {isSubmitting ? "SYNCING..." : "I HAVE PAID"}
                     </Button>
                 )}
             </footer>
@@ -309,16 +311,16 @@ function ConfirmPageContent() {
             <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
                 <DialogContent className="max-w-[320px] rounded-[28px] p-6">
                     <DialogHeader>
-                        <DialogTitle className="text-lg font-black uppercase tracking-tight">Cancel Order?</DialogTitle>
-                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400">Reason for cancelling</DialogDescription>
+                        <DialogTitle className="text-lg font-black uppercase tracking-tight">Stop Transaction?</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400">State reason for termination</DialogDescription>
                     </DialogHeader>
                     <div className="py-4">
-                        <Input placeholder="e.g. Bank issue, Changed mind" className="h-12 bg-slate-50 border-none rounded-xl text-xs font-bold" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
+                        <Input placeholder="e.g. Bank node busy, Changed mind" className="h-12 bg-slate-50 border-none rounded-xl text-xs font-bold" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
                     </div>
                     <DialogFooter className="flex-row gap-2">
                         <Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase" onClick={() => setIsCancelDialogOpen(false)}>No</Button>
                         <Button className="flex-1 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase" disabled={isCancelling || !cancelReason.trim()} onClick={handleCancelOrder}>
-                            {isCancelling ? "CANCELING..." : "Confirm"}
+                            {isCancelling ? "STOPPING..." : "Confirm"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -10,7 +10,7 @@ import {
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
   Search, ImageIcon, User as UserIcon,
-  Clock, ArrowUpRight, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap, Lock
+  Clock, ArrowUpRight, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap, Lock, AlertTriangle
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -149,7 +149,6 @@ export default function AdminDashboardPage() {
 
     const filteredSellOrders = useMemo(() => {
         const s = sellSearch.toLowerCase();
-        // Show only Pending, Partially Filled, Processing
         const activeStatuses = ['pending', 'partially_filled', 'processing'];
         return sellOrders.filter(o => 
             activeStatuses.includes(o.status) &&
@@ -182,8 +181,10 @@ export default function AdminDashboardPage() {
                 if (currentOrderSnap.data()?.status === 'completed') throw new Error("Already Approved");
 
                 const buyerData = buyerSnap.data();
-                let l1Ref = null, l1Snap = null, l2Ref = null, l2Snap = null;
+                const purchaseAmount = order.baseAmount || order.amount;
 
+                // READ ALL INVITERS
+                let l1Snap = null, l1Ref = null, l2Snap = null, l2Ref = null;
                 if (buyerData.inviterUid) {
                     l1Ref = doc(firestore, 'users', buyerData.inviterUid);
                     l1Snap = await transaction.get(l1Ref);
@@ -193,6 +194,7 @@ export default function AdminDashboardPage() {
                     }
                 }
 
+                // READ SELLER
                 let sellOrderRef = null, sellerProfileRef = null, sellSnap = null, sellerSnap = null;
                 if (order.matchedSellOrderId && order.sellerId && !['ADMIN', 'SYSTEM_VAULT'].includes(order.sellerId)) {
                     sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
@@ -205,7 +207,6 @@ export default function AdminDashboardPage() {
                 transaction.update(buyerRef, { balance: (buyerData.balance || 0) + order.amount });
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
                 
-                const purchaseAmount = order.baseAmount || order.amount;
                 if (l1Ref && l1Snap?.exists()) {
                     const bonus = purchaseAmount * 0.01;
                     transaction.update(l1Ref, { balance: (l1Snap.data().balance || 0) + bonus });
@@ -221,12 +222,14 @@ export default function AdminDashboardPage() {
                     });
                 }
 
-                if (sellSnap?.exists()) {
-                    const matches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => m.buyOrderId === order.id ? { ...m, status: 'completed' } : m);
-                    transaction.update(sellOrderRef!, { matchedBuyOrders: matches, status: matches.every((m: any) => m.status === 'completed') ? 'completed' : 'processing' });
+                if (sellSnap?.exists() && sellOrderRef) {
+                    const matches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => 
+                        m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
+                    );
+                    transaction.update(sellOrderRef, { matchedBuyOrders: matches, status: matches.every((m: any) => m.status === 'completed' || m.status === 'failed') ? 'completed' : 'processing' });
                 }
-                if (sellerSnap?.exists()) {
-                    transaction.update(sellerProfileRef!, { holdBalance: Math.max(0, (sellerSnap.data().holdBalance || 0) - purchaseAmount) });
+                if (sellerSnap?.exists() && sellerProfileRef) {
+                    transaction.update(sellerProfileRef, { holdBalance: Math.max(0, (sellerSnap.data().holdBalance || 0) - purchaseAmount) });
                 }
             });
             toast({ title: "Approved" });
@@ -242,20 +245,25 @@ export default function AdminDashboardPage() {
         try {
             await runTransaction(firestore, async (transaction) => {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
-                transaction.update(orderRef, { status: 'failed', rejectionReason: 'Invalid proof', rejectedBy: adminId, rejectedAt: serverTimestamp() });
+                transaction.update(orderRef, { status: 'failed', rejectionReason: 'Invalid proof or UTR mismatch', rejectedBy: adminId, rejectedAt: serverTimestamp() });
                 
-                if (order.matchedSellOrderId) {
+                if (order.matchedSellOrderId && order.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(order.sellerId)) {
                     const sRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    const userSRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
                     const sSnap = await transaction.get(sRef);
                     if (sSnap.exists()) {
                         const matches = (sSnap.data().matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
-                        transaction.update(sRef, { remainingAmount: (sSnap.data().remainingAmount || 0) + (order.baseAmount || order.amount), matchedBuyOrders: matches, status: 'partially_filled' });
+                        const restoredAmount = order.baseAmount || order.amount;
+                        const newRemaining = (sSnap.data().remainingAmount || 0) + restoredAmount;
+                        
+                        transaction.update(sRef, { remainingAmount: newRemaining, matchedBuyOrders: matches, status: 'partially_filled' });
+                        transaction.update(userSRef, { remainingAmount: newRemaining, matchedBuyOrders: matches, status: 'partially_filled' });
                     }
                 }
             });
-            toast({ title: "Rejected" });
+            toast({ title: "Rejected & Liquidity Restored" });
             fetchConfirmations();
-        } catch (e: any) { toast({ variant: "destructive", title: "Failed" }); } finally { setIsActionLoading(false); }
+        } catch (e: any) { toast({ variant: "destructive", title: "Action Failed" }); } finally { setIsActionLoading(false); }
     };
 
     const handleAddPaymentMethod = async () => {
@@ -524,15 +532,20 @@ export default function AdminDashboardPage() {
                                                                         ) : <div className="text-white/20 uppercase font-black text-xs">No Image</div>}
                                                                     </div>
                                                                     <div className="p-8 space-y-6">
-                                                                        <DialogHeader><DialogTitle className="text-2xl font-black">Review Assets</DialogTitle></DialogHeader>
+                                                                        <DialogHeader><DialogTitle className="text-2xl font-black">Contract Audit</DialogTitle></DialogHeader>
                                                                         <div className="space-y-4">
                                                                             <div className="p-4 bg-slate-50 rounded-2xl border">
                                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                                    <div><p className="text-[8px] font-bold text-slate-400 uppercase">UID</p><p className="text-sm font-black text-blue-600">{o.userNumericId}</p></div>
+                                                                                    <div><p className="text-[8px] font-bold text-slate-400 uppercase">Buyer UID</p><p className="text-sm font-black text-blue-600">{o.userNumericId}</p></div>
                                                                                     <div><p className="text-[8px] font-bold text-slate-400 uppercase">Amount</p><p className="text-sm font-black">₹{o.amount.toFixed(2)}</p></div>
                                                                                 </div>
                                                                             </div>
-                                                                            <div className="bg-slate-100 p-3 rounded-xl font-mono text-xs font-black">{o.utr}</div>
+                                                                            <div className="bg-slate-100 p-3 rounded-xl font-mono text-xs font-black break-all">{o.utr}</div>
+                                                                            {o.matchedSellOrderId && (
+                                                                                <div className="flex items-center gap-2 text-[9px] font-black text-amber-600 uppercase">
+                                                                                    <Zap className="h-3 w-3" /> P2P Rotation Active
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                         <div className="grid grid-cols-2 gap-3 pt-4">
                                                                             <Button onClick={() => handleRejectBuy(o)} variant="outline" className="h-12 rounded-2xl font-black text-[11px] text-red-500" disabled={isActionLoading}>REJECT</Button>
@@ -553,16 +566,16 @@ export default function AdminDashboardPage() {
 
                         <TabsContent value="server" className="space-y-6">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">System Payment Nodes</h2>
+                                <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">System nodes</h2>
                                 <Dialog open={isAddPMOpen} onOpenChange={setIsAddPMOpen}>
                                     <DialogTrigger asChild>
-                                        <Button className="rounded-xl h-11 btn-gradient font-black text-[10px] uppercase tracking-widest"><Plus className="mr-2 h-4 w-4" /> Add Master ID</Button>
+                                        <Button className="rounded-xl h-11 btn-gradient font-black text-[10px] uppercase tracking-widest"><Plus className="mr-2 h-4 w-4" /> Register node</Button>
                                     </DialogTrigger>
                                     <DialogContent className="rounded-[32px] max-w-md">
-                                        <DialogHeader><DialogTitle>New Payment Account</DialogTitle><DialogDescription>Configure system master details.</DialogDescription></DialogHeader>
+                                        <DialogHeader><DialogTitle>New system ID</DialogTitle><DialogDescription>Configure secure rotation node.</DialogDescription></DialogHeader>
                                         <div className="space-y-4 py-4">
                                             <div className="space-y-1.5">
-                                                <Label>Account Type</Label>
+                                                <Label>Node type</Label>
                                                 <Select onValueChange={(v) => setNewPM({ ...newPM, type: v })} defaultValue={newPM.type}>
                                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                                     <SelectContent>
@@ -575,25 +588,25 @@ export default function AdminDashboardPage() {
 
                                             {newPM.type === 'upi' && (
                                                 <div className="space-y-4">
-                                                    <div className="space-y-1.5"><Label>UPI ID</Label><Input placeholder="master@upi" value={newPM.upiId} onChange={e => setNewPM({...newPM, upiId: e.target.value})} /></div>
-                                                    <div className="space-y-1.5"><Label>Holder Name</Label><Input placeholder="Master Name" value={newPM.upiHolderName} onChange={e => setNewPM({...newPM, upiHolderName: e.target.value})} /></div>
+                                                    <div className="space-y-1.5"><Label>UPI address</Label><Input placeholder="master@upi" value={newPM.upiId} onChange={e => setNewPM({...newPM, upiId: e.target.value})} /></div>
+                                                    <div className="space-y-1.5"><Label>Holder identity</Label><Input placeholder="Master Name" value={newPM.upiHolderName} onChange={e => setNewPM({...newPM, upiHolderName: e.target.value})} /></div>
                                                 </div>
                                             )}
 
                                             {newPM.type === 'usdt' && (
-                                                <div className="space-y-1.5"><Label>TRC20 Wallet Address</Label><Input placeholder="T..." value={newPM.usdtWalletAddress} onChange={e => setNewPM({...newPM, usdtWalletAddress: e.target.value})} /></div>
+                                                <div className="space-y-1.5"><Label>TRC20 address</Label><Input placeholder="T..." value={newPM.usdtWalletAddress} onChange={e => setNewPM({...newPM, usdtWalletAddress: e.target.value})} /></div>
                                             )}
 
                                             {newPM.type === 'bank' && (
                                                 <div className="space-y-3">
                                                     <Input placeholder="Bank Name" value={newPM.bankName} onChange={e => setNewPM({...newPM, bankName: e.target.value})} />
-                                                    <Input placeholder="Account Holder" value={newPM.accountHolderName} onChange={e => setNewPM({...newPM, accountHolderName: e.target.value})} />
-                                                    <Input placeholder="Account Number" value={newPM.accountNumber} onChange={e => setNewPM({...newPM, accountNumber: e.target.value})} />
-                                                    <Input placeholder="IFSC Code" value={newPM.ifscCode} onChange={e => setNewPM({...newPM, ifscCode: e.target.value})} />
+                                                    <Input placeholder="Holder" value={newPM.accountHolderName} onChange={e => setNewPM({...newPM, accountHolderName: e.target.value})} />
+                                                    <Input placeholder="Account" value={newPM.accountNumber} onChange={e => setNewPM({...newPM, accountNumber: e.target.value})} />
+                                                    <Input placeholder="IFSC" value={newPM.ifscCode} onChange={e => setNewPM({...newPM, ifscCode: e.target.value})} />
                                                 </div>
                                             )}
                                         </div>
-                                        <DialogFooter><Button onClick={handleAddPaymentMethod} className="w-full h-12 rounded-xl font-black uppercase" disabled={isActionLoading}>Register Node</Button></DialogFooter>
+                                        <DialogFooter><Button onClick={handleAddPaymentMethod} className="w-full h-12 rounded-xl font-black uppercase" disabled={isActionLoading}>Finalize registration</Button></DialogFooter>
                                     </DialogContent>
                                 </Dialog>
                             </div>
@@ -610,16 +623,16 @@ export default function AdminDashboardPage() {
                                                 <Button onClick={() => handleDeletePaymentMethod(m.id)} variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-500"><Trash2 className="h-4 w-4" /></Button>
                                             </div>
                                             <div className="space-y-1">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.type} ID / Account</p>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{m.type} Access ID</p>
                                                 <p className="font-mono text-xs font-black text-slate-800 break-all">{m.upiId || m.usdtWalletAddress || m.accountNumber}</p>
-                                                {m.upiHolderName && <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">Name: {m.upiHolderName}</p>}
+                                                {m.upiHolderName && <p className="text-[9px] font-bold text-slate-500 mt-1 uppercase">Node: {m.upiHolderName}</p>}
                                                 {m.bankName && <p className="text-[9px] font-bold text-slate-500 uppercase">{m.bankName} - {m.accountHolderName}</p>}
                                             </div>
                                         </CardContent>
                                     </Card>
                                 ))}
                                 {paymentMethods.length === 0 && (
-                                    <div className="col-span-full py-20 text-center opacity-20"><Server className="h-12 w-12 mx-auto mb-4" /><p className="font-black uppercase tracking-widest text-xs">No Payment Nodes Configured</p></div>
+                                    <div className="col-span-full py-20 text-center opacity-20"><Server className="h-12 w-12 mx-auto mb-4" /><p className="font-black uppercase tracking-widest text-xs">Offline nodes</p></div>
                                 )}
                             </div>
                         </TabsContent>
