@@ -12,7 +12,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Smartphone, LockKeyhole, Eye, EyeOff } from "lucide-react";
+import { Smartphone, LockKeyhole, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import Link from 'next/link';
 import { useLanguage } from "@/context/language-context";
@@ -50,7 +50,6 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      // Proceed with Login directly
       const email = `91${values.phone}@lgpay.app`;
       await signInWithEmailAndPassword(auth, email, values.password);
       
@@ -63,7 +62,6 @@ export function LoginForm() {
         title: "Login Failed", 
         description: error.message || "Invalid credentials or verification error." 
       });
-    } finally {
       setIsLoading(false);
     }
   }
@@ -126,8 +124,8 @@ export function LoginForm() {
           )}
         />
         
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20" disabled={isLoading}>
-          {isLoading ? <Loader2 className="animate-spin h-5 w-5" /> : translations.login}
+        <Button type="submit" className="w-full btn-gradient rounded-2xl h-12 text-[13px] font-black mt-1 shadow-teal-500/20 uppercase tracking-widest" disabled={isLoading}>
+          {isLoading ? translations.loggingIn : translations.login}
         </Button>
       </form>
     </Form>

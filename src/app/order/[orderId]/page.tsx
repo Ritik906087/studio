@@ -3,10 +3,10 @@
 import React, { useMemo, Suspense, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useDoc, useUser, useFirestore } from '@/firebase';
-import { doc, updateDoc, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, CheckCircle, FileClock, XCircle, AlertTriangle, Info, Hourglass, BadgeCheck, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -141,7 +141,6 @@ function OrderStatusContent() {
             setIsCancelDialogOpen(false);
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Action Failed', description: e.message });
-        } finally {
             setIsCancelling(false);
         }
     };
@@ -181,7 +180,7 @@ function OrderStatusContent() {
 
                 {order.status === 'pending_payment' && (
                     <div className="grid grid-cols-2 gap-3">
-                        <Button asChild variant="outline" className="h-12 rounded-xl font-black uppercase text-[10px] border-slate-200" onClick={() => setIsCancelDialogOpen(true)}>
+                        <Button variant="outline" className="h-12 rounded-xl font-black uppercase text-[10px] border-slate-200" onClick={() => setIsCancelDialogOpen(true)}>
                             <span className="text-red-500">Cancel</span>
                         </Button>
                         <Button asChild className="h-12 btn-gradient rounded-xl font-black uppercase shadow-md active:scale-95 transition-all">
@@ -244,7 +243,7 @@ function OrderStatusContent() {
                             disabled={isCancelling || !cancelReason.trim()}
                             onClick={handleCancelOrder}
                         >
-                            {isCancelling ? <Loader size="xs" /> : "Confirm"}
+                            {isCancelling ? "CANCELING..." : "Confirm"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -255,7 +254,7 @@ function OrderStatusContent() {
 
 export default function OrderStatusPage() {
     return (
-        <Suspense fallback={<div className="flex h-screen items-center justify-center bg-white"><Loader size="md"/></div>}>
+        <Suspense fallback={<Loader fullscreen={true} />}>
             <OrderStatusContent />
         </Suspense>
     );

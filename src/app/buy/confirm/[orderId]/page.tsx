@@ -1,12 +1,11 @@
 'use client';
 
-import React, { Suspense, useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import React, { Suspense, useMemo, useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, CheckCircle2, XCircle, AlertCircle, Hash, Clock, HelpCircle, Upload, Info, QrCode } from 'lucide-react';
+import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc } from '@/firebase';
@@ -53,7 +52,7 @@ const CopyRow = ({ label, value }: { label: string, value?: string | number }) =
     const handleCopy = () => {
         if (!value) return;
         navigator.clipboard.writeText(value.toString());
-        toast({ title: 'Copied', description: `${label} copied.` });
+        toast({ title: 'Copied' });
     };
 
     return (
@@ -155,7 +154,6 @@ function ConfirmPageContent() {
             router.push('/home');
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Action Failed', description: e.message });
-        } finally {
             setIsCancelling(false);
         }
     };
@@ -214,12 +212,11 @@ function ConfirmPageContent() {
             router.push(`/order/${orderId}`);
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Submission Failed', description: e.message });
-        } finally {
             setIsSubmitting(false);
         }
     };
 
-    if (loading) return <div className="flex h-screen items-center justify-center bg-white"><Loader size="md" /></div>;
+    if (loading) return <Loader fullscreen={true} />;
     if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400">Order Expired</div>;
 
     const details = order.sellerWithdrawalDetails;
@@ -304,7 +301,7 @@ function ConfirmPageContent() {
                     <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase">Finish Payment</Button>
                 ) : (
                     <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 10 || !screenshotFile}>
-                        {isSubmitting ? <Loader size="xs" /> : "I FINISHED"}
+                        {isSubmitting ? "SUBMITTING..." : "I FINISHED"}
                     </Button>
                 )}
             </footer>
@@ -321,7 +318,7 @@ function ConfirmPageContent() {
                     <DialogFooter className="flex-row gap-2">
                         <Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase" onClick={() => setIsCancelDialogOpen(false)}>No</Button>
                         <Button className="flex-1 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase" disabled={isCancelling || !cancelReason.trim()} onClick={handleCancelOrder}>
-                            {isCancelling ? <Loader size="xs" /> : "Confirm"}
+                            {isCancelling ? "CANCELING..." : "Confirm"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
@@ -332,7 +329,7 @@ function ConfirmPageContent() {
 
 export default function ConfirmPage() {
     return (
-        <Suspense fallback={<div className="flex h-screen items-center justify-center bg-white"><Loader size="md" /></div>}>
+        <Suspense fallback={<Loader fullscreen={true} />}>
             <ConfirmPageContent />
         </Suspense>
     );

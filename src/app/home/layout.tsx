@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -33,16 +32,9 @@ export default function HomeLayout({
   ];
 
   if (!isMounted) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="animate-pulse">
-           <Loader size="md" />
-        </div>
-      </div>
-    );
+    return <Loader fullscreen={true} />;
   }
 
-  // Removed navigation for Buy and Confirm pages as requested
   const hideNavOn = ['/confirm', '/report-problem', '/key', '/login', '/register', '/buy'];
   const showNavBar = !hideNavOn.some(route => pathname.includes(route));
 

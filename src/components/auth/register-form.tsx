@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, Zap } from "lucide-react";
+import { Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, Zap } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -52,7 +52,6 @@ export function RegisterForm() {
     defaultValues: { phone: "", password: "", confirmPassword: "", invitationCode: invitationCodeFromUrl, agreement: false },
   });
 
-  // Pre-fill invitation code if present in URL
   useEffect(() => {
     if (invitationCodeFromUrl) {
       form.setValue("invitationCode", invitationCodeFromUrl);
@@ -60,37 +59,25 @@ export function RegisterForm() {
   }, [invitationCodeFromUrl, form]);
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
-    if (!auth || !firestore) {
-      toast({ variant: "destructive", title: "Error", description: "Firebase is not ready." });
-      return;
-    }
+    if (!auth || !firestore) return;
     setIsLoading(true);
     try {
         const email = `91${values.phone}@lgpay.app`;
-        
-        // 1. Check if phone is already used
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
         if (!phoneCheckSnap.empty) throw new Error("This phone number is already registered.");
 
-        // 2. Validate Invitation Code
         let inviterUid = null;
         const inviterQuery = query(collection(firestore, 'users'), where('numericId', '==', values.invitationCode), limit(1));
         const inviterSnap = await getDocs(inviterQuery);
         
-        if (inviterSnap.empty) {
-            throw new Error("Invalid invitation code. Please check and try again.");
-        }
+        if (inviterSnap.empty) throw new Error("Invalid invitation code.");
         inviterUid = inviterSnap.docs[0].id;
 
-        // 3. Create Auth Account
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
-
-        // 4. Generate Random 8-digit UID
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
-        // 5. Save to Firestore
         await setDoc(doc(firestore, 'users', user.uid), {
             uid: user.uid,
             email: email,
@@ -110,7 +97,6 @@ export function RegisterForm() {
     } catch (error: any) {
       console.error("Registration failed:", error);
       toast({ variant: "destructive", title: "Registration Failed", description: error.message });
-    } finally {
       setIsLoading(false);
     }
   }
@@ -206,9 +192,8 @@ export function RegisterForm() {
           </label>
         </div>
 
-        <Button type="submit" className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1" disabled={isLoading}>
-            {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
-            {isLoading ? "CREATING..." : "REGISTER"}
+        <Button type="submit" className="w-full btn-gradient rounded-2xl h-11 text-[13px] font-black mt-1 uppercase tracking-widest" disabled={isLoading}>
+            {isLoading ? "REGISTERING..." : "REGISTER"}
         </Button>
       </form>
     </Form>

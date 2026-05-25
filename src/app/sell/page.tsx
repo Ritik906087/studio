@@ -2,12 +2,12 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ChevronLeft, Info, Wallet, CircleDollarSign, Loader2 } from 'lucide-react';
+import { ChevronLeft, Info, Wallet, CircleDollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
@@ -56,14 +56,13 @@ export default function SellPage() {
 
             if (currentBalance < val) throw new Error("Insufficient balance");
 
-            // Deduct from available, add to hold
             transaction.update(userRef, { 
                 balance: currentBalance - val,
                 holdBalance: currentHold + val 
             });
 
             const sellOrderId = generateOrderId();
-            const sellRef = doc(collection(firestore, 'sellOrders')); // Global collection for matching
+            const sellRef = doc(collection(firestore, 'sellOrders'));
             const userSellRef = doc(firestore, 'users', user.uid, 'sellOrders', sellRef.id);
 
             const sellData = {
@@ -88,7 +87,8 @@ export default function SellPage() {
         router.push('/order');
     } catch (e: any) {
         toast({ title: "Error", description: e.message, variant: "destructive" });
-    } finally { setIsSelling(false); }
+        setIsSelling(false);
+    }
   };
 
   return (
@@ -172,11 +172,11 @@ export default function SellPage() {
 
         <div className="pt-4">
             <Button 
-                className="w-full btn-gradient h-14 rounded-2xl text-base font-black shadow-teal-500/20" 
+                className="w-full btn-gradient h-14 rounded-2xl text-base font-black shadow-teal-500/20 uppercase tracking-widest" 
                 onClick={handleSell} 
                 disabled={isSelling || !amount || !selectedMethod}
             >
-                {isSelling ? <Loader2 className="animate-spin h-6 w-6" /> : "Initiate P2P Sale"}
+                {isSelling ? "INITIATING..." : "Initiate P2P Sale"}
             </Button>
             <p className="text-center text-[9px] text-slate-400 mt-4 uppercase font-bold tracking-widest">Secured by Liquidity Guard</p>
         </div>

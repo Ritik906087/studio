@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -13,7 +12,6 @@ import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
 import { doc, updateDoc, getDocs, query, collection, where, arrayUnion, runTransaction, serverTimestamp, increment } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Loader } from '@/components/ui/loader';
 import { motion } from 'framer-motion';
 
 const TelegramIcon = () => (
@@ -37,7 +35,7 @@ const FINAL_REWARD_AMOUNT = 300;
 const INVITER_BONUS_AMOUNT = 100;
 
 export default function NewbieRewardsPage() {
-    const { user, profile, loading: userLoading } = useUser();
+    const { user, profile } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
     const router = useRouter();
@@ -102,7 +100,6 @@ export default function NewbieRewardsPage() {
                 
                 if (data?.claimedUserRewards?.includes(FINAL_REWARD_ID)) throw new Error("Already claimed");
 
-                // CRITICAL: Get all necessary reads BEFORE any writes
                 let inviterSnap = null;
                 let inviterRef = null;
                 if (data?.inviterUid) {
@@ -110,8 +107,6 @@ export default function NewbieRewardsPage() {
                     inviterSnap = await transaction.get(inviterRef);
                 }
 
-                // NOW PERFORM WRITES
-                // 1. Credit Reward to User (300)
                 transaction.update(userRef, {
                     balance: increment(FINAL_REWARD_AMOUNT),
                     claimedUserRewards: arrayUnion(FINAL_REWARD_ID)
@@ -127,7 +122,6 @@ export default function NewbieRewardsPage() {
                     orderId: `MISSION${Date.now()}`
                 });
 
-                // 2. Credit Reward to direct Inviter (L1 Relationship)
                 if (inviterRef && inviterSnap && inviterSnap.exists()) {
                     transaction.update(inviterRef, {
                         balance: increment(INVITER_BONUS_AMOUNT)
@@ -146,13 +140,11 @@ export default function NewbieRewardsPage() {
             });
             toast({ title: `₹${FINAL_REWARD_AMOUNT} Credited!` });
         } catch (error: any) {
-             console.error("Claim Error:", error);
              toast({ variant: 'destructive', title: 'Claim Failed', description: error.message });
-        } finally { setIsClaimingFinal(false); }
+             setIsClaimingFinal(false);
+        }
     };
     
-    if (userLoading) return <div className="flex h-screen items-center justify-center bg-white"><Loader size="md" /></div>;
-
     const allTasksCompleted = newbieTasksList.every(task => taskStatus[task.id]);
     const isFinalRewardClaimed = taskStatus[FINAL_REWARD_ID];
     const completedCount = Object.values(taskStatus).filter(Boolean).length;
@@ -218,7 +210,7 @@ export default function NewbieRewardsPage() {
                                     </div>
                                 ) : (
                                     <Button onClick={handleFinalClaim} disabled={isClaimingFinal} className="bg-white text-blue-600 hover:bg-white/90 font-black text-[9px] uppercase h-7 px-3 rounded-lg animate-pulse shadow-md border-none">
-                                        Claim Now
+                                        {isClaimingFinal ? "CLAIMING..." : "Claim Now"}
                                     </Button>
                                 )
                             ) : (

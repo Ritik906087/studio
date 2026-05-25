@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Loader2, Eye, EyeOff, ShieldCheck, Terminal, Server, Database } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, Terminal, Server, Database } from "lucide-react";
 import { useState } from "react";
 import { useFirestore } from "@/firebase";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
@@ -49,9 +49,7 @@ export default function AdminKeyPage() {
     setIsLoading(true);
 
     try {
-      if (!firestore) {
-        throw new Error("System Error: Database connection failed.");
-      }
+      if (!firestore) throw new Error("Database offline.");
       
       const hardcodedPassword = ADMIN_CREDENTIALS[values.phone];
       let isVerified = hardcodedPassword === values.password;
@@ -67,9 +65,7 @@ export default function AdminKeyPage() {
         isVerified = !adminSnap.empty;
       }
 
-      if (!isVerified) {
-        throw new Error("Access Denied: Invalid Security Credentials.");
-      }
+      if (!isVerified) throw new Error("Invalid Security Credentials.");
 
       const sessionData = {
         token: 'admin_' + Math.random().toString(36).substr(2, 12),
@@ -81,24 +77,22 @@ export default function AdminKeyPage() {
 
       toast({ 
         title: "Admin Server Granted", 
-        description: "Identity Verified. Initializing management core...",
+        description: "Initializing core...",
         className: "bg-blue-600 text-white border-none font-bold"
       });
       
       setTimeout(() => {
         window.location.href = '/admin/dashboard';
-      }, 1000);
+      }, 500);
 
     } catch (error: any) {
-      console.error("Admin verification error:", error);
       toast({ 
         variant: "destructive", 
         title: "Access Violation", 
-        description: error.message || "Credential validation failed." 
+        description: error.message 
       });
-      form.resetField("password");
-    } finally {
       setIsLoading(false);
+      form.resetField("password");
     }
   }
 
@@ -179,12 +173,7 @@ export default function AdminKeyPage() {
                 )}
               />
               <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 h-14 text-sm font-black tracking-widest uppercase rounded-xl shadow-lg shadow-blue-900/20" disabled={isLoading}>
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>SYNCHRONIZING...</span>
-                  </div>
-                ) : "AUTHENTICATE SYSTEM"}
+                {isLoading ? "SYNCHRONIZING..." : "AUTHENTICATE SYSTEM"}
               </Button>
             </form>
           </Form>
