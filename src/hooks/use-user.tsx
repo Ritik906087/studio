@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, createContext, useContext, ReactNode, useRef } from 'react';
@@ -38,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { isMounted.current = false; };
   }, []);
 
-  // Root redirect and public route protection
+  // Auth Protection Logic
   useEffect(() => {
     if (loading) return;
 
@@ -58,16 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       if (!isMounted.current) return;
-      
       setUser(firebaseUser);
-      
       if (!firebaseUser) {
         setProfile(null);
         setLoading(false);
-        if (unsubscribeProfileRef.current) {
-          unsubscribeProfileRef.current();
-          unsubscribeProfileRef.current = null;
-        }
       }
     });
 
@@ -75,12 +68,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   useEffect(() => {
-    if (!user || !firestore || !auth) return;
-
-    // Clean up previous profile listener if it exists
-    if (unsubscribeProfileRef.current) {
-      unsubscribeProfileRef.current();
+    if (!user || !firestore || !auth) {
+        if (!user) setLoading(false);
+        return;
     }
+
+    if (unsubscribeProfileRef.current) unsubscribeProfileRef.current();
 
     unsubscribeProfileRef.current = onSnapshot(
       doc(firestore, 'users', user.uid),
@@ -91,14 +84,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const data = snapshot.data();
           setProfile(data);
 
-          // --- SINGLE DEVICE ENFORCEMENT LOGIC ---
+          // SINGLE DEVICE ENFORCEMENT
           const localSessionId = localStorage.getItem(`session_${user.uid}`);
           
-          // Case: New login detected on another device (Database ID changed)
           if (data.sessionId && localSessionId && data.sessionId !== localSessionId) {
-            console.warn("Session conflict: Logged in from another device.");
-            
-            // Clean up listener before signing out to avoid race conditions
             if (unsubscribeProfileRef.current) {
                 unsubscribeProfileRef.current();
                 unsubscribeProfileRef.current = null;
@@ -109,27 +98,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               toast({
                 variant: "destructive",
                 title: "Session Expired",
-                description: "Logged in from another device. Please sign in again.",
+                description: "Login detected on another device.",
               });
               router.replace('/login');
             });
             return;
           }
           
-          // Case: Session ID was cleared but user is still 'authenticated' locally
           if (data.sessionId && !localSessionId) {
-              // This can happen if local storage was cleared or user is in incognito.
-              // We'll trust the current session but update local storage to match.
               localStorage.setItem(`session_${user.uid}`, data.sessionId);
           }
-
         } else {
           setProfile(null);
         }
         setLoading(false);
       },
       (error) => {
-        console.error("Profile listener error:", error);
+        console.error("Profile error:", error);
         if (isMounted.current) setLoading(false);
       }
     );
@@ -142,19 +127,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [user, firestore, auth, router]);
 
-  const value = {
-    user,
-    profile,
-    loading,
-  };
-
+  const value = { user, profile, loading };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useUser() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useUser must be used within an AuthProvider.');
-  }
+  if (context === undefined) throw new Error('useUser must be used within an AuthProvider.');
   return context;
 }
