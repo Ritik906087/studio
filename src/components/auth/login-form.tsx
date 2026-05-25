@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -79,23 +80,29 @@ export function LoginForm() {
       const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
       const user = userCredential.user;
 
-      // 3. Session Enforcement
-      const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      // 3. SINGLE DEVICE ENFORCEMENT: Generate new Session ID
+      const newSessionId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+      
+      // Update Firestore and LocalStorage simultaneously
       await updateDoc(doc(firestore, 'users', user.uid), {
         sessionId: newSessionId
       });
+      
       localStorage.setItem(`session_${user.uid}`, newSessionId);
       
+      toast({ title: "Login Successful", description: "Welcome back!" });
       router.push('/home');
     } catch (error: any) {
       console.error("Login error:", error);
+      let errMsg = "Invalid login details";
+      if (error.message === "Captcha verification failed") errMsg = error.message;
+      
       toast({ 
         variant: "destructive", 
         title: "Access Denied", 
-        description: error.message === "Captcha verification failed" ? error.message : "Invalid login details" 
+        description: errMsg 
       });
       setIsLoading(false);
-      // Reset turnstile on failure to force new verification
       setTurnstileToken(null);
     }
   }

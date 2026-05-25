@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -139,7 +140,9 @@ export function RegisterForm() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, values.password);
         const user = userCredential.user;
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
-        const newSessionId = Math.random().toString(36).substring(2, 15);
+        
+        // SINGLE DEVICE ENFORCEMENT: Generate new Session ID
+        const newSessionId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 
         await setDoc(doc(firestore, 'users', user.uid), {
             uid: user.uid,

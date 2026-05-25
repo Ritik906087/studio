@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, createContext, useContext, ReactNode, useRef } from 'react';
@@ -5,6 +6,7 @@ import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { useAuth, useFirestore } from '@/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useRouter, usePathname } from 'next/navigation';
+import { toast } from '@/hooks/use-toast';
 
 export type AuthState = {
   user: User | null;
@@ -89,15 +91,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const data = snapshot.data();
           setProfile(data);
 
-          // SINGLE DEVICE ENFORCEMENT
+          // --- SINGLE DEVICE ENFORCEMENT LOGIC ---
           const localSessionId = localStorage.getItem(`session_${user.uid}`);
+          
+          // Case: New login detected on another device (Database ID changed)
           if (data.sessionId && localSessionId && data.sessionId !== localSessionId) {
-            console.warn("Session conflict detected. Logging out.");
+            console.warn("Session conflict: Logged in from another device.");
+            
+            // Clean up listener before signing out to avoid race conditions
+            if (unsubscribeProfileRef.current) {
+                unsubscribeProfileRef.current();
+                unsubscribeProfileRef.current = null;
+            }
+
             signOut(auth).then(() => {
               localStorage.removeItem(`session_${user.uid}`);
+              toast({
+                variant: "destructive",
+                title: "Session Expired",
+                description: "Logged in from another device. Please sign in again.",
+              });
               router.replace('/login');
             });
+            return;
           }
+          
+          // Case: Session ID was cleared but user is still 'authenticated' locally
+          if (data.sessionId && !localSessionId) {
+              // This can happen if local storage was cleared or user is in incognito.
+              // We'll trust the current session but update local storage to match.
+              localStorage.setItem(`session_${user.uid}`, data.sessionId);
+          }
+
         } else {
           setProfile(null);
         }
