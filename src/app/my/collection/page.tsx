@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Plus, Wallet, BadgeCheck, ShieldCheck, Lock } from "lucide-react";
+import { ChevronLeft, Plus, Wallet, BadgeCheck, ShieldCheck, Lock, Info } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser } from '@/hooks/use-user';
