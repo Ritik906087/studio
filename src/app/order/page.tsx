@@ -1,24 +1,21 @@
-
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { 
     ChevronLeft, 
     ClipboardList, 
-    TrendingUp, 
-    TrendingDown, 
     Zap, 
-    CheckCircle2, 
-    AlertCircle,
     ArrowUpRight,
     ArrowDownLeft,
-    Clock
+    Clock,
+    Gift,
+    Users
 } from 'lucide-react';
 import Link from 'next/link';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
-import { collection, query, orderBy, getDocs, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader } from '@/components/ui/loader';
 import { Button } from '@/components/ui/button';
@@ -68,38 +65,44 @@ export default function OrderHistoryPage() {
     };
   }, [user, firestore]);
 
+  // Combine and sort all activities for the "All" tab
+  const allActivities = useMemo(() => {
+    const combined = [...buyOrders, ...sellOrders, ...ledger];
+    return combined.sort((a, b) => {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+    });
+  }, [buyOrders, sellOrders, ledger]);
+
   const HistoryItem = ({ item }: { item: any }) => {
-    const isOrder = item.type === 'buy' || item.type === 'sell';
     const isBuy = item.type === 'buy';
     const isSell = item.type === 'sell';
     const isLedger = item.type === 'ledger';
 
     const date = item.createdAt?.toDate ? item.createdAt.toDate() : new Date();
 
-    const getStatusStyle = (status: string) => {
-        switch (status) {
-            case 'completed': return "bg-green-50 text-green-600";
-            case 'failed':
-            case 'cancelled': return "bg-red-50 text-red-600";
-            default: return "bg-orange-50 text-orange-600";
-        }
-    };
-
     if (isLedger) {
+        const isBonus = ['team_bonus', 'daily_task', 'new_user_reward'].includes(item.type);
         return (
             <div className="flex items-center justify-between p-4 bg-white border-b border-slate-50 active:bg-slate-50 transition-colors">
                 <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                        <Zap className="h-5 w-5 text-blue-500" />
+                    <div className={cn(
+                        "h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
+                        item.type === 'team_bonus' ? "bg-purple-50 text-purple-600" : 
+                        item.type === 'new_user_reward' ? "bg-orange-50 text-orange-600" : "bg-blue-50 text-blue-500"
+                    )}>
+                        {item.type === 'team_bonus' ? <Users className="h-5 w-5" /> : 
+                         item.type === 'new_user_reward' ? <Gift className="h-5 w-5" /> : <Zap className="h-5 w-5" />}
                     </div>
                     <div>
-                        <p className="font-black text-slate-800 text-[12px] leading-tight uppercase">{item.description || item.type}</p>
+                        <p className="font-black text-slate-800 text-[12px] leading-tight uppercase truncate max-w-[180px]">{item.description || item.type}</p>
                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">{date.toLocaleDateString()} • {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
                 </div>
                 <div className="text-right">
                     <p className="font-black text-sm text-teal-600">+ ₹{item.amount.toFixed(2)}</p>
-                    <p className="text-[8px] font-black uppercase text-slate-300 tracking-tighter">Bonus Credited</p>
+                    <p className="text-[8px] font-black uppercase text-slate-300 tracking-tighter">Bonus</p>
                 </div>
             </div>
         );
@@ -113,7 +116,7 @@ export default function OrderHistoryPage() {
                         {isBuy ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownLeft className="h-5 w-5" />}
                     </div>
                     <div>
-                        <p className="font-black text-slate-800 text-[12px] leading-tight">{item.orderId}</p>
+                        <p className="font-black text-slate-800 text-[12px] leading-tight">{item.orderId || 'Order'}</p>
                         <div className="flex items-center gap-1.5 mt-1">
                              <Clock className="h-2 w-2 text-slate-300" />
                              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{date.toLocaleDateString()} • {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
@@ -162,17 +165,17 @@ export default function OrderHistoryPage() {
                 <div className="flex justify-center p-20"><Loader size="sm" /></div>
               ) : (
                 <div className="divide-y divide-slate-50">
-                    <TabsContent value="all" className="m-0">
-                         {ledger.length > 0 ? ledger.map(l => <HistoryItem key={l.id} item={l} />) : (
+                    <TabsContent value="all" className="m-0 focus-visible:ring-0">
+                         {allActivities.length > 0 ? allActivities.map(item => <HistoryItem key={item.id} item={item} />) : (
                              <div className="text-center py-32 opacity-20"><ClipboardList className="h-12 w-12 mx-auto mb-3" /><p className="font-black text-[10px] uppercase tracking-widest">Empty Ledger</p></div>
                          )}
                     </TabsContent>
-                    <TabsContent value="buy" className="m-0">
+                    <TabsContent value="buy" className="m-0 focus-visible:ring-0">
                          {buyOrders.length > 0 ? buyOrders.map(b => <HistoryItem key={b.id} item={b} />) : (
                              <div className="text-center py-32 opacity-20"><ClipboardList className="h-12 w-12 mx-auto mb-3" /><p className="font-black text-[10px] uppercase tracking-widest">No Purchases</p></div>
                          )}
                     </TabsContent>
-                    <TabsContent value="sell" className="m-0">
+                    <TabsContent value="sell" className="m-0 focus-visible:ring-0">
                          {sellOrders.length > 0 ? sellOrders.map(s => <HistoryItem key={s.id} item={s} />) : (
                              <div className="text-center py-32 opacity-20"><ClipboardList className="h-12 w-12 mx-auto mb-3" /><p className="font-black text-[10px] uppercase tracking-widest">No Sales</p></div>
                          )}

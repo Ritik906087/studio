@@ -1,11 +1,10 @@
-
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { ChevronLeft, Users as UsersIcon, Wallet, TrendingUp, CheckCircle2, ShieldCheck, Zap, ArrowRight, UserCheck } from 'lucide-react';
+import { ChevronLeft, Users as UsersIcon, Wallet, TrendingUp, CheckCircle2, Zap, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -129,7 +128,6 @@ const MiniStat = ({ title, value, color, icon: Icon, sub }: any) => (
             <p className={cn("text-2xl font-black tracking-tighter tabular-nums", color)}>{value}</p>
             {sub && <p className="text-[7px] font-bold text-white/40 mt-1 uppercase">{sub}</p>}
         </div>
-        <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-white/5 rounded-full pointer-events-none group-hover:scale-150 transition-transform duration-500" />
     </div>
 );
 
@@ -188,8 +186,6 @@ export default function TeamPage() {
 
       <main className="flex-grow flex flex-col">
         <div className="p-5 bg-slate-900 text-white relative overflow-hidden rounded-b-[40px] shadow-2xl">
-            <div className="absolute top-0 right-0 p-10 opacity-5 pointer-events-none animate-pulse"><ShieldCheck className="h-40 w-40" /></div>
-            
             <div className="grid grid-cols-2 gap-3 relative z-10">
                 <MiniStat title="Total Net Bonus" value={loading ? '...' : `₹${selfIncome.toFixed(2)}`} color="text-teal-400" icon={Wallet} sub="Lifetime Commissions" />
                 <MiniStat title="Family Nodes" value={loading ? '...' : (l1Agents.length + l2Agents.length)} color="text-blue-400" icon={UsersIcon} sub="Connected Channels" />
