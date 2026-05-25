@@ -6,10 +6,10 @@ import { AuthProvider } from '@/hooks/use-user';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 
 export const metadata: Metadata = {
-  title: "Flex Pay – Smart Digital Wallet",
+  title: "Flex Pay",
   description: "Join Flex Pay and experience fast, secure and easy digital payments. Invite friends and earn rewards instantly.",
   icons: {
-    icon: "https://firebasestorage.googleapis.com/v0/b/studio-7114417830-300d7.firebasestorage.app/o/file_000000002968720686f855daed13e880.png?alt=media&token=c4dece97-7dee-41c4-bac7-6c1f9f186fb6",
+    icon: "https://slytlppadlmnnloszuwd.supabase.co/storage/v1/object/public/Banner/IMG_20260525_122039_723.jpg",
   },
 };
 

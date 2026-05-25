@@ -1,4 +1,3 @@
-
 'use client';
 
 import React from 'react';
@@ -19,7 +18,8 @@ import {
   Trophy,
   KeyRound,
   Send,
-  HelpCircle
+  HelpCircle,
+  Download
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
@@ -146,6 +146,17 @@ export default function MyPage() {
         </div>
 
         <div className="pt-4 pb-12">
+          <div className="flex flex-col items-center mb-4">
+             <Link 
+                href="https://files.catbox.moe/7za6rf.apk" 
+                target="_blank"
+                className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-2 rounded-full border border-blue-100 hover:bg-blue-100 transition-colors uppercase tracking-widest active:scale-95"
+             >
+                <Download className="h-3 w-3" />
+                Download Flex-pay-v.4
+             </Link>
+          </div>
+
           <Button onClick={handleLogout} variant="outline" className="w-full h-11 border-red-50 text-red-500 font-bold text-[11px] rounded-[16px] flex items-center justify-center gap-2 active:bg-red-50 uppercase tracking-wide">
             <LogOut className="h-4 w-4" />
             Sign Out
