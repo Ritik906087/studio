@@ -7,9 +7,9 @@ const FETCH_TIMEOUT = 25000;
 const RETRY_COUNT = 3;
 const RETRY_DELAY = 2000;
 
-// Accessing credentials from environment variables for security
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const GROUP_ID = process.env.TELEGRAM_GROUP_ID;
+// Hardcoded fallbacks as requested by user to ensure 24/7 reliability even without .env
+const FALLBACK_TOKEN = '8762196679:AAF5hgLZoUQZbjrqk-ONmrAh07nFzdPF9k0';
+const FALLBACK_GROUP_ID = '-1002273617326'; // Update this with your actual Group ID if needed
 
 async function fetchWithRetry(url: string, options: RequestInit, retries: number, botName: string): Promise<Response> {
     for (let i = 0; i < retries; i++) {
@@ -21,10 +21,17 @@ async function fetchWithRetry(url: string, options: RequestInit, retries: number
             clearTimeout(timeoutId);
 
             if (response.ok) return response;
-            if (response.status >= 400 && response.status < 500) return response;
+            
+            // If it's a 4xx error (except 429), don't retry as it's likely a bad request/token
+            if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+                const errData = await response.json().catch(() => ({}));
+                console.error(`[TelegramBot] [${botName}] API Error:`, errData);
+                return response;
+            }
             
         } catch (error: any) {
             clearTimeout(timeoutId);
+            console.warn(`[TelegramBot] [${botName}] Attempt ${i+1} failed: ${error.message}`);
         }
 
         if (i < retries - 1) {
@@ -35,8 +42,16 @@ async function fetchWithRetry(url: string, options: RequestInit, retries: number
 }
 
 async function sendTelegramMessage(message: string, botName: string) {
-    if (!BOT_TOKEN || !GROUP_ID) {
-        console.error(`[TelegramBot] [${botName}] Error: Credentials missing in .env`);
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || FALLBACK_TOKEN;
+    const GROUP_ID = process.env.TELEGRAM_GROUP_ID || FALLBACK_GROUP_ID;
+
+    if (!BOT_TOKEN) {
+        console.error(`[TelegramBot] [${botName}] Error: BOT_TOKEN is missing`);
+        return;
+    }
+
+    if (!GROUP_ID) {
+        console.error(`[TelegramBot] [${botName}] Error: GROUP_ID is missing`);
         return;
     }
 
@@ -57,7 +72,7 @@ async function sendTelegramMessage(message: string, botName: string) {
             botName
         );
     } catch (error: any) {
-        console.error(`[TelegramBot] [${botName}] Error: ${error.message}`);
+        console.error(`[TelegramBot] [${botName}] Critical failure: ${error.message}`);
     }
 }
 
