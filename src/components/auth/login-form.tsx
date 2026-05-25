@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,8 +19,9 @@ import Link from 'next/link';
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, updateDoc } from "firebase/firestore";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
 
@@ -30,6 +32,7 @@ export function LoginForm() {
   const { toast } = useToast();
   const router = useRouter();
   const auth = useAuth();
+  const firestore = useFirestore();
 
   const formSchema = z.object({
     phone: z.string().length(10, { message: translations.phoneRequired }).regex(/^[6-9]\d{9}$/, { message: translations.phoneInvalid }),
@@ -46,14 +49,21 @@ export function LoginForm() {
       toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
       return;
     }
-    if (!auth) return;
+    if (!auth || !firestore) return;
     setIsLoading(true);
 
     try {
       const email = `91${values.phone}@lgpay.app`;
-      await signInWithEmailAndPassword(auth, email, values.password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, values.password);
+      const user = userCredential.user;
+
+      // Update sessionId to enforce single device login
+      const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      await updateDoc(doc(firestore, 'users', user.uid), {
+        sessionId: newSessionId
+      });
+      localStorage.setItem(`session_${user.uid}`, newSessionId);
       
-      // Removed success toast alert
       router.push('/home');
     } catch (error: any) {
       console.error("Login error:", error);

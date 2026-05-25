@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -58,10 +59,36 @@ export function RegisterForm() {
     }
   }, [invitationCodeFromUrl, form]);
 
+  const generateHardwareFingerprint = () => {
+    let gpuInfo = "Unknown";
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (gl) {
+            const debugInfo = (gl as any).getExtension('WEBGL_debug_renderer_info');
+            gpuInfo = debugInfo ? (gl as any).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : "Generic";
+        }
+    } catch (e) {}
+
+    const raw = `${navigator.hardwareConcurrency || 0}|${(navigator as any).deviceMemory || 0}|${gpuInfo}|${window.screen.width}x${window.screen.height}|${navigator.platform}`;
+    return btoa(raw).slice(0, 32).toUpperCase();
+  };
+
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     if (!auth || !firestore) return;
     setIsLoading(true);
     try {
+        // 1. Generate Hardware Fingerprint
+        const fingerprint = generateHardwareFingerprint();
+
+        // 2. Check for duplicate hardware fingerprint
+        const fingerprintQuery = query(collection(firestore, 'users'), where('hardwareFingerprint', '==', fingerprint), limit(1));
+        const fingerprintSnap = await getDocs(fingerprintQuery);
+        
+        if (!fingerprintSnap.empty) {
+          throw new Error("Already account created by this device please login");
+        }
+
         const email = `91${values.phone}@lgpay.app`;
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
         const phoneCheckSnap = await getDocs(phoneCheckQuery);
@@ -78,6 +105,8 @@ export function RegisterForm() {
         const user = userCredential.user;
         const numericId = Math.floor(10000000 + Math.random() * 90000000).toString();
 
+        const newSessionId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
         await setDoc(doc(firestore, 'users', user.uid), {
             uid: user.uid,
             email: email,
@@ -89,8 +118,12 @@ export function RegisterForm() {
             balance: 0,
             holdBalance: 0,
             claimedUserRewards: [],
+            hardwareFingerprint: fingerprint, // Secure hardware link
+            sessionId: newSessionId,
             createdAt: serverTimestamp(),
         });
+
+        localStorage.setItem(`session_${user.uid}`, newSessionId);
 
         toast({ title: "Welcome!", description: "Registration successful." });
         router.push("/login");

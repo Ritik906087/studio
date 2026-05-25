@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, createContext, useContext, ReactNode, useRef } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { useAuth, useFirestore } from '@/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 
@@ -18,9 +18,6 @@ const AuthContext = createContext<AuthState>({
   loading: true,
 });
 
-/**
- * Robust AuthProvider with built-in anti-freeze and timeout mechanisms.
- */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const firestore = useFirestore();
@@ -29,12 +26,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const isMounted = useRef(true);
 
-  // Global safety timeout to prevent permanent loading (8 seconds max)
   useEffect(() => {
     isMounted.current = true;
     const globalTimeout = setTimeout(() => {
       if (isMounted.current && loading) {
-        console.warn("Auth: Force releasing stuck loader (Global Timeout)");
         setLoading(false);
       }
     }, 8000);
@@ -47,7 +42,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!auth) {
-      // Fallback if Firebase fails to init within 3s
       const timer = setTimeout(() => {
         if (!auth && isMounted.current) setLoading(false);
       }, 3000);
@@ -67,44 +61,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [auth]);
 
   useEffect(() => {
-    if (!user || !firestore) {
+    if (!user || !firestore || !auth) {
       if (!user && !loading && isMounted.current) setLoading(false);
       return;
     };
-
-    // Profile listener with internal timeout
-    const profileTimeout = setTimeout(() => {
-      if (isMounted.current && loading) {
-        console.warn("Auth: Profile fetch taking too long, proceeding to app.");
-        setLoading(false);
-      }
-    }, 5000);
 
     const unsubscribeProfile = onSnapshot(
       doc(firestore, 'users', user.uid),
       (snapshot) => {
         if (!isMounted.current) return;
         if (snapshot.exists()) {
-          setProfile(snapshot.data());
+          const data = snapshot.data();
+          setProfile(data);
+
+          // SINGLE DEVICE ENFORCEMENT
+          // Check if server sessionId matches local sessionId
+          const localSessionId = localStorage.getItem(`session_${user.uid}`);
+          if (data.sessionId && localSessionId && data.sessionId !== localSessionId) {
+            console.warn("Session invalidated. Logged in on another device.");
+            signOut(auth);
+            localStorage.removeItem(`session_${user.uid}`);
+            window.location.href = '/login';
+          }
         } else {
           setProfile(null);
         }
-        clearTimeout(profileTimeout);
         setLoading(false);
       },
       (error) => {
         if (!isMounted.current) return;
-        console.error("Profile listen error:", error);
-        clearTimeout(profileTimeout);
         setLoading(false);
       }
     );
 
-    return () => {
-      unsubscribeProfile();
-      clearTimeout(profileTimeout);
-    };
-  }, [user, firestore, loading]);
+    return () => unsubscribeProfile();
+  }, [user, firestore, auth, loading]);
 
   const value = {
     user,
