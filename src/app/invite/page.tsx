@@ -1,13 +1,13 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { Clipboard, Send, ChevronLeft, Users, Zap, CheckCircle2, Info, Gift } from 'lucide-react';
+import { Clipboard, Send, ChevronLeft, Users, Zap, CheckCircle2, Info } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
@@ -94,7 +94,6 @@ export default function InvitePage() {
 
           {/* NEWBIE BONUS NOTICE */}
           <div className="bg-orange-50 border border-orange-100 rounded-[24px] p-5 relative overflow-hidden">
-              <div className="absolute -top-1 -right-1 opacity-10 rotate-12"><Gift className="h-12 w-12 text-orange-600" /></div>
               <p className="text-[11px] font-black text-orange-800 leading-relaxed uppercase">
                 If your <span className="text-orange-900 underline">Level 1 (Direct)</span> invited user completes all Newbie Reward tasks, you will receive an instant ₹100 bonus. Detailed reports are available in the My Family section.
               </p>

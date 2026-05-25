@@ -6,11 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { 
-  LogOut, Users, LayoutDashboard, ShieldCheck, Activity, 
+  LogOut, Users, LayoutDashboard, ShieldCheck, 
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
-  ExternalLink, Ban, BadgeCheck, AlertTriangle, HelpCircle, Search, ImageIcon,
-  Clock, Hash, ArrowUpRight, ArrowDownLeft, Info, History, User as UserIcon
+  Search, ImageIcon, User as UserIcon,
+  Clock, ArrowUpRight, ArrowDownLeft
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -18,14 +18,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useFirestore } from '@/firebase';
 import { collection, onSnapshot, query, orderBy, where, doc, setDoc, collectionGroup, runTransaction, serverTimestamp, getDocs, limit, addDoc } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { Loader } from '@/components/ui/loader';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +31,6 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogDescription,
-  DialogFooter
 } from "@/components/ui/dialog";
 
 const ALLOWED_ADMINS = ['9955557336', '9060873927'];
@@ -69,8 +66,8 @@ export default function AdminDashboardPage() {
     const [confirmSearch, setConfirmSearch] = useState('');
 
     const [editingPayment, setEditingPayment] = useState<string | null>(null);
-    const [indexError, setIndexError] = useState<string | null>(null);
     const [adminId, setAdminId] = useState<string>('SYSTEM');
+    const [isActionLoading, setIsActionLoading] = useState(false);
 
     useEffect(() => {
         const sessionStr = localStorage.getItem('flex_admin_session');
@@ -85,7 +82,6 @@ export default function AdminDashboardPage() {
                 setAdminId(session.masterId);
             }
         } catch (e) {
-            console.error("Session parse error:", e);
             localStorage.removeItem('flex_admin_session');
             router.replace('/admin/key');
         }
@@ -95,7 +91,7 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         setUsersLoading(true);
         try {
-            const q = query(collection(firestore, 'users'), orderBy('createdAt', 'desc'), limit(200));
+            const q = query(collection(firestore, 'users'), orderBy('createdAt', 'desc'), limit(250));
             const snap = await getDocs(q);
             setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         } catch (e) {
@@ -105,41 +101,41 @@ export default function AdminDashboardPage() {
         }
     }, [firestore]);
 
-    useEffect(() => {
+    const fetchConfirmations = useCallback(async () => {
         if (!firestore) return;
-        
-        fetchUsers();
-
-        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), where('status', 'in', ['pending', 'partially_filled', 'processing']), limit(100)), (snap) => {
-            setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-
-        const buyOrdersQuery = query(
-            collectionGroup(firestore, 'orders'), 
-            where('status', '==', 'pending_confirmation'), 
-            limit(100)
-        );
-
-        const unsubBuy = onSnapshot(buyOrdersQuery, (snap) => {
+        try {
+            const buyOrdersQuery = query(
+                collectionGroup(firestore, 'orders'), 
+                where('status', '==', 'pending_confirmation'), 
+                limit(100)
+            );
+            const snap = await getDocs(buyOrdersQuery);
             const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => {
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
                 const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
                 return timeB - timeA;
             });
             setPendingBuyOrders(sorted);
-            setIndexError(null);
-        }, (error: any) => {
-            if (error.code === 'failed-precondition') setIndexError(error.message);
-        });
+        } catch (e) {}
+    }, [firestore]);
+
+    useEffect(() => {
+        if (!firestore) return;
         
+        fetchUsers();
+        fetchConfirmations();
+
+        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), where('status', 'in', ['pending', 'partially_filled', 'processing']), limit(100)), (snap) => {
+            setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+
         const unsubPM = onSnapshot(collection(firestore, 'paymentMethods'), (snap) => {
             setPaymentMethods(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        return () => { unsubSell(); unsubBuy(); unsubPM(); };
-    }, [firestore, fetchUsers]);
+        return () => { unsubSell(); unsubPM(); };
+    }, [firestore, fetchUsers, fetchConfirmations]);
 
-    // Search Logic
     const filteredUsers = useMemo(() => {
         const s = userSearch.toLowerCase();
         return allUsers.filter(u => u.numericId?.includes(s) || u.phoneNumber?.includes(s) || u.displayName?.toLowerCase().includes(s));
@@ -160,36 +156,14 @@ export default function AdminDashboardPage() {
         router.replace('/admin/key');
     };
 
-    const logAdminAction = async (action: string, details: any) => {
-        if (!firestore) return;
-        try {
-            await addDoc(collection(firestore, 'adminLogs'), {
-                adminId,
-                action,
-                details,
-                timestamp: serverTimestamp()
-            });
-        } catch (e) { console.warn("Log failed", e); }
-    };
-
-    const handleUpdateAdminPayment = async (type: string, data: any) => {
-        if (!firestore) return;
-        try {
-            await setDoc(doc(firestore, 'paymentMethods', type), { ...data, type }, { merge: true });
-            await logAdminAction('UPDATE_SERVER', { type });
-            toast({ title: "Updated" });
-            setEditingPayment(null);
-        } catch (e: any) { toast({ variant: 'destructive', title: "Failed" }); }
-    };
-
     const handleApproveBuy = async (order: any) => {
-        if (!firestore) return;
+        if (!firestore || isActionLoading) return;
+        setIsActionLoading(true);
         try {
             await runTransaction(firestore, async (transaction) => {
                 const buyerRef = doc(firestore, 'users', order.userId);
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 
-                // CRITICAL: Perform all GETs at the start
                 const buyerSnap = await transaction.get(buyerRef);
                 const currentOrderSnap = await transaction.get(orderRef);
 
@@ -197,12 +171,7 @@ export default function AdminDashboardPage() {
                 if (currentOrderSnap.data()?.status === 'completed') throw new Error("Already Approved");
 
                 const buyerData = buyerSnap.data();
-
-                // 2. Fetch Inviter Docs for Commission
-                let l1Snap = null;
-                let l1Ref = null;
-                let l2Snap = null;
-                let l2Ref = null;
+                let l1Ref = null, l1Snap = null, l2Ref = null, l2Snap = null;
 
                 if (buyerData.inviterUid) {
                     l1Ref = doc(firestore, 'users', buyerData.inviterUid);
@@ -213,145 +182,69 @@ export default function AdminDashboardPage() {
                     }
                 }
 
-                // 3. Fetch SellOrder Doc (if P2P)
-                let sellSnap = null;
-                let sellOrderRef = null;
-                let sellerProfileRef = null;
-                let sellerSnap = null;
-                let sellerUserSellRef = null;
-
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN' && order.sellerId !== 'SYSTEM_VAULT') {
+                let sellOrderRef = null, sellerProfileRef = null, sellSnap = null, sellerSnap = null;
+                if (order.matchedSellOrderId && order.sellerId && !['ADMIN', 'SYSTEM_VAULT'].includes(order.sellerId)) {
                     sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
                     sellerProfileRef = doc(firestore, 'users', order.sellerId);
-                    sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
-                    
                     sellSnap = await transaction.get(sellOrderRef);
                     sellerSnap = await transaction.get(sellerProfileRef);
                 }
 
-                // --- NOW START WRITES ---
-                
-                // 1. Credit Buyer
-                const currentBuyerBalance = buyerData.balance || 0;
-                transaction.update(buyerRef, { balance: currentBuyerBalance + order.amount });
+                // WRITES
+                transaction.update(buyerRef, { balance: (buyerData.balance || 0) + order.amount });
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
                 
-                // 2. Multi-Level Commission Logic
                 const purchaseAmount = order.baseAmount || order.amount;
-
-                // Level 1 Commission (1%)
-                if (l1Ref && l1Snap && l1Snap.exists()) {
-                    const l1Data = l1Snap.data();
-                    const l1Bonus = purchaseAmount * 0.01;
-                    transaction.update(l1Ref, { balance: (l1Data.balance || 0) + l1Bonus });
-
-                    const l1TxRef = doc(collection(firestore, 'users', l1Ref.id, 'transactions'));
-                    transaction.set(l1TxRef, {
-                        userId: l1Ref.id,
-                        amount: l1Bonus,
-                        type: 'team_bonus',
-                        description: `L1 Trade Commission (1%): Buyer UID ${buyerData.numericId}`,
-                        createdAt: serverTimestamp(),
-                        orderId: `COMM_L1_${order.id}`
+                if (l1Ref && l1Snap?.exists()) {
+                    const bonus = purchaseAmount * 0.01;
+                    transaction.update(l1Ref, { balance: (l1Snap.data().balance || 0) + bonus });
+                    transaction.set(doc(collection(firestore, 'users', l1Ref.id, 'transactions')), {
+                        userId: l1Ref.id, amount: bonus, type: 'team_bonus', description: `L1 Commission: Buyer ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C1_${order.id}`
+                    });
+                }
+                if (l2Ref && l2Snap?.exists()) {
+                    const bonus = purchaseAmount * 0.008;
+                    transaction.update(l2Ref, { balance: (l2Snap.data().balance || 0) + bonus });
+                    transaction.set(doc(collection(firestore, 'users', l2Ref.id, 'transactions')), {
+                        userId: l2Ref.id, amount: bonus, type: 'team_bonus', description: `L2 Commission: Buyer ${buyerData.numericId}`, createdAt: serverTimestamp(), orderId: `C2_${order.id}`
                     });
                 }
 
-                // Level 2 Commission (0.8%)
-                if (l2Ref && l2Snap && l2Snap.exists()) {
-                    const l2Data = l2Snap.data();
-                    const l2Bonus = purchaseAmount * 0.008;
-                    transaction.update(l2Ref, { balance: (l2Data.balance || 0) + l2Bonus });
-
-                    const l2TxRef = doc(collection(firestore, 'users', l2Ref.id, 'transactions'));
-                    transaction.set(l2TxRef, {
-                        userId: l2Ref.id,
-                        amount: l2Bonus,
-                        type: 'team_bonus',
-                        description: `L2 Trade Commission (0.8%): Buyer UID ${buyerData.numericId}`,
-                        createdAt: serverTimestamp(),
-                        orderId: `COMM_L2_${order.id}`
-                    });
+                if (sellSnap?.exists()) {
+                    const matches = (sellSnap.data().matchedBuyOrders || []).map((m: any) => m.buyOrderId === order.id ? { ...m, status: 'completed' } : m);
+                    transaction.update(sellOrderRef!, { matchedBuyOrders: matches, status: matches.every((m: any) => m.status === 'completed') ? 'completed' : 'processing' });
                 }
-
-                // 3. P2P Seller Logic
-                if (sellSnap && sellSnap.exists()) {
-                    const sellData = sellSnap.data();
-                    const updatedMatches = (sellData.matchedBuyOrders || []).map((m: any) => 
-                        m.buyOrderId === order.id ? { ...m, status: 'completed' } : m
-                    );
-                    const allCompleted = updatedMatches.every((m: any) => m.status === 'completed') && sellData.remainingAmount === 0;
-                    
-                    transaction.update(sellOrderRef!, { 
-                        matchedBuyOrders: updatedMatches,
-                        status: allCompleted ? 'completed' : 'processing'
-                    });
-                    
-                    if (sellerUserSellRef) {
-                        transaction.update(sellerUserSellRef, { 
-                            matchedBuyOrders: updatedMatches,
-                            status: allCompleted ? 'completed' : 'processing'
-                        });
-                    }
-                }
-
-                if (sellerSnap && sellerSnap.exists()) {
-                    const currentSellerHold = sellerSnap.data()?.holdBalance || 0;
-                    transaction.update(sellerProfileRef!, { holdBalance: Math.max(0, currentSellerHold - purchaseAmount) });
+                if (sellerSnap?.exists()) {
+                    transaction.update(sellerProfileRef!, { holdBalance: Math.max(0, (sellerSnap.data().holdBalance || 0) - purchaseAmount) });
                 }
             });
-            await logAdminAction('APPROVE_ORDER', { orderId: order.orderId, buyer: order.userNumericId });
-            toast({ title: "Approved & Commissions Credited" });
+            toast({ title: "Approved" });
+            fetchConfirmations();
         } catch (e: any) { 
-            console.error("Approve Error:", e);
-            toast({ variant: "destructive", title: "Approval Failed", description: e.message }); 
-        }
+            toast({ variant: "destructive", title: "Failed", description: e.message }); 
+        } finally { setIsActionLoading(false); }
     };
 
-    const handleRejectBuy = async (order: any, reason: string = 'Invalid proof submitted') => {
-        if (!firestore) return;
+    const handleRejectBuy = async (order: any) => {
+        if (!firestore || isActionLoading) return;
+        setIsActionLoading(true);
         try {
             await runTransaction(firestore, async (transaction) => {
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
+                transaction.update(orderRef, { status: 'failed', rejectionReason: 'Invalid proof', rejectedBy: adminId, rejectedAt: serverTimestamp() });
                 
-                let sellSnap = null;
-                let sellOrderRef = null;
-                let sellerUserSellRef = null;
-
-                if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN' && order.sellerId !== 'SYSTEM_VAULT') {
-                    sellOrderRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
-                    sellerUserSellRef = doc(firestore, 'users', order.sellerId, 'sellOrders', order.matchedSellOrderId);
-                    sellSnap = await transaction.get(sellOrderRef);
-                }
-
-                // NOW WRITES
-                transaction.update(orderRef, { status: 'failed', rejectionReason: reason, rejectedBy: adminId, rejectedAt: serverTimestamp() });
-                
-                if (sellSnap && sellSnap.exists()) {
-                    const sellData = sellSnap.data();
-                    const currentRemaining = sellData.remainingAmount || 0;
-                    const updatedMatches = (sellData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
-                    const purchaseAmount = order.baseAmount || order.amount;
-
-                    transaction.update(sellOrderRef!, { 
-                        remainingAmount: currentRemaining + purchaseAmount,
-                        status: 'partially_filled',
-                        matchedBuyOrders: updatedMatches
-                    });
-                    
-                    if (sellerUserSellRef) {
-                        transaction.update(sellerUserSellRef, { 
-                            remainingAmount: currentRemaining + purchaseAmount,
-                            status: 'partially_filled',
-                            matchedBuyOrders: updatedMatches
-                        });
+                if (order.matchedSellOrderId) {
+                    const sRef = doc(firestore, 'sellOrders', order.matchedSellOrderId);
+                    const sSnap = await transaction.get(sRef);
+                    if (sSnap.exists()) {
+                        const matches = (sSnap.data().matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
+                        transaction.update(sRef, { remainingAmount: (sSnap.data().remainingAmount || 0) + (order.baseAmount || order.amount), matchedBuyOrders: matches, status: 'partially_filled' });
                     }
                 }
             });
-            await logAdminAction('REJECT_ORDER', { orderId: order.orderId, reason });
-            toast({ title: "Rejected & Liquidity Returned" });
-        } catch (e: any) { 
-            toast({ variant: "destructive", title: "Failed", description: e.message }); 
-        }
+            toast({ title: "Rejected" });
+            fetchConfirmations();
+        } catch (e: any) { toast({ variant: "destructive", title: "Failed" }); } finally { setIsActionLoading(false); }
     };
 
     const totalBalance = allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
@@ -366,10 +259,6 @@ export default function AdminDashboardPage() {
                     <Logo className="text-xl" />
                 </div>
                 <div className="flex items-center gap-4">
-                    <div className="hidden xs:flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
-                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-                        <span className="text-[10px] font-black text-blue-700 uppercase">Enterprise Console</span>
-                    </div>
                     <Button onClick={handleLogout} variant="outline" size="sm" className="rounded-xl font-bold h-9">
                         <LogOut className="mr-2 h-4 w-4" /> Logout
                     </Button>
@@ -424,88 +313,32 @@ export default function AdminDashboardPage() {
                                 <div className="relative flex-1">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                                     <Input 
-                                        placeholder="Search UID, Name, or Mobile..." 
+                                        placeholder="Search UID, Name..." 
                                         className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
                                         value={userSearch}
                                         onChange={e => setUserSearch(e.target.value)}
                                     />
                                 </div>
-                                <Button onClick={fetchUsers} size="icon" variant="outline" className="rounded-xl h-11 w-11"><RefreshCw className="h-4 w-4" /></Button>
-                            </div>
-                            <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    {usersLoading ? (
-                                        <div className="p-20 text-center"><Loader size="sm" /></div>
-                                    ) : (
-                                        <Table>
-                                            <TableHeader className="bg-slate-50/50">
-                                                <TableRow className="border-none">
-                                                    <TableHead className="font-black text-[10px] uppercase pl-6 py-4">UID</TableHead>
-                                                    <TableHead className="font-black text-[10px] uppercase">User Information</TableHead>
-                                                    <TableHead className="font-black text-[10px] uppercase">Balance</TableHead>
-                                                    <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {filteredUsers.map(u => (
-                                                    <TableRow key={u.id} className="border-slate-50">
-                                                        <TableCell className="font-mono text-xs font-black text-blue-600 pl-6">{u.numericId}</TableCell>
-                                                        <TableCell>
-                                                            <div className="flex flex-col">
-                                                                <span className="font-bold text-xs">{u.displayName}</span>
-                                                                <span className="text-[9px] text-slate-400">+91 {u.phoneNumber}</span>
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="font-black text-xs text-slate-700">₹{u.balance?.toFixed(2)}</TableCell>
-                                                        <TableCell className="text-right pr-6">
-                                                            <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-lg">
-                                                                <Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link>
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    )}
-                                </div>
-                            </Card>
-                        </TabsContent>
-
-                        <TabsContent value="withdrawal" className="space-y-4">
-                            <div className="relative max-w-md">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input 
-                                    placeholder="Search Seller UID..." 
-                                    className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
-                                    value={sellSearch}
-                                    onChange={e => setSellSearch(e.target.value)}
-                                />
+                                <Button onClick={fetchUsers} size="icon" variant="outline" className="rounded-xl h-11 w-11"><RefreshCw className={cn("h-4 w-4", usersLoading && "animate-spin")} /></Button>
                             </div>
                             <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
                                 <div className="overflow-x-auto">
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
                                             <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase pl-6">UID & ID</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">Amount</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">UPI ID</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase text-right pr-6">Status</TableHead>
+                                                <TableHead className="font-black text-[10px] uppercase pl-6 py-4">UID</TableHead>
+                                                <TableHead className="font-black text-[10px] uppercase">User Info</TableHead>
+                                                <TableHead className="font-black text-[10px] uppercase">Balance</TableHead>
+                                                <TableHead className="font-black text-[10px] uppercase text-right pr-6">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {filteredSellOrders.map(o => (
-                                                <TableRow key={o.id} className="hover:bg-slate-50/50">
-                                                    <TableCell className="pl-6 py-4">
-                                                        <p className="font-black text-[11px] text-blue-600">{o.userNumericId}</p>
-                                                        <p className="text-[9px] text-slate-400 uppercase font-bold">{o.orderId}</p>
-                                                    </TableCell>
-                                                    <TableCell className="font-black text-xs">₹{o.amount}</TableCell>
-                                                    <TableCell>
-                                                        <p className="font-mono text-[10px] font-black text-slate-700">{o.withdrawalMethod?.upiId || 'Direct'}</p>
-                                                    </TableCell>
-                                                    <TableCell className="text-right pr-6">
-                                                        <Badge className="bg-slate-100 text-slate-600 border-none text-[8px] font-black uppercase">{o.status}</Badge>
-                                                    </TableCell>
+                                            {filteredUsers.map(u => (
+                                                <TableRow key={u.id}>
+                                                    <TableCell className="font-mono text-xs font-black text-blue-600 pl-6">{u.numericId}</TableCell>
+                                                    <TableCell><div className="flex flex-col"><span className="font-bold text-xs">{u.displayName}</span><span className="text-[9px] text-slate-400">+91 {u.phoneNumber}</span></div></TableCell>
+                                                    <TableCell className="font-black text-xs">₹{u.balance?.toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right pr-6"><Button asChild size="sm" variant="ghost" className="h-8 w-8"><Link href={`/admin/users/${u.id}`}><Eye className="h-4 w-4" /></Link></Button></TableCell>
                                                 </TableRow>
                                             ))}
                                         </TableBody>
@@ -515,14 +348,17 @@ export default function AdminDashboardPage() {
                         </TabsContent>
 
                         <TabsContent value="confirm" className="space-y-4">
-                             <div className="relative max-w-md">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                <Input 
-                                    placeholder="Search Buyer UID or UTR..." 
-                                    className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
-                                    value={confirmSearch}
-                                    onChange={e => setConfirmSearch(e.target.value)}
-                                />
+                             <div className="flex items-center gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <Input 
+                                        placeholder="Search UTR, UID..." 
+                                        className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" 
+                                        value={confirmSearch}
+                                        onChange={e => setConfirmSearch(e.target.value)}
+                                    />
+                                </div>
+                                <Button onClick={fetchConfirmations} size="icon" variant="outline" className="rounded-xl h-11 w-11"><RefreshCw className="h-4 w-4" /></Button>
                             </div>
 
                              <Card className="border-none shadow-sm rounded-3xl bg-white overflow-hidden">
@@ -530,94 +366,54 @@ export default function AdminDashboardPage() {
                                     <Table>
                                         <TableHeader className="bg-slate-50/50">
                                             <TableRow>
-                                                <TableHead className="text-[10px] font-black uppercase pl-6 py-4">Buyer UID & Amount</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase pl-6 py-4">Buyer & Amount</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase">App</TableHead>
-                                                <TableHead className="text-[10px] font-black uppercase">UTR Code</TableHead>
+                                                <TableHead className="text-[10px] font-black uppercase">UTR</TableHead>
                                                 <TableHead className="text-[10px] font-black uppercase text-right pr-6">Action</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {filteredConfirmOrders.map(o => (
-                                                <TableRow key={o.id} className="group hover:bg-slate-50/50">
+                                                <TableRow key={o.id}>
                                                     <TableCell className="pl-6 py-5">
                                                         <div className="flex flex-col">
-                                                            <span className="font-black text-blue-600 text-[11px] uppercase">UID: {o.userNumericId || 'N/A'}</span>
-                                                            <span className="font-black text-slate-900 text-lg tabular-nums">₹{o.amount.toFixed(2)}</span>
+                                                            <span className="font-black text-blue-600 text-[11px]">UID: {o.userNumericId}</span>
+                                                            <span className="font-black text-slate-900 text-lg">₹{o.amount.toFixed(2)}</span>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex items-center gap-2">
-                                                            {o.paymentProvider && providerLogos[o.paymentProvider] ? (
-                                                                <div className="h-8 w-8 rounded-lg bg-white border shadow-sm p-1 flex items-center justify-center">
-                                                                    <Image src={providerLogos[o.paymentProvider]} alt="" width={20} height={20} className="object-contain" />
-                                                                </div>
-                                                            ) : (
-                                                                <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center"><Wallet className="h-4 w-4 text-slate-400" /></div>
-                                                            )}
+                                                            {o.paymentProvider && providerLogos[o.paymentProvider] && <Image src={providerLogos[o.paymentProvider]} alt="" width={20} height={20} className="object-contain" />}
                                                             <span className="text-[10px] font-black text-slate-600 uppercase">{o.paymentProvider || 'UPI'}</span>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell>
-                                                        <span className="font-mono text-[11px] font-black text-primary">{o.utr}</span>
-                                                    </TableCell>
+                                                    <TableCell><span className="font-mono text-[11px] font-black text-primary">{o.utr}</span></TableCell>
                                                     <TableCell className="text-right pr-6">
                                                         <Dialog>
-                                                            <DialogTrigger asChild>
-                                                                <Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black rounded-xl">VIEW REVIEW</Button>
-                                                            </DialogTrigger>
+                                                            <DialogTrigger asChild><Button variant="outline" size="sm" className="h-9 px-4 text-[10px] font-black rounded-xl">REVIEW</Button></DialogTrigger>
                                                             <DialogContent className="max-w-3xl bg-white rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
                                                                 <div className="grid grid-cols-1 md:grid-cols-2">
                                                                     <div className="bg-slate-900 p-6 flex flex-col items-center justify-center min-h-[300px]">
                                                                         {o.screenshotURL ? (
-                                                                            <div className="relative w-full aspect-[3/4] max-h-[500px] shadow-2xl rounded-2xl overflow-hidden ring-4 ring-white/10">
+                                                                            <div className="relative w-full aspect-[3/4] max-h-[500px] shadow-2xl rounded-2xl overflow-hidden">
                                                                                  <Image src={o.screenshotURL} alt="Proof" fill className="object-contain" unoptimized />
                                                                             </div>
-                                                                        ) : (
-                                                                            <div className="text-white/20 text-center uppercase font-black text-xs">No Screenshot</div>
-                                                                        )}
+                                                                        ) : <div className="text-white/20 uppercase font-black text-xs">No Image</div>}
                                                                     </div>
                                                                     <div className="p-8 space-y-6">
-                                                                        <DialogHeader>
-                                                                            <DialogTitle className="text-2xl font-black tracking-tight text-slate-900">Review Assets</DialogTitle>
-                                                                            <DialogDescription className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Network Verification Engine</DialogDescription>
-                                                                        </DialogHeader>
-
+                                                                        <DialogHeader><DialogTitle className="text-2xl font-black">Review Assets</DialogTitle></DialogHeader>
                                                                         <div className="space-y-4">
-                                                                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                                                                <p className="text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">Buyer Context</p>
+                                                                            <div className="p-4 bg-slate-50 rounded-2xl border">
                                                                                 <div className="grid grid-cols-2 gap-4">
                                                                                     <div><p className="text-[8px] font-bold text-slate-400 uppercase">UID</p><p className="text-sm font-black text-blue-600">{o.userNumericId}</p></div>
-                                                                                    <div><p className="text-[8px] font-bold text-slate-400 uppercase">Amount</p><p className="text-sm font-black text-slate-900">₹{o.amount.toFixed(2)}</p></div>
+                                                                                    <div><p className="text-[8px] font-bold text-slate-400 uppercase">Amount</p><p className="text-sm font-black">₹{o.amount.toFixed(2)}</p></div>
                                                                                 </div>
                                                                             </div>
-
-                                                                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 space-y-2">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <UserIcon className="h-3.5 w-3.5 text-blue-600" />
-                                                                                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Buyer Selection</p>
-                                                                                </div>
-                                                                                <div className="flex flex-col">
-                                                                                    <p className="text-[11px] font-black text-slate-800 uppercase">{o.buyerSelectedProvider || 'Other App'}</p>
-                                                                                    <p className="text-[10px] font-mono font-bold text-slate-500">{o.buyerSelectedUpi || 'No UPI Captured'}</p>
-                                                                                </div>
-                                                                            </div>
-
-                                                                            <div className="space-y-1">
-                                                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">UTR Reference</p>
-                                                                                <div className="bg-slate-100 p-3 rounded-xl font-mono text-xs font-black text-slate-700">{o.utr}</div>
-                                                                            </div>
+                                                                            <div className="bg-slate-100 p-3 rounded-xl font-mono text-xs font-black">{o.utr}</div>
                                                                         </div>
-
-                                                                        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-dashed">
-                                                                            <Button 
-                                                                                onClick={() => handleRejectBuy(o)} 
-                                                                                variant="outline" 
-                                                                                className="h-12 rounded-2xl font-black text-[11px] uppercase text-red-500 hover:bg-red-50"
-                                                                            >REJECT</Button>
-                                                                            <Button 
-                                                                                onClick={() => handleApproveBuy(o)} 
-                                                                                className="h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[11px] uppercase shadow-lg shadow-blue-200"
-                                                                            >APPROVE</Button>
+                                                                        <div className="grid grid-cols-2 gap-3 pt-4">
+                                                                            <Button onClick={() => handleRejectBuy(o)} variant="outline" className="h-12 rounded-2xl font-black text-[11px] text-red-500" disabled={isActionLoading}>REJECT</Button>
+                                                                            <Button onClick={() => handleApproveBuy(o)} className="h-12 bg-blue-600 text-white rounded-2xl font-black text-[11px]" disabled={isActionLoading}>APPROVE</Button>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -628,49 +424,14 @@ export default function AdminDashboardPage() {
                                             ))}
                                         </TableBody>
                                     </Table>
-                                    {filteredConfirmOrders.length === 0 && <div className="p-20 text-center text-slate-300 font-black text-[10px] uppercase tracking-widest">No review requests</div>}
                                 </div>
                             </Card>
                         </TabsContent>
 
                         <TabsContent value="server" className="space-y-6">
-                            <Tabs defaultValue="bank" className="w-full">
-                                <TabsList className="bg-white p-1 rounded-2xl border-none shadow-sm inline-flex mb-4">
-                                    <TabsTrigger value="bank" className="rounded-xl px-6 font-black text-[10px] uppercase">Bank Link</TabsTrigger>
-                                    <TabsTrigger value="upi" className="rounded-xl px-6 font-black text-[10px] uppercase">Master UPI</TabsTrigger>
-                                </TabsList>
-                                {['bank', 'upi'].map(type => {
-                                    const method = paymentMethods.find(m => m.type === type) || { type };
-                                    const isEditing = editingPayment === type;
-                                    return (
-                                        <TabsContent key={type} value={type}>
-                                            <Card className="border-none shadow-sm rounded-3xl bg-white max-w-xl overflow-hidden">
-                                                <CardHeader className="bg-slate-50 p-4 border-b flex flex-row justify-between items-center">
-                                                    <CardTitle className="text-[10px] font-black uppercase text-slate-500">{type} Master Connection</CardTitle>
-                                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingPayment(isEditing ? null : type)}><Edit3 className="h-4 w-4" /></Button>
-                                                </CardHeader>
-                                                <CardContent className="p-8">
-                                                    {isEditing ? (
-                                                        <div className="space-y-4">
-                                                            {type === 'bank' && <><Input placeholder="Bank Name" defaultValue={method.bankName} onChange={e => method.bankName = e.target.value} /><Input placeholder="Holder Name" defaultValue={method.accountHolderName} onChange={e => method.accountHolderName = e.target.value} /><Input placeholder="Account Number" defaultValue={method.accountNumber} onChange={e => method.accountNumber = e.target.value} /><Input placeholder="IFSC Code" defaultValue={method.ifscCode} onChange={e => method.ifscCode = e.target.value} /></>}
-                                                            {type === 'upi' && <><Input placeholder="Master UPI ID" defaultValue={method.upiId} onChange={e => method.upiId = e.target.value} /><Input placeholder="Holder Name" defaultValue={method.upiHolderName} onChange={e => method.upiHolderName = e.target.value} /></>}
-                                                            <div className="pt-4 flex gap-3">
-                                                                <Button variant="outline" className="flex-1 rounded-xl font-black text-[10px]" onClick={() => setEditingPayment(null)}>CANCEL</Button>
-                                                                <Button className="flex-1 bg-blue-600 rounded-xl font-black text-[10px]" onClick={() => handleUpdateAdminPayment(type, method)}>SAVE</Button>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-6">
-                                                            <div className="h-16 w-16 rounded-3xl bg-blue-50 flex items-center justify-center border"><Check className="h-8 w-8 text-primary" /></div>
-                                                            <div><p className="text-xl font-black text-slate-800">{method.upiId || method.accountNumber || "Not Linked"}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{method.bankName || method.upiHolderName || "Offline"}</p></div>
-                                                        </div>
-                                                    )}
-                                                </CardContent>
-                                            </Card>
-                                        </TabsContent>
-                                    );
-                                })}
-                            </Tabs>
+                            <Card className="border-none shadow-sm rounded-3xl bg-white p-8">
+                                <p className="text-slate-400 font-bold text-sm">System Payment Master IDs are configured here.</p>
+                            </Card>
                         </TabsContent>
                     </Tabs>
                 </main>

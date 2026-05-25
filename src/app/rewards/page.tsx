@@ -5,15 +5,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   ChevronLeft,
   Gift,
-  Trophy,
-  Target,
   Zap,
   CheckCircle2,
   Lock,
@@ -25,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { useUser, useFirestore } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from '@/components/ui/loader';
-import { doc, collection, query, where, Timestamp, runTransaction, getDocs, arrayUnion, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, where, Timestamp, runTransaction, getDocs, arrayUnion, getDoc, serverTimestamp } from 'firebase/firestore';
 
 const orderCountTasks = [
     { id: 'oc1', title: 'Mini Milestone', desc: 'Complete 1 order', reward: 2, goal: 1 },
@@ -134,8 +130,8 @@ export default function RewardsPage() {
             ordersSnapshot.forEach(doc => {
                 const order = doc.data();
                 orderCount++;
-                if (order.baseAmount > maxAmount) maxAmount = order.baseAmount;
-                else if (order.amount > maxAmount) maxAmount = order.amount;
+                const amt = order.baseAmount || order.amount || 0;
+                if (amt > maxAmount) maxAmount = amt;
             });
             setStats({ count: orderCount, maxAmount });
 
@@ -216,7 +212,6 @@ export default function RewardsPage() {
 
             <main className="p-3 space-y-4">
                 <Card className="border-none balance-gradient text-white rounded-[28px] shadow-xl shadow-blue-500/10 overflow-hidden relative">
-                    <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none"><Trophy className="h-32 w-32" /></div>
                     <CardContent className="p-6 relative z-10">
                         <div className="flex justify-between items-start">
                             <div>
@@ -225,9 +220,6 @@ export default function RewardsPage() {
                                     <span className="text-3xl font-black tabular-nums tracking-tighter">₹{totalPotential}</span>
                                     <span className="text-[10px] font-bold bg-white/20 px-1.5 py-0.5 rounded uppercase">Pool</span>
                                 </div>
-                            </div>
-                            <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md border border-white/10">
-                                <Target className="h-5 w-5 text-blue-200" />
                             </div>
                         </div>
                         <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
