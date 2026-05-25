@@ -37,6 +37,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { isMounted.current = false; };
   }, []);
 
+  // Fail-safe to prevent infinite loader
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading && isMounted.current) {
+        setLoading(false);
+      }
+    }, 10000); // 10 second safety cap
+    return () => clearTimeout(timeout);
+  }, [loading]);
+
   // Auth Protection Logic
   useEffect(() => {
     if (loading) return;

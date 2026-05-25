@@ -57,13 +57,13 @@ export default function BuyPage() {
   const [pendingPurchaseAmount, setPendingPurchaseAmount] = useState<number | null>(null);
   const [selectedBuyerMethod, setSelectedBuyerMethod] = useState<any>(null);
 
-  const generateNodeId = () => {
+  const generateNodeId = useCallback(() => {
     let result = '';
     for (let i = 0; i < 15; i++) {
         result += Math.floor(Math.random() * 10).toString();
     }
     return result;
-  };
+  }, []);
 
   const generateRandomBatch = useCallback(() => {
     // Generate between 300 to 400 orders
@@ -81,7 +81,7 @@ export default function BuyPage() {
         });
     }
     setDynamicOrders(newOrders);
-  }, []);
+  }, [generateNodeId]);
 
   useEffect(() => {
     generateRandomBatch();
