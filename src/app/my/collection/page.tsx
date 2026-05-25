@@ -1,16 +1,15 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Plus, Wallet, Trash2, BadgeCheck, ShieldCheck } from "lucide-react";
+import { ChevronLeft, Plus, Wallet, BadgeCheck, ShieldCheck, Lock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser } from '@/hooks/use-user';
 import { useFirestore } from '@/firebase';
-import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { Loader } from "@/components/ui/loader";
-import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 
 const providerConfig: Record<string, { logo: string; brandColor: string }> = {
   PhonePe: { logo: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(4).png", brandColor: "#6739B7" },
@@ -23,7 +22,6 @@ const providerConfig: Record<string, { logo: string; brandColor: string }> = {
 export default function CollectionPage() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const { toast } = useToast();
   const [methods, setMethods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -35,16 +33,6 @@ export default function CollectionPage() {
     });
     return () => unsub();
   }, [user, firestore]);
-
-  const handleDelete = async (idx: number) => {
-    if (!confirm("Remove account?")) return;
-    try {
-        const updated = [...methods];
-        updated.splice(idx, 1);
-        await updateDoc(doc(firestore!, 'users', user!.uid), { paymentMethods: updated });
-        toast({ title: "Removed" });
-    } catch (e) {}
-  };
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F8FAFC]">
@@ -67,7 +55,7 @@ export default function CollectionPage() {
             methods.map((m, i) => {
                 const cfg = providerConfig[m.name] || { logo: "", brandColor: "#cbd5e1" };
                 return (
-                    <div key={i} className="bg-white rounded-xl p-3 border border-slate-100 shadow-sm relative overflow-hidden flex items-center justify-between group active:scale-[0.98] transition-transform">
+                    <div key={i} className="bg-white rounded-xl p-3 border border-slate-100 shadow-sm relative overflow-hidden flex items-center justify-between group">
                          <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: cfg.brandColor }} />
                          <div className="flex items-center gap-2.5">
                              <div className="h-9 w-9 bg-slate-50 rounded-lg flex items-center justify-center p-1.5 border border-slate-100 shrink-0">
@@ -80,12 +68,12 @@ export default function CollectionPage() {
                          </div>
                          <div className="flex items-center gap-2">
                              <div className="flex flex-col items-end shrink-0">
-                                <BadgeCheck className="h-3 w-3 text-blue-500" />
-                                <span className="text-[7px] font-black text-slate-300 uppercase">Linked</span>
+                                <div className="flex items-center gap-1">
+                                    <BadgeCheck className="h-3 w-3 text-blue-500" />
+                                    <Lock className="h-2.5 w-2.5 text-slate-300" />
+                                </div>
+                                <span className="text-[7px] font-black text-slate-300 uppercase">Linked & Locked</span>
                              </div>
-                             <Button variant="ghost" size="icon" onClick={() => handleDelete(i)} className="h-8 w-8 rounded-lg text-slate-300 hover:text-red-500">
-                                <Trash2 className="h-3.5 w-3.5" />
-                             </Button>
                          </div>
                     </div>
                 )
@@ -99,7 +87,17 @@ export default function CollectionPage() {
                 </Button>
             </div>
         )}
-        <div className="pt-4 text-center opacity-30">
+        
+        {methods.length > 0 && (
+            <div className="p-4 mt-2 bg-orange-50/50 border border-orange-100 rounded-xl flex gap-3">
+                <Info className="h-4 w-4 text-orange-500 shrink-0" />
+                <p className="text-[9px] text-orange-800 font-bold uppercase leading-relaxed">
+                    SECURITY LOCK: LINKED ACCOUNTS CANNOT BE REMOVED OR EDITED. CONTACT SUPPORT FOR VERIFICATION CHANGES.
+                </p>
+            </div>
+        )}
+
+        <div className="pt-6 text-center opacity-30">
             <ShieldCheck className="h-5 w-5 mx-auto mb-1" />
             <p className="text-[7px] font-black uppercase tracking-widest">Secured by Flex Pay Network</p>
         </div>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -45,16 +46,16 @@ const PROVIDERS: ProviderConfig[] = [
     name: "Paytm", 
     logo: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(5).png", 
     brandColor: "#00BAF2",
-    handles: ["@paytm", "@ptyes"],
-    tpapKeywords: ["PAYTM", "PPBL"]
+    handles: ["@paytm", "@ptyes", "@ptaxis", "@ptsbi", "@pthdfc"],
+    tpapKeywords: ["PAYTM", "PPBL", "PTYES", "PTAXIS", "PTSBI", "PTHDFC"]
   },
   { 
     id: "mobikwik",
     name: "MobiKwik", 
     logo: "https://gcfmifxdqlcfmorsozek.supabase.co/storage/v1/object/public/Payment%20icons/download%20(1).png", 
     brandColor: "#0057E0",
-    handles: ["@ikwik", "@mbkns"],
-    tpapKeywords: ["MOBIKWIK", "IKWIK"]
+    handles: ["@ikwik", "@mbk", "@mbkns"],
+    tpapKeywords: ["MOBIKWIK", "IKWIK", "MBK", "MBKNS"]
   },
   { 
     id: "freecharge",
@@ -101,7 +102,8 @@ export default function AddCollectionPage() {
     
     setIsVerifying(true);
     try {
-        const result = await verifyUpiAction(upiId.trim().toLowerCase());
+        const inputUpi = upiId.trim().toLowerCase();
+        const result = await verifyUpiAction(inputUpi);
 
         if (!result.success || !result.data || !result.data.isVpaVerified) {
             throw new Error("Wrong VPA/UPI. Please try again.");
@@ -109,11 +111,15 @@ export default function AddCollectionPage() {
 
         const data = result.data;
 
-        const matchedTpap = selectedProvider.tpapKeywords.some(keyword => 
+        // Check if the input UPI handle belongs to the selected provider
+        const handleMatched = selectedProvider.handles.some(h => inputUpi.endsWith(h.toLowerCase()));
+        
+        // Also check library metadata as a secondary confirmation
+        const tpapMatched = selectedProvider.tpapKeywords.some(keyword => 
             data.tpap.toUpperCase().includes(keyword) || data.message.toUpperCase().includes(keyword)
         );
 
-        if (!matchedTpap) {
+        if (!handleMatched && !tpapMatched) {
             throw new Error(`Wrong VPA/UPI. Please select correct app.`);
         }
 
@@ -214,8 +220,8 @@ export default function AddCollectionPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-slate-800 text-xs">{provider.name}</h3>
-                                    <div className="flex gap-1 mt-0.5">
-                                        {provider.handles.slice(0, 1).map(h => (
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                        {provider.handles.slice(0, 3).map(h => (
                                             <span key={h} className="text-[7px] font-black bg-slate-50 text-slate-400 px-1.5 py-0.5 rounded-full border uppercase tracking-tighter">{h}</span>
                                         ))}
                                     </div>
