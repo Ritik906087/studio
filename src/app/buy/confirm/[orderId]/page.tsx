@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, AlertCircle, Clock, HelpCircle, Upload, ShieldCheck, QrCode, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { useFirestore, useDoc } from '@/firebase';
@@ -223,9 +223,19 @@ function ConfirmPageContent() {
     if (!order) return <div className="p-8 text-center font-black uppercase text-slate-400 pt-32">Order Expired</div>;
 
     const details = order.sellerWithdrawalDetails;
-    // Generate simple text string instead of payment URI
-    const qrText = `Order: ${order.orderId}\nAmount: ₹${order.baseAmount.toFixed(2)}\nReceiver ID: ${details?.upiId}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrText)}`;
+    const isSystemOrder = order.sellerId === 'SYSTEM_VAULT';
+
+    // HYBRID QR LOGIC
+    let qrData = "";
+    if (isSystemOrder) {
+        // Plain Text QR for System/Admin
+        qrData = `Order: ${order.orderId}\nAmount: ₹${order.baseAmount.toFixed(2)}\nReceiver: ${details?.name}\nID: ${details?.upiId}`;
+    } else {
+        // Standard Payment QR for P2P Users
+        qrData = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Flex User')}&am=${order.baseAmount.toFixed(2)}&tr=${order.orderId}&cu=INR`;
+    }
+
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(qrData)}`;
 
     return (
         <div className="flex flex-col min-h-screen bg-white font-body">
@@ -233,7 +243,9 @@ function ConfirmPageContent() {
                 <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
                     <ChevronLeft className="h-6 w-6 text-slate-800" />
                 </Button>
-                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">Payment Audit</h1>
+                <h1 className="text-sm font-black uppercase tracking-widest text-slate-800">
+                    {isSystemOrder ? "System Audit" : "P2P Settlement"}
+                </h1>
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
 
@@ -247,14 +259,22 @@ function ConfirmPageContent() {
                 {view === 'info' ? (
                     <div className="space-y-6 animate-in fade-in duration-300">
                         <div className="flex flex-col items-center justify-center space-y-4">
-                            <div className="relative p-6 bg-white rounded-[32px] shadow-2xl ring-1 ring-slate-100">
+                            <div className="relative p-6 bg-white rounded-[32px] shadow-2xl ring-1 ring-slate-100 group active:scale-[0.98] transition-transform">
                                 <div className="relative h-48 w-48 overflow-hidden rounded-2xl">
-                                    <Image src={qrUrl} alt="Secure QR" fill className="object-contain" unoptimized />
+                                    <Image src={qrUrl} alt="QR Code" fill className="object-contain" unoptimized />
+                                </div>
+                                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-1 rounded-full shadow-lg flex items-center gap-1.5">
+                                    <QrCode className="h-3 w-3" />
+                                    <span className="text-[9px] font-black uppercase">Scan to Pay</span>
                                 </div>
                             </div>
-                            <div className="text-center space-y-1">
-                                <p className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">Scan text code to proceed</p>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Protocol: Secure Text-to-QR</p>
+                            <div className="text-center space-y-1 pt-2">
+                                <p className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">
+                                    {isSystemOrder ? "Secure Text-to-QR Protocol" : "Instant P2P Network Scan"}
+                                </p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic">
+                                    Status: Verified Receiver Active
+                                </p>
                             </div>
                         </div>
 
@@ -262,17 +282,33 @@ function ConfirmPageContent() {
                             <CopyRow label="Receiver" value={details?.name || 'Authorized Member'} />
                             <CopyRow label="Amount" value={`₹${order.baseAmount.toFixed(2)}`} />
                             <CopyRow label="Order ID" value={order.orderId} />
-                            {/* Identifier hidden from written UI as requested */}
+                            
+                            {/* Identifier Visibility Logic */}
+                            {!isSystemOrder ? (
+                                <CopyRow label="UPI ID" value={details?.upiId} />
+                            ) : (
+                                <div className="flex items-center justify-between py-3.5 border-t border-slate-100/50">
+                                    <span className="text-[11px] font-black uppercase text-slate-400 w-20">Identity</span>
+                                    <span className="flex-1 text-[10px] font-black text-blue-600/50 text-right uppercase tracking-[0.2em]">Hidden for Security</span>
+                                </div>
+                            )}
                         </div>
 
-                        <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
-                            <p className="text-[9px] text-blue-700 font-bold uppercase leading-relaxed text-center">
-                                Identity protected. Use the QR code to verify the destination account in your app.
+                        <div className={cn(
+                            "p-4 rounded-2xl border flex gap-3 items-center",
+                            isSystemOrder ? "bg-amber-50 border-amber-100" : "bg-blue-50 border-blue-100"
+                        )}>
+                            <ShieldCheck className={cn("h-6 w-6 shrink-0", isSystemOrder ? "text-amber-500" : "text-blue-500")} />
+                            <p className={cn("text-[9px] font-bold uppercase leading-relaxed", isSystemOrder ? "text-amber-700" : "text-blue-700")}>
+                                {isSystemOrder 
+                                    ? "This is a secure system ID. Manual copying is disabled. Use the QR code to verify details in your payment app."
+                                    : "P2P Settlement active. Please pay the exact amount shown above to ensure instant asset release."
+                                }
                             </p>
                         </div>
 
                         <div className="space-y-3 pt-2 text-center">
-                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Terminate Contract</button>
+                            <button onClick={() => setIsCancelDialogOpen(true)} className="text-[10px] font-black text-red-500 uppercase tracking-widest underline decoration-2 underline-offset-4">Terminate Order</button>
                         </div>
                     </div>
                 ) : (
@@ -280,24 +316,34 @@ function ConfirmPageContent() {
                         <div className="p-5 bg-blue-600 text-white rounded-[24px]">
                             <div className="flex items-center gap-3 mb-2">
                                 <AlertCircle className="h-6 w-6" />
-                                <h3 className="font-black text-sm uppercase">Secure Submission</h3>
+                                <h3 className="font-black text-sm uppercase">Audit Submission</h3>
                             </div>
                             <p className="text-[10px] font-bold leading-relaxed uppercase">
-                                Please ensure the UTR and screenshot are correct. All submissions are audited by the system.
+                                Please ensure the 12-digit UTR and screenshot are correct. Mismatch will result in rejection.
                             </p>
                         </div>
 
                         <div className="space-y-5">
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">UTR / Ref Number</Label>
-                                <Input placeholder="12-Digit Reference ID" value={utr} onChange={(e) => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))} className="h-14 rounded-2xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black" />
+                                <Label className="text-[10px] font-black uppercase text-slate-400">UTR / Reference Number</Label>
+                                <Input placeholder="12-Digit Ref ID" value={utr} onChange={(e) => setUtr(e.target.value.replace(/\D/g, '').slice(0, 12))} className="h-14 rounded-2xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black" />
                             </div>
 
                             <div className="space-y-1.5">
                                 <Label className="text-[10px] font-black uppercase text-slate-400">Payment Screenshot</Label>
                                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
-                                <div onClick={() => fileInputRef.current?.click()} className={cn("w-full h-40 border-2 border-dashed rounded-[28px] flex flex-col items-center justify-center cursor-pointer", screenshotFile ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-white border-slate-200 text-slate-300")}>
-                                    {screenshotFile ? <p className="text-xs font-black uppercase">Proof Attached ✓</p> : <Upload className="h-8 w-8 opacity-30" />}
+                                <div onClick={() => fileInputRef.current?.click()} className={cn("w-full h-44 border-2 border-dashed rounded-[32px] flex flex-col items-center justify-center cursor-pointer transition-all", screenshotFile ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-slate-50 border-slate-200 text-slate-300")}>
+                                    {screenshotFile ? (
+                                        <div className="text-center space-y-2">
+                                            <div className="h-10 w-10 bg-teal-100 rounded-full flex items-center justify-center mx-auto"><Upload className="h-5 w-5" /></div>
+                                            <p className="text-[10px] font-black uppercase">Proof Attached ✓</p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center space-y-2">
+                                            <Upload className="h-8 w-8 mx-auto opacity-30" />
+                                            <p className="text-[9px] font-black uppercase opacity-40">Tap to Upload Receipt</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
