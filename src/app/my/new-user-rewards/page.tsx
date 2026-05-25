@@ -102,6 +102,15 @@ export default function NewbieRewardsPage() {
                 
                 if (data?.claimedUserRewards?.includes(FINAL_REWARD_ID)) throw new Error("Already claimed");
 
+                // CRITICAL: Get all necessary reads BEFORE any writes
+                let inviterSnap = null;
+                let inviterRef = null;
+                if (data?.inviterUid) {
+                    inviterRef = doc(firestore, 'users', data.inviterUid);
+                    inviterSnap = await transaction.get(inviterRef);
+                }
+
+                // NOW PERFORM WRITES
                 // 1. Credit Reward to User (300)
                 transaction.update(userRef, {
                     balance: increment(FINAL_REWARD_AMOUNT),
@@ -119,31 +128,26 @@ export default function NewbieRewardsPage() {
                 });
 
                 // 2. Credit Reward to direct Inviter (L1 Relationship)
-                if (data?.inviterUid) {
-                    const inviterRef = doc(firestore, 'users', data.inviterUid);
-                    const inviterSnap = await transaction.get(inviterRef);
+                if (inviterRef && inviterSnap && inviterSnap.exists()) {
+                    transaction.update(inviterRef, {
+                        balance: increment(INVITER_BONUS_AMOUNT)
+                    });
                     
-                    if (inviterSnap.exists()) {
-                        transaction.update(inviterRef, {
-                            balance: increment(INVITER_BONUS_AMOUNT)
-                        });
-                        
-                        const inviterTxRef = doc(collection(firestore, 'users', data.inviterUid, 'transactions'));
-                        transaction.set(inviterTxRef, {
-                            userId: data.inviterUid,
-                            amount: INVITER_BONUS_AMOUNT,
-                            type: 'team_bonus',
-                            description: `Mission Bonus (L1): Member UID ${data.numericId} completed tasks`,
-                            createdAt: serverTimestamp(),
-                            orderId: `INV_BONUS_${Date.now()}`
-                        });
-                    }
+                    const inviterTxRef = doc(collection(firestore, 'users', data?.inviterUid, 'transactions'));
+                    transaction.set(inviterTxRef, {
+                        userId: data?.inviterUid,
+                        amount: INVITER_BONUS_AMOUNT,
+                        type: 'team_bonus',
+                        description: `Mission Bonus (L1): Member UID ${data?.numericId} completed tasks`,
+                        createdAt: serverTimestamp(),
+                        orderId: `INV_BONUS_${Date.now()}`
+                    });
                 }
             });
             toast({ title: `₹${FINAL_REWARD_AMOUNT} Credited!` });
         } catch (error: any) {
              console.error("Claim Error:", error);
-             toast({ variant: 'destructive', title: 'Claim Failed' });
+             toast({ variant: 'destructive', title: 'Claim Failed', description: error.message });
         } finally { setIsClaimingFinal(false); }
     };
     

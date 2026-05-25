@@ -189,18 +189,35 @@ export default function AdminDashboardPage() {
                 const buyerRef = doc(firestore, 'users', order.userId);
                 const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
                 
+                // CRITICAL: Perform all GETs at the start
                 const buyerSnap = await transaction.get(buyerRef);
                 const currentOrderSnap = await transaction.get(orderRef);
 
                 if (!buyerSnap.exists()) throw new Error("Buyer missing");
+                if (currentOrderSnap.data()?.status === 'completed') throw new Error("Already Approved");
+
                 const buyerData = buyerSnap.data();
 
-                if (currentOrderSnap.data()?.status === 'completed') throw new Error("Already Approved");
-                
+                // 2. Fetch Inviter Docs for Commission
+                let l1Snap = null;
+                let l1Ref = null;
+                let l2Snap = null;
+                let l2Ref = null;
+
+                if (buyerData.inviterUid) {
+                    l1Ref = doc(firestore, 'users', buyerData.inviterUid);
+                    l1Snap = await transaction.get(l1Ref);
+                    if (l1Snap.exists() && l1Snap.data().inviterUid) {
+                        l2Ref = doc(firestore, 'users', l1Snap.data().inviterUid);
+                        l2Snap = await transaction.get(l2Ref);
+                    }
+                }
+
+                // 3. Fetch SellOrder Doc (if P2P)
                 let sellSnap = null;
-                let sellerSnap = null;
                 let sellOrderRef = null;
                 let sellerProfileRef = null;
+                let sellerSnap = null;
                 let sellerUserSellRef = null;
 
                 if (order.matchedSellOrderId && order.sellerId && order.sellerId !== 'ADMIN' && order.sellerId !== 'SYSTEM_VAULT') {
@@ -211,60 +228,52 @@ export default function AdminDashboardPage() {
                     sellSnap = await transaction.get(sellOrderRef);
                     sellerSnap = await transaction.get(sellerProfileRef);
                 }
+
+                // --- NOW START WRITES ---
                 
-                // --- 1. Credit Buyer ---
+                // 1. Credit Buyer
                 const currentBuyerBalance = buyerData.balance || 0;
                 transaction.update(buyerRef, { balance: currentBuyerBalance + order.amount });
                 transaction.update(orderRef, { status: 'completed', completedAt: serverTimestamp(), approvedBy: adminId });
                 
-                // --- 2. Multi-Level Commission Logic (L1: 1%, L2: 0.8%) ---
+                // 2. Multi-Level Commission Logic
                 const purchaseAmount = order.baseAmount || order.amount;
 
-                // Level 1 Commission
-                if (buyerData.inviterUid) {
-                    const l1Uid = buyerData.inviterUid;
-                    const l1Ref = doc(firestore, 'users', l1Uid);
-                    const l1Snap = await transaction.get(l1Ref);
-                    if (l1Snap.exists()) {
-                        const l1Data = l1Snap.data();
-                        const l1Bonus = purchaseAmount * 0.01;
-                        transaction.update(l1Ref, { balance: (l1Data.balance || 0) + l1Bonus });
+                // Level 1 Commission (1%)
+                if (l1Ref && l1Snap && l1Snap.exists()) {
+                    const l1Data = l1Snap.data();
+                    const l1Bonus = purchaseAmount * 0.01;
+                    transaction.update(l1Ref, { balance: (l1Data.balance || 0) + l1Bonus });
 
-                        const l1TxRef = doc(collection(firestore, 'users', l1Uid, 'transactions'));
-                        transaction.set(l1TxRef, {
-                            userId: l1Uid,
-                            amount: l1Bonus,
-                            type: 'team_bonus',
-                            description: `L1 Trade Commission (1%): Buyer UID ${buyerData.numericId}`,
-                            createdAt: serverTimestamp(),
-                            orderId: `COMM_L1_${order.id}`
-                        });
-
-                        // Level 2 Commission
-                        if (l1Data.inviterUid) {
-                            const l2Uid = l1Data.inviterUid;
-                            const l2Ref = doc(firestore, 'users', l2Uid);
-                            const l2Snap = await transaction.get(l2Ref);
-                            if (l2Snap.exists()) {
-                                const l2Data = l2Snap.data();
-                                const l2Bonus = purchaseAmount * 0.008;
-                                transaction.update(l2Ref, { balance: (l2Data.balance || 0) + l2Bonus });
-
-                                const l2TxRef = doc(collection(firestore, 'users', l2Uid, 'transactions'));
-                                transaction.set(l2TxRef, {
-                                    userId: l2Uid,
-                                    amount: l2Bonus,
-                                    type: 'team_bonus',
-                                    description: `L2 Trade Commission (0.8%): Buyer UID ${buyerData.numericId}`,
-                                    createdAt: serverTimestamp(),
-                                    orderId: `COMM_L2_${order.id}`
-                                });
-                            }
-                        }
-                    }
+                    const l1TxRef = doc(collection(firestore, 'users', l1Ref.id, 'transactions'));
+                    transaction.set(l1TxRef, {
+                        userId: l1Ref.id,
+                        amount: l1Bonus,
+                        type: 'team_bonus',
+                        description: `L1 Trade Commission (1%): Buyer UID ${buyerData.numericId}`,
+                        createdAt: serverTimestamp(),
+                        orderId: `COMM_L1_${order.id}`
+                    });
                 }
 
-                // --- 3. Seller Hold Balance and Order Matching Logic ---
+                // Level 2 Commission (0.8%)
+                if (l2Ref && l2Snap && l2Snap.exists()) {
+                    const l2Data = l2Snap.data();
+                    const l2Bonus = purchaseAmount * 0.008;
+                    transaction.update(l2Ref, { balance: (l2Data.balance || 0) + l2Bonus });
+
+                    const l2TxRef = doc(collection(firestore, 'users', l2Ref.id, 'transactions'));
+                    transaction.set(l2TxRef, {
+                        userId: l2Ref.id,
+                        amount: l2Bonus,
+                        type: 'team_bonus',
+                        description: `L2 Trade Commission (0.8%): Buyer UID ${buyerData.numericId}`,
+                        createdAt: serverTimestamp(),
+                        orderId: `COMM_L2_${order.id}`
+                    });
+                }
+
+                // 3. P2P Seller Logic
                 if (sellSnap && sellSnap.exists()) {
                     const sellData = sellSnap.data();
                     const updatedMatches = (sellData.matchedBuyOrders || []).map((m: any) => 
@@ -291,9 +300,10 @@ export default function AdminDashboardPage() {
                 }
             });
             await logAdminAction('APPROVE_ORDER', { orderId: order.orderId, buyer: order.userNumericId });
-            toast({ title: "Approved" });
+            toast({ title: "Approved & Commissions Credited" });
         } catch (e: any) { 
-            toast({ variant: "destructive", title: "Failed", description: e.message }); 
+            console.error("Approve Error:", e);
+            toast({ variant: "destructive", title: "Approval Failed", description: e.message }); 
         }
     };
 
@@ -301,6 +311,8 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         try {
             await runTransaction(firestore, async (transaction) => {
+                const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
+                
                 let sellSnap = null;
                 let sellOrderRef = null;
                 let sellerUserSellRef = null;
@@ -311,7 +323,7 @@ export default function AdminDashboardPage() {
                     sellSnap = await transaction.get(sellOrderRef);
                 }
 
-                const orderRef = doc(firestore, 'users', order.userId, 'orders', order.id);
+                // NOW WRITES
                 transaction.update(orderRef, { status: 'failed', rejectionReason: reason, rejectedBy: adminId, rejectedAt: serverTimestamp() });
                 
                 if (sellSnap && sellSnap.exists()) {
