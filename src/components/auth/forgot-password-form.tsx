@@ -23,10 +23,12 @@ import { useRouter } from "next/navigation";
 import { getAuth, signInWithEmailAndPassword, updatePassword, signOut } from "firebase/auth";
 import { useFirestore } from "@/firebase";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
+import { Turnstile } from "./turnstile";
 
 export function ForgotPasswordForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const { toast } = useToast();
   const { translations } = useLanguage();
@@ -55,10 +57,23 @@ export function ForgotPasswordForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!turnstileToken) {
+        toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification." });
+        return;
+    }
     if (!firestore) return;
     setIsLoading(true);
 
     try {
+      // 0. Backend verification of Turnstile
+      const verifyRes = await fetch('/api/verify-turnstile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: turnstileToken }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyData.success) throw new Error("Security verification failed. Try again.");
+
       // 1. Check if user is registered in Firestore
       const userQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
       const userSnap = await getDocs(userQuery);
@@ -99,6 +114,7 @@ export function ForgotPasswordForm() {
         title: "Update Failed", 
         description: error.message || "Something went wrong." 
       });
+      setTurnstileToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -186,7 +202,13 @@ export function ForgotPasswordForm() {
             <FormMessage className="text-[10px] pl-2" />
           </div>
 
-          <Button type="submit" className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase tracking-widest shadow-teal-500/20" disabled={isLoading}>
+          <Turnstile 
+            onVerify={(token) => setTurnstileToken(token)} 
+            onExpire={() => setTurnstileToken(null)}
+            onError={() => setTurnstileToken(null)}
+          />
+
+          <Button type="submit" className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase tracking-widest shadow-teal-500/20" disabled={isLoading || !turnstileToken}>
             {isLoading ? (
               <div className="flex items-center gap-2">
                 <Loader size="xs" />

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from "react";
@@ -22,6 +21,7 @@ import { Loader } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { verifyUpiAction, type UpiVerificationResult } from "@/app/actions/upi-verification";
+import { Turnstile } from "@/components/auth/turnstile";
 
 type ProviderConfig = {
   id: string;
@@ -83,6 +83,7 @@ export default function AddCollectionPage() {
   const [selectedProvider, setSelectedProvider] = useState<ProviderConfig | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [upiId, setUpiId] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationData, setVerificationData] = useState<UpiVerificationResult | null>(null);
@@ -95,13 +96,27 @@ export default function AddCollectionPage() {
     setUpiId("");
     setVerificationData(null);
     setManualName("");
+    setTurnstileToken(null);
   };
 
   const handleVerify = async () => {
     if (!selectedProvider || !upiId) return;
+    if (!turnstileToken) {
+        toast({ variant: "destructive", title: "Human Check Required", description: "Please complete the security captcha." });
+        return;
+    }
     
     setIsVerifying(true);
     try {
+        // Backend check for turnstile first
+        const verifyCaptcha = await fetch('/api/verify-turnstile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: turnstileToken }),
+        });
+        const captchaData = await verifyCaptcha.json();
+        if (!captchaData.success) throw new Error("Security verification failed. Please refresh.");
+
         const inputUpi = upiId.trim().toLowerCase();
         const result = await verifyUpiAction(inputUpi);
 
@@ -132,6 +147,7 @@ export default function AddCollectionPage() {
     } catch (error: any) {
         toast({ variant: "destructive", title: "Verification Failed", description: error.message });
         setVerificationData(null);
+        setTurnstileToken(null); // Reset on error
     } finally {
         setIsVerifying(false);
     }
@@ -254,7 +270,7 @@ export default function AddCollectionPage() {
       </main>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-[32px] px-5 pb-8 pt-6 border-none shadow-2xl h-[80vh] overflow-y-auto no-scrollbar bg-[#F5F7FB]">
+        <SheetContent side="bottom" className="rounded-t-[32px] px-5 pb-8 pt-6 border-none shadow-2xl h-[85vh] overflow-y-auto no-scrollbar bg-[#F5F7FB]">
           <SheetHeader className="text-left mb-5">
             <div className="flex items-center gap-3 mb-1">
                 <div className="h-10 w-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center p-2 shadow-sm">
@@ -266,7 +282,7 @@ export default function AddCollectionPage() {
             </div>
           </SheetHeader>
 
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div className="space-y-1.5">
                 <Label className="text-[9px] font-black uppercase text-slate-400 ml-1 tracking-widest">Enter VPA / UPI ID</Label>
                 <div className="relative">
@@ -275,7 +291,7 @@ export default function AddCollectionPage() {
                         value={upiId}
                         onChange={(e) => { setUpiId(e.target.value.toLowerCase()); setVerificationData(null); }}
                         className="h-12 rounded-xl bg-white border-none ring-1 ring-slate-100 focus-visible:ring-primary/40 text-base font-black"
-                        disabled={isVerifying}
+                        disabled={isVerifying || !!verificationData}
                     />
                     <AnimatePresence>
                         {verificationData?.isVpaVerified && (
@@ -291,6 +307,16 @@ export default function AddCollectionPage() {
                     </AnimatePresence>
                 </div>
             </div>
+
+            {!verificationData && (
+                <div className="animate-in fade-in zoom-in-95 duration-300">
+                    <Turnstile 
+                        onVerify={(token) => setTurnstileToken(token)} 
+                        onExpire={() => setTurnstileToken(null)}
+                        onError={() => setTurnstileToken(null)}
+                    />
+                </div>
+            )}
 
             {verificationData && (
                 <motion.div 
@@ -314,7 +340,7 @@ export default function AddCollectionPage() {
             )}
 
             <div className="grid grid-cols-2 gap-3 pt-2">
-                <Button variant="outline" className="h-12 rounded-xl font-black text-slate-400 uppercase text-[10px] tracking-widest" onClick={() => setIsSheetOpen(false)} disabled={isSaving}>
+                <Button variant="outline" className="h-12 rounded-xl font-black text-slate-400 uppercase text-[10px] tracking-widest" onClick={() => setIsSheetOpen(false)} disabled={isSaving || isVerifying}>
                     Cancel
                 </Button>
                 {verificationData ? (
@@ -329,7 +355,7 @@ export default function AddCollectionPage() {
                     <Button 
                         onClick={handleVerify} 
                         className="h-12 btn-gradient rounded-xl font-black uppercase text-[10px] tracking-widest shadow-blue-500/20"
-                        disabled={isVerifying || !upiId}
+                        disabled={isVerifying || !upiId || !turnstileToken}
                     >
                         {isVerifying ? <Loader size="xs" className="mr-2" /> : "Verify ID"}
                     </Button>

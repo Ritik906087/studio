@@ -81,10 +81,10 @@ export function Turnstile({ onVerify, onExpire, onError, theme = 'auto' }: Turns
   }, [onVerify, onExpire, onError, theme]);
 
   return (
-    <div className="flex justify-center my-4 min-h-[65px]">
+    <div className="flex justify-center my-4 min-h-[70px] w-full">
       <div 
-        className="rounded-xl overflow-hidden shadow-sm ring-1 ring-slate-100 max-h-[65px]"
-        style={{ width: '300px' }}
+        className="rounded-xl overflow-hidden shadow-sm ring-1 ring-slate-100 min-h-[70px] bg-white flex items-center justify-center"
+        style={{ width: '100%', maxWidth: '300px' }}
       >
         <div ref={containerRef} />
       </div>
