@@ -10,7 +10,7 @@ import {
   Menu, X, TrendingDown, CheckCircle2, Server, 
   Edit3, Eye, Wallet, Check, RefreshCw,
   Search, ImageIcon, User as UserIcon,
-  Clock, ArrowUpRight, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap
+  Clock, ArrowUpRight, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap, Lock
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
@@ -149,7 +149,12 @@ export default function AdminDashboardPage() {
 
     const filteredSellOrders = useMemo(() => {
         const s = sellSearch.toLowerCase();
-        return sellOrders.filter(o => o.userNumericId?.includes(s) || o.orderId?.toLowerCase().includes(s) || o.status?.toLowerCase().includes(s));
+        // Show only Pending, Partially Filled, Processing
+        const activeStatuses = ['pending', 'partially_filled', 'processing'];
+        return sellOrders.filter(o => 
+            activeStatuses.includes(o.status) &&
+            (o.userNumericId?.includes(s) || o.orderId?.toLowerCase().includes(s) || o.status?.toLowerCase().includes(s))
+        );
     }, [sellOrders, sellSearch]);
 
     const filteredConfirmOrders = useMemo(() => {
@@ -413,43 +418,52 @@ export default function AdminDashboardPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {filteredSellOrders.map(o => (
-                                                <TableRow key={o.id}>
-                                                    <TableCell className="pl-6 py-4">
-                                                        <div className="flex flex-col">
-                                                            <span className="font-black text-xs text-slate-800">{o.orderId}</span>
-                                                            <span className="text-[9px] font-bold text-blue-600 uppercase">UID: {o.userNumericId}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-black text-sm text-slate-900">₹{o.amount.toFixed(2)}</span>
-                                                            <span className="text-[8px] font-bold text-slate-400 uppercase">Remaining: ₹{o.remainingAmount?.toFixed(2)}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline" className={cn("text-[8px] font-black uppercase rounded-md", 
-                                                            o.status === 'completed' ? 'bg-green-50 text-green-600 border-green-100' : 
-                                                            o.status === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-blue-50 text-blue-600'
-                                                        )}>
-                                                            {o.status}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right pr-6">
-                                                        <Select onValueChange={(v) => handleUpdateSellOrderStatus(o, v)}>
-                                                            <SelectTrigger className="h-8 w-24 text-[9px] font-black rounded-lg">
-                                                                <SelectValue placeholder="Update" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="pending">Pending</SelectItem>
-                                                                <SelectItem value="processing">Processing</SelectItem>
-                                                                <SelectItem value="completed">Completed</SelectItem>
-                                                                <SelectItem value="failed">Failed</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {filteredSellOrders.map(o => {
+                                                const isMatched = o.matchedBuyOrders && o.matchedBuyOrders.length > 0;
+                                                return (
+                                                    <TableRow key={o.id}>
+                                                        <TableCell className="pl-6 py-4">
+                                                            <div className="flex flex-col">
+                                                                <span className="font-black text-xs text-slate-800">{o.orderId}</span>
+                                                                <span className="text-[9px] font-bold text-blue-600 uppercase">UID: {o.userNumericId}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex flex-col">
+                                                                <span className="font-black text-sm text-slate-900">₹{o.amount.toFixed(2)}</span>
+                                                                <span className="text-[8px] font-bold text-slate-400 uppercase">Remaining: ₹{o.remainingAmount?.toFixed(2)}</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className={cn("text-[8px] font-black uppercase rounded-md", 
+                                                                o.status === 'completed' ? 'bg-green-50 text-green-600 border-green-100' : 
+                                                                o.status === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-blue-50 text-blue-600'
+                                                            )}>
+                                                                {o.status}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right pr-6">
+                                                            {isMatched ? (
+                                                                <div className="flex items-center justify-end gap-1.5 text-[8px] font-black text-slate-400 uppercase">
+                                                                    <Lock className="h-3 w-3" /> P2P Matched
+                                                                </div>
+                                                            ) : (
+                                                                <Select onValueChange={(v) => handleUpdateSellOrderStatus(o, v)}>
+                                                                    <SelectTrigger className="h-8 w-24 text-[9px] font-black rounded-lg">
+                                                                        <SelectValue placeholder="Update" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="pending">Pending</SelectItem>
+                                                                        <SelectItem value="processing">Processing</SelectItem>
+                                                                        <SelectItem value="completed">Completed</SelectItem>
+                                                                        <SelectItem value="failed">Failed</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            )}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
                                         </TableBody>
                                     </Table>
                                 </div>
