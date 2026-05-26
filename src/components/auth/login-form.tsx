@@ -192,8 +192,12 @@ export function LoginForm({ turnstileToken, onVerify }: LoginFormProps) {
         </form>
       </Form>
 
-      <Dialog open={isVerificationOpen} onOpenChange={setIsVerificationOpen}>
-        <DialogContent className="max-w-[340px] rounded-[16px] p-6 border-none shadow-2xl bg-white overflow-hidden select-none">
+      <Dialog open={isVerificationOpen} onOpenChange={() => {}}>
+        <DialogContent 
+          className="max-w-[340px] rounded-[16px] p-6 border-none shadow-2xl bg-white overflow-hidden select-none [&>button]:hidden"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>Security Verification</DialogTitle>
           </DialogHeader>
