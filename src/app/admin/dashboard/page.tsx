@@ -9,13 +9,13 @@ import {
   LogOut, Users, LayoutDashboard, Server, 
   Eye, Wallet, Check, RefreshCw,
   Search, ImageIcon, Clock, ArrowDownLeft, Trash2, Plus, CreditCard, Landmark, Zap,
-  Banknote, History, CheckCircle2, X, Menu, ArrowUpRight, Copy, AlertTriangle, ArrowRight, User
+  Banknote, History, CheckCircle2, X, Menu, ArrowUpRight, Copy, AlertTriangle, ArrowRight, User, ShieldCheck
 } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, collectionGroup, onSnapshot, query, where, doc, runTransaction, serverTimestamp, getDocs, limit, addDoc, Timestamp, deleteDoc } from 'firebase/firestore';
+import { collection, collectionGroup, onSnapshot, query, where, doc, runTransaction, serverTimestamp, getDocs, limit, addDoc, Timestamp, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -75,7 +75,7 @@ export default function AdminDashboardPage() {
             const now = Date.now();
             const cutoffTime = now - (30 * 60 * 1000); // 30 mins ago
 
-            // Optimized Query: Only filter by status to avoid composite index requirement
+            // Simplified query to avoid composite index
             const q = query(
                 collectionGroup(firestore, 'orders'),
                 where('status', '==', 'pending_payment')
@@ -84,13 +84,13 @@ export default function AdminDashboardPage() {
             const snap = await getDocs(q);
             if (snap.empty) return;
 
-            console.log(`[Protocol Monitor] Validating ${snap.size} active sessions...`);
+            console.log(`[Protocol Monitor] Scanning ${snap.size} active sessions...`);
 
             for (const orderDoc of snap.docs) {
                 const data = orderDoc.data();
                 const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
 
-                // Check expiration in memory
+                // Check expiration in memory logic
                 if (createdAt > 0 && createdAt < cutoffTime) {
                     const userId = data.userId;
                     
@@ -118,6 +118,17 @@ export default function AdminDashboardPage() {
                                     remainingAmount: (sData.remainingAmount || 0) + restoredAmount,
                                     status: 'partially_filled'
                                 });
+
+                                // Return balance to seller profile
+                                const sellerRef = doc(firestore, 'users', data.sellerId);
+                                const sellerProfileSnap = await transaction.get(sellerRef);
+                                if (sellerProfileSnap.exists()) {
+                                    const spData = sellerProfileSnap.data();
+                                    transaction.update(sellerRef, {
+                                        balance: (spData.balance || 0) + restoredAmount,
+                                        holdBalance: Math.max(0, (spData.holdBalance || 0) - restoredAmount)
+                                    });
+                                }
                             }
                         }
 
@@ -172,7 +183,6 @@ export default function AdminDashboardPage() {
     const fetchConfirmations = useCallback(async () => {
         if (!firestore) return;
         try {
-            // Simplified query to avoid index requirement
             const pendingQuery = query(
                 collectionGroup(firestore, 'orders'),
                 where('status', '==', 'pending_confirmation')
@@ -180,7 +190,7 @@ export default function AdminDashboardPage() {
             const snap = await getDocs(pendingQuery);
             const allPending = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            // Sorting on client side
+            // Memory sorting to avoid index requirement
             const sorted = allPending.sort((a: any, b: any) => {
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
                 const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -362,7 +372,7 @@ export default function AdminDashboardPage() {
                     const restoredAmount = order.baseAmount || order.amount;
                     const newRemaining = (sData.remainingAmount || 0) + restoredAmount;
                     
-                    transaction.update(sellOrderRef, { 
+                    transaction.update(sellerOrderRef, { 
                         remainingAmount: newRemaining, 
                         matchedBuyOrders: matches, 
                         status: 'partially_filled' 
@@ -375,6 +385,17 @@ export default function AdminDashboardPage() {
                             matchedBuyOrders: matches, 
                             status: 'partially_filled' 
                         });
+
+                        // Return balance to seller profile
+                        const sellerRef = doc(firestore, 'users', sData.userId);
+                        const sellerProfileSnap = await transaction.get(sellerRef);
+                        if (sellerProfileSnap.exists()) {
+                            const spData = sellerProfileSnap.data();
+                            transaction.update(sellerRef, {
+                                balance: (spData.balance || 0) + restoredAmount,
+                                holdBalance: Math.max(0, (spData.holdBalance || 0) - restoredAmount)
+                            });
+                        }
                     }
                 }
             });
