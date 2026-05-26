@@ -2,12 +2,15 @@
 "use client";
 
 import { LoginForm } from '@/components/auth/login-form';
+import { Turnstile } from '@/components/auth/turnstile';
 import Link from 'next/link';
 import { useLanguage } from '@/context/language-context';
 import { Smartphone } from 'lucide-react';
+import { useState } from 'react';
 
 export default function LoginPage() {
   const { translations } = useLanguage();
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   return (
     <div className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-500 py-4 flex flex-col justify-center min-h-[80vh]">
@@ -22,10 +25,22 @@ export default function LoginPage() {
       </div>
 
       <div className="bg-white/80 backdrop-blur-md rounded-[32px] p-6 shadow-xl shadow-blue-500/5 ring-1 ring-slate-100">
-        <LoginForm />
+        <LoginForm 
+          turnstileToken={turnstileToken} 
+          onVerificationError={() => setTurnstileToken(null)}
+        />
       </div>
 
-      <div className="mt-8 text-center space-y-4">
+      {/* Cloudflare Outside the Form UI */}
+      <div className="mt-4 px-2">
+        <Turnstile 
+          onVerify={(token) => setTurnstileToken(token)} 
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+        />
+      </div>
+
+      <div className="mt-4 text-center space-y-4">
         <div className="text-xs text-slate-500 font-bold">
           {translations.noAccount}{' '}
           <Link

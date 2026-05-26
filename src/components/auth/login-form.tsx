@@ -23,14 +23,17 @@ import { useAuth, useFirestore } from "@/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { Loader } from "@/components/ui/loader";
-import { Turnstile } from "./turnstile";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
 
-export function LoginForm() {
+interface LoginFormProps {
+  turnstileToken: string | null;
+  onVerificationError: () => void;
+}
+
+export function LoginForm({ turnstileToken, onVerificationError }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   
   const { translations } = useLanguage();
   const { toast } = useToast();
@@ -50,7 +53,7 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!turnstileToken) {
-      toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification." });
+      toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification below the form." });
       return;
     }
 
@@ -70,7 +73,10 @@ export function LoginForm() {
         body: JSON.stringify({ token: turnstileToken }),
       });
       const verifyData = await verifyRes.json();
-      if (!verifyData.success) throw new Error("Security verification failed. Try again.");
+      if (!verifyData.success) {
+        onVerificationError();
+        throw new Error("Security verification expired or failed. Please solve the captcha again.");
+      }
 
       // Firebase Sign In
       const email = `91${values.phone}@lgpay.app`;
@@ -96,7 +102,6 @@ export function LoginForm() {
         title: "Access Denied", 
         description: error.message || "Invalid login details" 
       });
-      setTurnstileToken(null);
       setIsLoading(false);
     }
   }
@@ -157,12 +162,6 @@ export function LoginForm() {
               <FormMessage className="text-[10px] pl-2" />
             </FormItem>
           )}
-        />
-
-        <Turnstile 
-          onVerify={(token) => setTurnstileToken(token)} 
-          onExpire={() => setTurnstileToken(null)}
-          onError={() => setTurnstileToken(null)}
         />
         
         <Button 

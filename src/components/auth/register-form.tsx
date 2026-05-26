@@ -24,14 +24,17 @@ import { useAuth, useFirestore } from "@/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs, limit, serverTimestamp } from "firebase/firestore";
 import { Loader } from "@/components/ui/loader";
-import { Turnstile } from "./turnstile";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
-export function RegisterForm() {
+interface RegisterFormProps {
+  turnstileToken: string | null;
+  onVerificationError: () => void;
+}
+
+export function RegisterForm({ turnstileToken, onVerificationError }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   
   const { toast } = useToast();
   const { translations } = useLanguage();
@@ -93,7 +96,7 @@ export function RegisterForm() {
 
   async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
     if (!turnstileToken) {
-      toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification." });
+      toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification below the form." });
       return;
     }
 
@@ -108,7 +111,10 @@ export function RegisterForm() {
           body: JSON.stringify({ token: turnstileToken }),
         });
         const verifyData = await verifyRes.json();
-        if (!verifyData.success) throw new Error("Security verification failed. Try again.");
+        if (!verifyData.success) {
+          onVerificationError();
+          throw new Error("Security verification expired or failed. Please solve the captcha again.");
+        }
 
         // Hardware Fingerprint Check
         const fingerprint = generateHardwareFingerprint();
@@ -169,7 +175,6 @@ export function RegisterForm() {
         title: "Registration Failed", 
         description: error.message 
       });
-      setTurnstileToken(null);
       setIsLoading(false);
     }
   }
@@ -263,12 +268,6 @@ export function RegisterForm() {
             I agree to the <Link href="/privacy" className="text-primary font-bold hover:underline">Privacy Policy</Link>
           </label>
         </div>
-
-        <Turnstile 
-          onVerify={(token) => setTurnstileToken(token)} 
-          onExpire={() => setTurnstileToken(null)}
-          onError={() => setTurnstileToken(null)}
-        />
 
         <Button 
           type="submit" 

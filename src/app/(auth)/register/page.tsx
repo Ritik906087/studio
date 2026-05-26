@@ -1,13 +1,18 @@
+
 "use client";
 
 import { RegisterForm } from '@/components/auth/register-form';
+import { Turnstile } from '@/components/auth/turnstile';
 import Link from 'next/link';
 import { useLanguage } from '@/context/language-context';
+import { useState } from 'react';
 
 export default function RegisterPage() {
   const { translations } = useLanguage();
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
   return (
-    <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-sm">
+    <div className="w-full animate-in fade-in slide-in-from-bottom-2 duration-500 max-w-sm py-4">
       <div className="text-center py-2 mb-4">
         <h1 className="text-2xl font-black text-slate-800 tracking-tight">
           {translations.register}
@@ -16,7 +21,19 @@ export default function RegisterPage() {
       </div>
 
       <div className="bg-white rounded-3xl p-5 shadow-sm ring-1 ring-slate-100">
-        <RegisterForm />
+        <RegisterForm 
+          turnstileToken={turnstileToken} 
+          onVerificationError={() => setTurnstileToken(null)}
+        />
+      </div>
+
+      {/* Cloudflare Outside the Form UI */}
+      <div className="mt-4 px-2">
+        <Turnstile 
+          onVerify={(token) => setTurnstileToken(token)} 
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+        />
       </div>
 
       <div className="mt-6 text-center">
