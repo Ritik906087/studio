@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,6 +26,8 @@ import { Turnstile } from "./turnstile";
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
@@ -193,6 +194,9 @@ export function LoginForm({ turnstileToken, onVerify }: LoginFormProps) {
 
       <Dialog open={isVerificationOpen} onOpenChange={setIsVerificationOpen}>
         <DialogContent className="max-w-[340px] rounded-[16px] p-6 border-none shadow-2xl bg-white overflow-hidden select-none">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Security Verification</DialogTitle>
+          </DialogHeader>
           <div className="flex flex-col items-center justify-center py-2">
              <Turnstile 
                 onVerify={handleTurnstileVerify} 

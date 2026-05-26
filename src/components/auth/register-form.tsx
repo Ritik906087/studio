@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,6 +27,8 @@ import { Turnstile } from "./turnstile";
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
@@ -298,6 +299,9 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
 
       <Dialog open={isVerificationOpen} onOpenChange={setIsVerificationOpen}>
         <DialogContent className="max-w-[340px] rounded-[16px] p-6 border-none shadow-2xl bg-white overflow-hidden select-none">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Security Verification</DialogTitle>
+          </DialogHeader>
           <div className="flex flex-col items-center justify-center py-2">
              <Turnstile 
                 onVerify={handleTurnstileVerify} 
