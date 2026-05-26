@@ -5,7 +5,7 @@ import { LoginForm } from '@/components/auth/login-form';
 import { Turnstile } from '@/components/auth/turnstile';
 import Link from 'next/link';
 import { useLanguage } from '@/context/language-context';
-import { Smartphone } from 'lucide-react';
+import { Smartphone, CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 
 export default function LoginPage() {
@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   return (
-    <div className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-500 py-4 flex flex-col justify-center min-h-[80vh]">
+    <div className="w-full max-sm animate-in fade-in slide-in-from-bottom-2 duration-500 py-4 flex flex-col justify-center min-h-[80vh]">
       <div className="text-center mb-8">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/20">
            <Smartphone className="h-7 w-7 text-white" />
@@ -31,13 +31,24 @@ export default function LoginPage() {
         />
       </div>
 
-      {/* Cloudflare Outside the Form UI */}
+      {/* Cloudflare Logic: Hide when verified */}
       <div className="mt-4 px-2">
-        <Turnstile 
-          onVerify={(token) => setTurnstileToken(token)} 
-          onExpire={() => setTurnstileToken(null)}
-          onError={() => setTurnstileToken(null)}
-        />
+        {!turnstileToken ? (
+          <div className="animate-in fade-in duration-300">
+            <Turnstile 
+              onVerify={(token) => setTurnstileToken(token)} 
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+            />
+          </div>
+        ) : (
+          <div className="flex justify-center animate-in zoom-in duration-300 py-2">
+            <div className="bg-teal-50 border border-teal-100 text-teal-600 px-5 py-2.5 rounded-2xl flex items-center gap-2 shadow-sm shadow-teal-500/5">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Identity Verified</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 text-center space-y-4">
