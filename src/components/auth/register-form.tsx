@@ -28,8 +28,6 @@ import { Turnstile } from "./turnstile";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
@@ -177,17 +175,15 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
     const isValid = await form.trigger();
     if (!isValid) return;
 
-    // Open verification modal
     setIsVerificationOpen(true);
   };
 
   const handleTurnstileVerify = (token: string) => {
     onVerify(token);
-    // Automatically close and submit after a short delay for user feedback
     setTimeout(() => {
       setIsVerificationOpen(false);
       performRegistration(form.getValues(), token);
-    }, 1000);
+    }, 800);
   };
 
   return (
@@ -300,38 +296,15 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
         </form>
       </Form>
 
-      {/* CLOUDFLARE MODAL */}
       <Dialog open={isVerificationOpen} onOpenChange={setIsVerificationOpen}>
-        <DialogContent className="max-w-[320px] rounded-[24px] p-6 border-none shadow-2xl bg-white overflow-hidden select-none">
-          <DialogHeader className="mb-4">
-             <DialogTitle className="text-center text-sm font-black uppercase text-slate-800 tracking-tight flex items-center justify-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-blue-500" />
-                Security Check
-             </DialogTitle>
-          </DialogHeader>
-          
-          <div className="flex flex-col items-center justify-center py-4 space-y-4">
-             {!turnstileToken ? (
-               <div className="animate-in fade-in zoom-in duration-300 w-full flex flex-col items-center">
-                  <Turnstile 
-                    onVerify={handleTurnstileVerify} 
-                    onExpire={() => onVerify(null)}
-                    onError={() => onVerify(null)}
-                  />
-               </div>
-             ) : (
-               <div className="flex flex-col items-center gap-2 text-teal-600 animate-in zoom-in duration-300">
-                  <div className="h-12 w-12 rounded-full bg-teal-50 flex items-center justify-center border border-teal-100">
-                    <ShieldCheck className="h-6 w-6" />
-                  </div>
-                  <p className="text-[10px] font-black uppercase tracking-widest">Verified Successfully</p>
-               </div>
-             )}
-          </div>
-
-          <div className="mt-4 pt-4 border-t flex items-center justify-center gap-2 opacity-40">
-             <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
-             <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Verifying Connection...</span>
+        <DialogContent className="max-w-[340px] rounded-[16px] p-6 border-none shadow-2xl bg-white overflow-hidden select-none">
+          <div className="flex flex-col items-center justify-center py-2">
+             <Turnstile 
+                onVerify={handleTurnstileVerify} 
+                onExpire={() => onVerify(null)}
+                onError={() => onVerify(null)}
+                theme="light"
+             />
           </div>
         </DialogContent>
       </Dialog>
