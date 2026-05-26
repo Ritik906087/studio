@@ -15,7 +15,7 @@ import { Logo } from '@/components/logo';
 import Link from 'next/link';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useFirestore } from '@/firebase';
-import { collection, collectionGroup, onSnapshot, query, orderBy, where, doc, deleteDoc, runTransaction, serverTimestamp, getDocs, limit, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, collectionGroup, onSnapshot, query, where, doc, runTransaction, serverTimestamp, getDocs, limit, addDoc, Timestamp, deleteDoc } from 'firebase/firestore';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -62,70 +62,72 @@ export default function AdminDashboardPage() {
 
     const [isAddPMOpen, setIsAddPMOpen] = useState(false);
     const [newPM, setNewPM] = useState<any>({ type: 'upi', upiId: '', upiHolderName: '', usdtWalletAddress: '', bankName: '', accountNumber: '', ifscCode: '', accountHolderName: '' });
-    
-    const [settleUTR, setSettleUTR] = useState('');
-    const [settleOrder, setSettleOrder] = useState<any>(null);
 
-    // --- ENHANCED GLOBAL AUTO-CLEANUP ---
+    const totalPool = useMemo(() => {
+        return allUsers.reduce((acc, u) => acc + (u.balance || 0), 0);
+    }, [allUsers]);
+
+    // --- ROBUST INDEX-FREE AUTO-CLEANUP ---
     const cleanupExpiredOrders = useCallback(async () => {
         if (!firestore) return;
         
         try {
             const now = Date.now();
-            const thirtyMinsAgo = new Date(now - 30 * 60 * 1000);
-            const cutoff = Timestamp.fromDate(thirtyMinsAgo);
+            const cutoffTime = now - (30 * 60 * 1000); // 30 mins ago
 
-            // Fetch ALL pending_payment orders older than 30 mins across entire DB
+            // Optimized Query: Only filter by status to avoid composite index requirement
             const q = query(
                 collectionGroup(firestore, 'orders'),
-                where('status', '==', 'pending_payment'),
-                where('createdAt', '<=', cutoff),
-                limit(30)
+                where('status', '==', 'pending_payment')
             );
 
             const snap = await getDocs(q);
             if (snap.empty) return;
 
-            console.log(`[Protocol Cleanup] Terminating ${snap.size} expired contracts...`);
+            console.log(`[Protocol Monitor] Validating ${snap.size} active sessions...`);
 
             for (const orderDoc of snap.docs) {
-                const orderData = orderDoc.data();
-                const userId = orderData.userId;
-                
-                await runTransaction(firestore, async (transaction) => {
-                    const buyerOrderRef = doc(firestore, 'users', userId, 'orders', orderDoc.id);
+                const data = orderDoc.data();
+                const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
+
+                // Check expiration in memory
+                if (createdAt > 0 && createdAt < cutoffTime) {
+                    const userId = data.userId;
                     
-                    // Release Seller Hold if it was a P2P match
-                    if (orderData.matchedSellOrderId && orderData.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(orderData.sellerId)) {
-                        const sellerOrderRef = doc(firestore, 'sellOrders', orderData.matchedSellOrderId);
-                        const sellerUserOrderRef = doc(firestore, 'users', orderData.sellerId, 'sellOrders', orderData.matchedSellOrderId);
+                    await runTransaction(firestore, async (transaction) => {
+                        const buyerOrderRef = doc(firestore, 'users', userId, 'orders', orderDoc.id);
+                        
+                        // Release Seller Hold if it was a P2P match
+                        if (data.matchedSellOrderId && data.sellerId && !['SYSTEM_VAULT', 'ADMIN'].includes(data.sellerId)) {
+                            const sellerOrderRef = doc(firestore, 'sellOrders', data.matchedSellOrderId);
+                            const sellerUserOrderRef = doc(firestore, 'users', data.sellerId, 'sellOrders', data.matchedSellOrderId);
 
-                        const sellerSnap = await transaction.get(sellerOrderRef);
-                        if (sellerSnap.exists()) {
-                            const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
-                            const updatedMatches = matchedOrders.filter((m: any) => m.buyOrderId !== orderDoc.id);
-                            const currentRemaining = sellerSnap.data().remainingAmount || 0;
-                            const orderBaseAmount = orderData.baseAmount || orderData.amount;
-                            
-                            transaction.update(sellerOrderRef, { 
-                                matchedBuyOrders: updatedMatches,
-                                remainingAmount: currentRemaining + orderBaseAmount,
-                                status: 'partially_filled'
-                            });
-                            transaction.update(sellerUserOrderRef, { 
-                                matchedBuyOrders: updatedMatches,
-                                remainingAmount: currentRemaining + orderBaseAmount,
-                                status: 'partially_filled'
-                            });
+                            const sellerSnap = await transaction.get(sellerOrderRef);
+                            if (sellerSnap.exists()) {
+                                const sData = sellerSnap.data();
+                                const matchedOrders = (sData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== orderDoc.id);
+                                const restoredAmount = data.baseAmount || data.amount;
+                                
+                                transaction.update(sellerOrderRef, { 
+                                    matchedBuyOrders: matchedOrders,
+                                    remainingAmount: (sData.remainingAmount || 0) + restoredAmount,
+                                    status: 'partially_filled'
+                                });
+                                transaction.update(sellerUserOrderRef, { 
+                                    matchedBuyOrders: matchedOrders,
+                                    remainingAmount: (sData.remainingAmount || 0) + restoredAmount,
+                                    status: 'partially_filled'
+                                });
+                            }
                         }
-                    }
 
-                    transaction.update(buyerOrderRef, {
-                        status: 'cancelled',
-                        cancellationReason: 'System: 30m Session Timeout',
-                        cancelledAt: serverTimestamp()
+                        transaction.update(buyerOrderRef, {
+                            status: 'cancelled',
+                            cancellationReason: 'System: 30m Session Timeout',
+                            cancelledAt: serverTimestamp()
+                        });
                     });
-                });
+                }
             }
         } catch (e) {
             console.error("Cleanup Protocol Error:", e);
@@ -150,7 +152,7 @@ export default function AdminDashboardPage() {
         }
 
         cleanupExpiredOrders();
-        const cleanupInterval = setInterval(cleanupExpiredOrders, 45000); // Check every 45s
+        const cleanupInterval = setInterval(cleanupExpiredOrders, 30000); // Scan every 30s
         return () => clearInterval(cleanupInterval);
     }, [router, cleanupExpiredOrders]);
 
@@ -158,8 +160,7 @@ export default function AdminDashboardPage() {
         if (!firestore) return;
         setUsersLoading(true);
         try {
-            const q = query(collection(firestore, 'users'), orderBy('createdAt', 'desc'), limit(250));
-            const snap = await getDocs(q);
+            const snap = await getDocs(collection(firestore, 'users'));
             setAllUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         } catch (e) {
             console.error(e);
@@ -171,6 +172,7 @@ export default function AdminDashboardPage() {
     const fetchConfirmations = useCallback(async () => {
         if (!firestore) return;
         try {
+            // Simplified query to avoid index requirement
             const pendingQuery = query(
                 collectionGroup(firestore, 'orders'),
                 where('status', '==', 'pending_confirmation')
@@ -178,6 +180,7 @@ export default function AdminDashboardPage() {
             const snap = await getDocs(pendingQuery);
             const allPending = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+            // Sorting on client side
             const sorted = allPending.sort((a: any, b: any) => {
                 const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
                 const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -195,7 +198,7 @@ export default function AdminDashboardPage() {
         fetchUsers();
         fetchConfirmations();
 
-        const unsubSell = onSnapshot(query(collection(firestore, 'sellOrders'), orderBy('createdAt', 'desc'), limit(150)), (snap) => {
+        const unsubSell = onSnapshot(collection(firestore, 'sellOrders'), (snap) => {
             setSellOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
@@ -382,6 +385,29 @@ export default function AdminDashboardPage() {
         } finally { setIsActionLoading(false); }
     };
 
+    const handleAddPaymentMethod = async () => {
+        if (!firestore || !newPM.type) return;
+        setIsActionLoading(true);
+        try {
+            await addDoc(collection(firestore, 'paymentMethods'), {
+                ...newPM,
+                createdAt: serverTimestamp()
+            });
+            toast({ title: "Payment Node Injected" });
+            setIsAddPMOpen(false);
+            setNewPM({ type: 'upi', upiId: '', upiHolderName: '', usdtWalletAddress: '', bankName: '', accountNumber: '', ifscCode: '', accountHolderName: '' });
+        } catch (e) { toast({ variant: 'destructive', title: 'Injection Failed' }); }
+        finally { setIsActionLoading(false); }
+    };
+
+    const handleDeletePaymentMethod = async (id: string) => {
+        if (!firestore) return;
+        try {
+            await deleteDoc(doc(firestore, 'paymentMethods', id));
+            toast({ title: "Node Terminated" });
+        } catch (e) { toast({ variant: 'destructive', title: 'Failed to delete' }); }
+    };
+
     const sidebarItems = useMemo(() => {
         const items = [
             { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -443,7 +469,7 @@ export default function AdminDashboardPage() {
                                 </Card>
                                 <Card className="border-none shadow-sm rounded-3xl p-6 bg-slate-900 text-white">
                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Pool</p>
-                                    <div className="text-3xl font-black text-primary mt-2">₹{totalBalance.toLocaleString()}</div>
+                                    <div className="text-3xl font-black text-primary mt-2">₹{totalPool.toLocaleString()}</div>
                                 </Card>
                             </div>
                             <div className="bg-blue-50 border border-blue-100 rounded-[24px] p-4 flex items-center gap-3">
@@ -481,7 +507,7 @@ export default function AdminDashboardPage() {
                             </Card>
                         </TabsContent>
 
-                        <TabsContent value="confirm" className="space-y-4">
+                        <TabsContent value="confirm" className="space-y-4 focus-visible:ring-0 outline-none">
                             <div className="flex items-center gap-3">
                                 <div className="relative flex-1">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -491,63 +517,221 @@ export default function AdminDashboardPage() {
                             </div>
                             <div className="grid gap-6">
                                 {filteredConfirmOrders.map(order => (
-                                    <Card key={order.id} className="border-none shadow-sm rounded-3xl bg-white p-0 overflow-hidden group hover:shadow-md transition-all">
-                                        <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-9 w-9 bg-white/10 rounded-xl flex items-center justify-center"><User className="h-5 w-5" /></div>
+                                    <Card key={order.id} className="border-none shadow-sm rounded-[32px] bg-white p-0 overflow-hidden group hover:shadow-md transition-all">
+                                        <div className="bg-slate-900 text-white p-5 flex justify-between items-center relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 p-8 opacity-10"><Zap className="h-20 w-20" /></div>
+                                            <div className="flex items-center gap-4 relative z-10">
+                                                <div className="h-11 w-11 bg-white/10 rounded-[18px] flex items-center justify-center border border-white/5 shadow-inner"><User className="h-6 w-6 text-blue-400" /></div>
                                                 <div>
-                                                    <p className="text-[8px] font-black uppercase text-white/40 leading-none">Buyer Identity</p>
-                                                    <p className="text-sm font-black tracking-tight">UID: {order.userNumericId}</p>
-                                                </div>
-                                            </div>
-                                            <Badge variant="outline" className="bg-white/10 text-white border-white/20 text-[8px] font-black uppercase">{order.paymentType}</Badge>
-                                        </div>
-
-                                        <div className="p-5 space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100">
-                                                    <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest">Source Node (App)</p>
-                                                    <p className="text-[11px] font-black text-blue-800 uppercase mt-1 flex items-center gap-2">
-                                                        <Zap className="h-3 w-3" /> {order.buyerSelectedProvider || "Direct Link"}
-                                                    </p>
-                                                    <p className="text-[8px] font-mono text-blue-400 mt-0.5 truncate">{order.buyerSelectedUpi || "Linked-Default"}</p>
-                                                </div>
-                                                <div className="p-3 bg-teal-50 rounded-2xl border border-teal-100">
-                                                    <p className="text-[8px] font-black text-teal-400 uppercase tracking-widest">Target Node (Receiver)</p>
-                                                    <p className="text-[11px] font-black text-teal-800 uppercase mt-1 flex items-center gap-2">
-                                                        <ArrowRight className="h-3 w-3" /> {order.sellerWithdrawalDetails?.name || "Flex Admin"}
-                                                    </p>
-                                                    <p className="text-[8px] font-mono text-teal-400 mt-0.5 truncate">{order.sellerWithdrawalDetails?.upiId || "N/A"}</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pt-2">
-                                                <div className="space-y-1">
-                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Transaction Registry</p>
-                                                    <p className="text-2xl font-black text-slate-900 tracking-tighter">₹{order.baseAmount || order.amount}</p>
+                                                    <p className="text-[9px] font-black uppercase text-blue-400/70 tracking-widest mb-0.5">Buyer Passport</p>
                                                     <div className="flex items-center gap-2">
-                                                      <p className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded uppercase">UTR: {order.utr}</p>
-                                                      <button onClick={() => handleCopy(order.utr)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                        <p className="text-base font-black tracking-tight">UID: {order.userNumericId}</p>
+                                                        <button onClick={() => handleCopy(order.userNumericId)} className="text-white/30 hover:text-white transition-colors"><Copy className="h-3 w-3" /></button>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 w-full md:w-auto">
+                                            </div>
+                                            <Badge variant="outline" className="bg-white/10 text-white border-white/20 text-[9px] font-black uppercase tracking-widest py-1 px-3 rounded-full">{order.paymentType?.replace('_', ' ')}</Badge>
+                                        </div>
+
+                                        <div className="p-6 space-y-6">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="p-4 bg-blue-50/50 rounded-[24px] border border-blue-100/50">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Source (Sender)</p>
+                                                        <div className="h-6 w-6 rounded-lg bg-blue-100 flex items-center justify-center"><ArrowUpRight className="h-3.5 w-3.5 text-blue-600" /></div>
+                                                    </div>
+                                                    <p className="text-[13px] font-black text-blue-900 uppercase flex items-center gap-2">
+                                                        <Zap className="h-3.5 w-3.5 text-blue-500" /> {order.buyerSelectedProvider || "Direct Gateway"}
+                                                    </p>
+                                                    <p className="text-[9px] font-mono font-bold text-blue-500/70 mt-1 truncate">{order.buyerSelectedUpi || "Internal-Link"}</p>
+                                                </div>
+                                                <div className="p-4 bg-teal-50/50 rounded-[24px] border border-teal-100/50">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <p className="text-[9px] font-black text-teal-400 uppercase tracking-widest">Target (Receiver)</p>
+                                                        <div className="h-6 w-6 rounded-lg bg-teal-100 flex items-center justify-center"><ArrowDownLeft className="h-3.5 w-3.5 text-teal-600" /></div>
+                                                    </div>
+                                                    <p className="text-[13px] font-black text-teal-900 uppercase flex items-center gap-2">
+                                                        <Landmark className="h-3.5 w-3.5 text-teal-500" /> {order.sellerWithdrawalDetails?.name || "Flex Vault"}
+                                                    </p>
+                                                    <p className="text-[9px] font-mono font-bold text-teal-500/70 mt-1 truncate">{order.sellerWithdrawalDetails?.upiId || "N/A"}</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col md:flex-row justify-between items-end gap-6 pt-2">
+                                                <div className="w-full md:w-auto space-y-2">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] ml-1">Asset Audit</p>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-3xl font-black text-slate-900 tabular-nums tracking-tighter">₹{(order.baseAmount || order.amount).toLocaleString()}</span>
+                                                        <div className="flex items-center gap-2 mt-1.5">
+                                                            <div className="bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 flex items-center gap-2">
+                                                                <p className="text-[10px] font-mono font-black text-slate-600 uppercase tracking-tight">UTR: {order.utr}</p>
+                                                                <button onClick={() => handleCopy(order.utr)} className="text-slate-400 hover:text-blue-500 transition-colors"><Copy className="h-3 w-3" /></button>
+                                                            </div>
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase">{order.submittedAt ? new Date(order.submittedAt.seconds * 1000).toLocaleTimeString() : '...'}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 w-full md:w-auto">
                                                     <Dialog>
-                                                        <DialogTrigger asChild><Button variant="outline" className="flex-1 md:flex-none rounded-xl h-11"><ImageIcon className="mr-2 h-4 w-4" /> View Proof</Button></DialogTrigger>
-                                                        <DialogContent className="max-w-md rounded-3xl"><div className="relative aspect-auto max-h-[70vh] overflow-hidden rounded-xl"><img src={order.screenshotURL} alt="Proof" className="w-full h-full object-contain" /></div></DialogContent>
+                                                        <DialogTrigger asChild><Button variant="outline" className="flex-1 md:flex-none rounded-2xl h-12 border-slate-200 font-bold"><ImageIcon className="mr-2 h-4 w-4" /> Proof</Button></DialogTrigger>
+                                                        <DialogContent className="max-w-[400px] rounded-[32px] p-0 border-none overflow-hidden shadow-2xl">
+                                                            <div className="relative aspect-[4/5] bg-slate-900"><img src={order.screenshotURL} alt="Proof" className="w-full h-full object-contain" /></div>
+                                                        </DialogContent>
                                                     </Dialog>
-                                                    <Button onClick={() => handleApproveBuy(order)} className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 h-11 rounded-xl font-black px-6" disabled={isActionLoading}><Check className="mr-2 h-4 w-4" /> Approve</Button>
-                                                    <Button onClick={() => handleRejectBuy(order)} variant="destructive" className="flex-1 md:flex-none h-11 rounded-xl font-black px-6" disabled={isActionLoading}><X className="mr-2 h-4 w-4" /> Reject</Button>
+                                                    <Button onClick={() => handleApproveBuy(order)} className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 h-12 rounded-2xl font-black px-8 uppercase text-[11px] tracking-widest shadow-lg shadow-green-600/20" disabled={isActionLoading}><Check className="mr-2 h-4 w-4" /> Approve</Button>
+                                                    <Button onClick={() => handleRejectBuy(order)} variant="destructive" className="flex-1 md:flex-none h-12 rounded-2xl font-black px-8 uppercase text-[11px] tracking-widest shadow-lg shadow-red-600/20" disabled={isActionLoading}><X className="mr-2 h-4 w-4" /> Reject</Button>
                                                 </div>
                                             </div>
                                         </div>
                                     </Card>
                                 ))}
-                                {filteredConfirmOrders.length === 0 && <div className="text-center py-24 opacity-30 font-black uppercase text-[10px] tracking-widest">No pending audits</div>}
+                                {filteredConfirmOrders.length === 0 && <div className="text-center py-32 opacity-20 font-black uppercase text-[11px] tracking-[0.3em]">Registry Secure • No pending audits</div>}
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="withdrawals" className="space-y-4 focus-visible:ring-0 outline-none">
+                            <div className="flex items-center gap-3">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <Input placeholder="Search UID, Order ID..." className="pl-10 h-11 bg-white rounded-xl border-none shadow-sm" value={withdrawalSearch} onChange={e => setWithdrawalSearch(e.target.value)} />
+                                </div>
+                            </div>
+                            <div className="grid gap-4">
+                                {filteredWithdrawals.map(o => (
+                                    <Card key={o.id} className="border-none shadow-sm rounded-3xl bg-white p-5 group hover:shadow-md transition-all">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-10 w-10 bg-emerald-50 rounded-xl flex items-center justify-center"><ArrowDownLeft className="h-5 w-5 text-emerald-600" /></div>
+                                                <div>
+                                                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Withdrawal Node</p>
+                                                    <p className="text-xs font-black text-slate-900">UID: {o.userNumericId}</p>
+                                                </div>
+                                            </div>
+                                            <Badge className={cn("text-[8px] font-black uppercase rounded-lg", o.status === 'processing' ? "bg-blue-100 text-blue-600" : "bg-amber-100 text-amber-600")}>
+                                                {o.status.replace('_', ' ')}
+                                            </Badge>
+                                        </div>
+
+                                        {/* P2P MATCH DETECTION */}
+                                        {o.matchedBuyOrders && o.matchedBuyOrders.length > 0 && (
+                                            <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-2xl">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                                                    <span className="text-[9px] font-black text-blue-700 uppercase tracking-tighter">Match P2P Detected</span>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    {o.matchedBuyOrders.map((m: any, idx: number) => (
+                                                        <div key={idx} className="flex items-center justify-between bg-white/50 p-2 rounded-xl border border-blue-50">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[8px] font-black text-slate-400">Buyer:</span>
+                                                                <span className="text-[10px] font-bold text-blue-900">{m.buyerNumericId || "UID_PENDING"}</span>
+                                                                <button onClick={() => handleCopy(m.buyerNumericId)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-[10px] font-black text-slate-800">₹{m.amount}</span>
+                                                                <span className={cn("text-[7px] font-black uppercase px-1.5 py-0.5 rounded", m.status === 'completed' ? "bg-green-100 text-green-600" : "bg-slate-100 text-slate-400")}>{m.status}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-2 gap-4 py-3 border-t border-dashed">
+                                            <div>
+                                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Payout Amount</p>
+                                                <p className="text-lg font-black text-slate-900">₹{o.amount.toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Receiver Method</p>
+                                                <p className="text-[10px] font-black text-slate-800 uppercase">{o.withdrawalMethod?.name}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <p className="text-[10px] font-mono font-bold text-blue-600">{o.withdrawalMethod?.upiId || o.withdrawalMethod?.accountNumber}</p>
+                                                    <button onClick={() => handleCopy(o.withdrawalMethod?.upiId || o.withdrawalMethod?.accountNumber)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
+                                            <Button size="sm" variant="ghost" className="flex-1 rounded-xl font-bold uppercase text-[9px] text-slate-400">Archive</Button>
+                                            <Button size="sm" asChild className="flex-[2] btn-gradient rounded-xl font-black uppercase text-[9px] tracking-widest shadow-blue-500/20"><Link href={`/admin/users/${o.userId}`}>Audit User Node</Link></Button>
+                                        </div>
+                                    </Card>
+                                ))}
+                                {filteredWithdrawals.length === 0 && <div className="text-center py-32 opacity-20 font-black uppercase text-[11px] tracking-widest">No active payouts</div>}
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="server" className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Node Configuration</h2>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Collection Gateways</p>
+                                </div>
+                                <Button onClick={() => setIsAddPMOpen(true)} className="rounded-xl btn-gradient font-black uppercase text-[10px] h-11 px-6 shadow-blue-500/20"><Plus className="mr-2 h-4 w-4" /> Inject Node</Button>
+                            </div>
+                            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                                {paymentMethods.map(pm => (
+                                    <Card key={pm.id} className="border-none shadow-sm rounded-3xl bg-white p-6 relative overflow-hidden group">
+                                        <div className={cn("absolute top-0 left-0 w-1.5 h-full", pm.type === 'usdt' ? "bg-amber-500" : "bg-blue-500")} />
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center p-2 shadow-inner">
+                                                {pm.type === 'usdt' ? <div className="font-black text-amber-500 text-lg">$</div> : <Landmark className="h-6 w-6 text-blue-500" />}
+                                            </div>
+                                            <Button variant="ghost" size="icon" onClick={() => handleDeletePaymentMethod(pm.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 className="h-4 w-4" /></Button>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Provider Type</p>
+                                                <p className="text-sm font-black text-slate-800 uppercase">{pm.type === 'usdt' ? 'Digital Asset (USDT)' : pm.bankName || 'UPI Gateway'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Terminal Address</p>
+                                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 group-hover:border-blue-100 transition-all">
+                                                    <span className="text-[11px] font-mono font-black text-slate-600 truncate mr-2">{pm.upiId || pm.usdtWalletAddress || pm.accountNumber}</span>
+                                                    <button onClick={() => handleCopy(pm.upiId || pm.usdtWalletAddress || pm.accountNumber)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3.5 w-3.5" /></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                ))}
                             </div>
                         </TabsContent>
                     </Tabs>
                 </main>
             </div>
+
+            {/* ADD PAYMENT NODE DIALOG */}
+            <Dialog open={isAddPMOpen} onOpenChange={setIsAddPMOpen}>
+                <DialogContent className="rounded-[32px] max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black uppercase tracking-tight">Inject Gateway Node</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold text-slate-400 uppercase">Deploy new collection endpoint</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <div className="space-y-2">
+                            <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Node Protocol</Label>
+                            <Select value={newPM.type} onValueChange={(v) => setNewPM({ ...newPM, type: v })}>
+                                <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-none font-bold uppercase"><SelectValue /></SelectTrigger>
+                                <SelectContent className="rounded-xl border-none shadow-2xl">
+                                    <SelectItem value="upi" className="font-bold">UPI GATEWAY</SelectItem>
+                                    <SelectItem value="usdt" className="font-bold">USDT TRC20</SelectItem>
+                                    <SelectItem value="bank" className="font-bold">BANK WIRE</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {newPM.type === 'upi' && (
+                            <>
+                                <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">VPA / UPI ID</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-black" placeholder="name@bank" value={newPM.upiId} onChange={e => setNewPM({...newPM, upiId: e.target.value})} /></div>
+                                <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">Holder Identity</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-black uppercase" placeholder="Verified Name" value={newPM.upiHolderName} onChange={e => setNewPM({...newPM, upiHolderName: e.target.value})} /></div>
+                            </>
+                        )}
+                        {newPM.type === 'usdt' && (
+                            <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-slate-400 ml-1">TRC20 Wallet Hash</Label><Input className="h-12 bg-slate-50 border-none rounded-xl font-mono font-bold" placeholder="T..." value={newPM.usdtWalletAddress} onChange={e => setNewPM({...newPM, usdtWalletAddress: e.target.value})} /></div>
+                        )}
+                    </div>
+                    <DialogFooter><Button onClick={handleAddPaymentMethod} className="w-full h-12 btn-gradient rounded-xl uppercase font-black text-[10px] tracking-widest shadow-blue-500/20" disabled={isActionLoading}>{isActionLoading ? "Syncing..." : "Inject Node"}</Button></DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
