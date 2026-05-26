@@ -103,7 +103,6 @@ function ConfirmPageContent() {
 
     const { data: order, loading } = useDoc<Order>(orderRef);
 
-    // --- AUTO-CANCEL TRANSACTION HELPER ---
     const triggerAutoCancel = async () => {
         if (!order || !user || !firestore || isCancelling) return;
         setIsCancelling(true);
@@ -117,18 +116,18 @@ function ConfirmPageContent() {
 
                     const sellerSnap = await transaction.get(sellerOrderRef);
                     if (sellerSnap.exists()) {
-                        const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
-                        const updatedMatches = matchedOrders.filter((m: any) => m.buyOrderId !== order.id);
-                        const currentRemaining = sellerSnap.data().remainingAmount || 0;
+                        const sData = sellerSnap.data();
+                        const updatedMatches = (sData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
+                        const restoredAmt = order.baseAmount || order.amount;
                         
                         transaction.update(sellerOrderRef, { 
                             matchedBuyOrders: updatedMatches,
-                            remainingAmount: currentRemaining + (order.baseAmount || order.amount),
+                            remainingAmount: (sData.remainingAmount || 0) + restoredAmt,
                             status: 'partially_filled'
                         });
                         transaction.update(sellerUserOrderRef, { 
                             matchedBuyOrders: updatedMatches,
-                            remainingAmount: currentRemaining + (order.baseAmount || order.amount),
+                            remainingAmount: (sData.remainingAmount || 0) + restoredAmt,
                             status: 'partially_filled'
                         });
                     }
@@ -136,13 +135,13 @@ function ConfirmPageContent() {
 
                 transaction.update(buyerOrderRef, {
                     status: 'cancelled',
-                    cancellationReason: 'Session Timeout',
+                    cancellationReason: 'Protocol Timeout (30m)',
                     cancelledAt: serverTimestamp()
                 });
             });
             router.replace('/home');
         } catch (e) {
-            console.error("Auto-cancel fail", e);
+            console.error("Auto-terminate failure", e);
         }
     };
 
@@ -161,7 +160,7 @@ function ConfirmPageContent() {
             if (diff <= 0) {
                 setTimeLeft(0);
                 clearInterval(interval);
-                triggerAutoCancel(); // Auto-cancel when timer reaches 0
+                triggerAutoCancel();
             } else {
                 setTimeLeft(diff);
             }
@@ -188,18 +187,18 @@ function ConfirmPageContent() {
 
                     const sellerSnap = await transaction.get(sellerOrderRef);
                     if (sellerSnap.exists()) {
-                        const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
-                        const updatedMatches = matchedOrders.filter((m: any) => m.buyOrderId !== order.id);
-                        const currentRemaining = sellerSnap.data().remainingAmount || 0;
+                        const sData = sellerSnap.data();
+                        const updatedMatches = (sData.matchedBuyOrders || []).filter((m: any) => m.buyOrderId !== order.id);
+                        const restoredAmt = order.baseAmount || order.amount;
                         
                         transaction.update(sellerOrderRef, { 
                             matchedBuyOrders: updatedMatches,
-                            remainingAmount: currentRemaining + (order.baseAmount || order.amount),
+                            remainingAmount: (sData.remainingAmount || 0) + restoredAmt,
                             status: 'partially_filled'
                         });
                         transaction.update(sellerUserOrderRef, { 
                             matchedBuyOrders: updatedMatches,
-                            remainingAmount: currentRemaining + (order.baseAmount || order.amount),
+                            remainingAmount: (sData.remainingAmount || 0) + restoredAmt,
                             status: 'partially_filled'
                         });
                     }
@@ -222,11 +221,11 @@ function ConfirmPageContent() {
 
     const handleConfirmSubmit = async () => {
         if (timeLeft <= 0) {
-            toast({ variant: 'destructive', title: 'Session Expired', description: 'This order has timed out.' });
+            toast({ variant: 'destructive', title: 'Session Expired' });
             return;
         }
         if (!utr || utr.length < 10) {
-            toast({ variant: 'destructive', title: 'Invalid proof', description: 'Enter full TXID or UTR.' });
+            toast({ variant: 'destructive', title: 'Invalid proof' });
             return;
         }
         if (!screenshotFile) {
@@ -249,12 +248,11 @@ function ConfirmPageContent() {
 
                     const sellerSnap = await transaction.get(sellerOrderRef);
                     if (sellerSnap.exists()) {
-                        const matchedOrders = sellerSnap.data().matchedBuyOrders || [];
-                        const updatedMatches = matchedOrders.map((m: any) => 
+                        const matchedOrders = (sellerSnap.data().matchedBuyOrders || []).map((m: any) => 
                             m.buyOrderId === orderId ? { ...m, status: 'pending_confirmation', utr: utr } : m
                         );
-                        transaction.update(sellerOrderRef, { matchedBuyOrders: updatedMatches });
-                        transaction.update(sellerUserOrderRef, { matchedBuyOrders: updatedMatches });
+                        transaction.update(sellerOrderRef, { matchedBuyOrders: matchedOrders });
+                        transaction.update(sellerUserOrderRef, { matchedBuyOrders: matchedOrders });
                     }
                 }
 
@@ -274,9 +272,7 @@ function ConfirmPageContent() {
                     amount: order.baseAmount || order.amount,
                     utr: utr
                 });
-            } catch (tgError) {
-                console.error("Telegram alert failed, but order was submitted.");
-            }
+            } catch (tgError) {}
 
             toast({ title: 'Submitted for Audit' });
             router.push(`/order/${orderId}`);
@@ -294,13 +290,9 @@ function ConfirmPageContent() {
     const isSystemOrder = order.sellerId === 'SYSTEM_VAULT' || !order.matchedSellOrderId;
 
     let qrData = "";
-    if (isUsdt) {
-        qrData = details?.walletAddress || "";
-    } else if (isSystemOrder) {
-        qrData = details?.upiId || "";
-    } else {
-        qrData = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Flex Member')}&am=${order.baseAmount.toFixed(2)}&tr=${order.orderId}&cu=INR`;
-    }
+    if (isUsdt) qrData = details?.walletAddress || "";
+    else if (isSystemOrder) qrData = details?.upiId || "";
+    else qrData = `upi://pay?pa=${details?.upiId}&pn=${encodeURIComponent(details?.name || 'Flex Member')}&am=${order.baseAmount.toFixed(2)}&tr=${order.orderId}&cu=INR`;
 
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(qrData)}`;
 
@@ -310,9 +302,7 @@ function ConfirmPageContent() {
                 <Button onClick={() => view === 'prove' ? setView('info') : router.push('/buy')} variant="ghost" size="icon" className="h-9 w-9 rounded-full bg-slate-50">
                     <ChevronLeft className="h-5 w-5 text-slate-800" />
                 </Button>
-                <h1 className="text-xs font-black uppercase tracking-widest text-slate-800">
-                    {isUsdt ? "USDT Gateway" : "Secure Payment"}
-                </h1>
+                <h1 className="text-xs font-black uppercase tracking-widest text-slate-800">{isUsdt ? "USDT Gateway" : "Secure Payment"}</h1>
                 <HelpCircle className="h-5 w-5 text-blue-500" />
             </header>
 
@@ -336,12 +326,8 @@ function ConfirmPageContent() {
                                 </div>
                             </div>
                             <div className="text-center space-y-1 pt-2">
-                                <p className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">
-                                    {isUsdt ? "TRC20 Wallet Node" : (isSystemOrder ? "Authorized QR Node" : "P2P Settlement")}
-                                </p>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic">
-                                    Identity Verified
-                                </p>
+                                <p className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">{isUsdt ? "TRC20 Wallet Node" : (isSystemOrder ? "Authorized QR Node" : "P2P Settlement")}</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest italic">Identity Verified</p>
                             </div>
                         </div>
 
@@ -368,52 +354,29 @@ function ConfirmPageContent() {
                             )}
                         </div>
 
-                        <div className={cn(
-                            "p-4 rounded-2xl border flex gap-3 items-center",
-                            isUsdt ? "bg-amber-50 border-amber-100" : "bg-blue-50 border-blue-100"
-                        )}>
+                        <div className={cn("p-4 rounded-2xl border flex gap-3 items-center", isUsdt ? "bg-amber-50 border-amber-100" : "bg-blue-50 border-blue-100")}>
                             {isUsdt ? <AlertCircle className="h-6 w-6 text-amber-600 shrink-0" /> : <ShieldCheck className="h-6 w-6 text-blue-500 shrink-0" />}
                             <p className={cn("text-[9px] font-bold uppercase leading-relaxed", isUsdt ? "text-amber-700" : "text-blue-700")}>
-                                {isUsdt 
-                                    ? "WARNING: Send ONLY USDT to this address via TRC20 network. Other tokens or networks will be permanently lost."
-                                    : "P2P Settlement active. Please pay the exact amount shown above to ensure instant asset release."
-                                }
+                                {isUsdt ? "WARNING: Send ONLY USDT to this address via TRC20 network." : "P2P Settlement active. Please pay the exact amount to ensure instant release."}
                             </p>
                         </div>
                     </div>
                 ) : (
                     <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                         <div className="p-5 bg-slate-900 text-white rounded-[24px]">
-                            <div className="flex items-center gap-3 mb-2">
-                                <Zap className="h-6 w-6 text-blue-400" />
-                                <h3 className="font-black text-sm uppercase">Audit Submission</h3>
-                            </div>
-                            <p className="text-[10px] font-bold leading-relaxed uppercase opacity-70">
-                                Enter the 12-digit UTR or Transaction ID (TXID) accurately. Wrong input will delay or fail the audit.
-                            </p>
+                            <div className="flex items-center gap-3 mb-2"><Zap className="h-6 w-6 text-blue-400" /><h3 className="font-black text-sm uppercase">Audit Submission</h3></div>
+                            <p className="text-[10px] font-bold leading-relaxed uppercase opacity-70">Enter the 12-digit UTR accurately. Wrong input will delay or fail the audit.</p>
                         </div>
-
                         <div className="space-y-5">
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Ref ID / TXID</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Ref ID / UTR</Label>
                                 <Input placeholder={isUsdt ? "Enter Transaction Hash" : "12-Digit Reference Number"} value={utr} onChange={(e) => setUtr(e.target.value)} className="h-14 rounded-2xl bg-slate-50 border-none ring-1 ring-slate-100 font-mono font-black" />
                             </div>
-
                             <div className="space-y-1.5">
                                 <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Payment Proof Screenshot</Label>
                                 <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)} />
                                 <div onClick={() => fileInputRef.current?.click()} className={cn("w-full h-44 border-2 border-dashed rounded-[32px] flex flex-col items-center justify-center cursor-pointer transition-all", screenshotFile ? "bg-teal-50 border-teal-200 text-teal-600" : "bg-slate-50 border-slate-200 text-slate-300")}>
-                                    {screenshotFile ? (
-                                        <div className="text-center space-y-2">
-                                            <div className="h-12 w-12 bg-teal-100 rounded-full flex items-center justify-center mx-auto shadow-sm"><Upload className="h-6 w-6" /></div>
-                                            <p className="text-[10px] font-black uppercase">Receipt Attached ✓</p>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center space-y-2">
-                                            <Upload className="h-8 w-8 mx-auto opacity-30" />
-                                            <p className="text-[9px] font-black uppercase opacity-40">Tap to Upload Screenshot</p>
-                                        </div>
-                                    )}
+                                    {screenshotFile ? <div className="text-center space-y-2"><div className="h-12 w-12 bg-teal-100 rounded-full flex items-center justify-center mx-auto shadow-sm"><Upload className="h-6 w-6" /></div><p className="text-[10px] font-black uppercase">Receipt Attached ✓</p></div> : <div className="text-center space-y-2"><Upload className="h-8 w-8 mx-auto opacity-30" /><p className="text-[9px] font-black uppercase opacity-40">Tap to Upload Screenshot</p></div>}
                                 </div>
                             </div>
                         </div>
@@ -422,61 +385,22 @@ function ConfirmPageContent() {
             </main>
 
             <footer className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-xl border-t grid grid-cols-2 gap-3 z-50">
-                <Button variant="outline" className="h-14 rounded-2xl text-red-500 border-red-100 font-black text-xs uppercase" onClick={() => setIsCancelDialogOpen(true)}>
-                    Cancel
-                </Button>
-
-                {view === 'info' ? (
-                    <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase">Submit Proof</Button>
-                ) : (
-                    <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 8 || !screenshotFile || timeLeft <= 0}>
-                        {isSubmitting ? "UPLOADING..." : "CONFIRM"}
-                    </Button>
-                )}
+                <Button variant="outline" className="h-14 rounded-2xl text-red-500 border-red-100 font-black text-xs uppercase" onClick={() => setIsCancelDialogOpen(true)}>Cancel</Button>
+                {view === 'info' ? <Button onClick={() => setView('prove')} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase">Submit Proof</Button> : <Button onClick={handleConfirmSubmit} className="h-14 btn-gradient rounded-2xl font-black text-xs uppercase" disabled={isSubmitting || utr.length < 8 || !screenshotFile || timeLeft <= 0}>{isSubmitting ? "UPLOADING..." : "CONFIRM"}</Button>}
             </footer>
 
             <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
                 <DialogContent className="max-w-[340px] rounded-[32px] p-6 bg-white overflow-hidden border-none shadow-2xl">
-                    <DialogHeader className="text-center mb-4">
-                        <DialogTitle className="text-xl font-black uppercase tracking-tight text-slate-800">Stop Payment?</DialogTitle>
-                        <DialogDescription className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Select cancellation reason</DialogDescription>
-                    </DialogHeader>
-                    
+                    <DialogHeader className="text-center mb-4"><DialogTitle className="text-xl font-black uppercase tracking-tight text-slate-800">Stop Payment?</DialogTitle><DialogDescription className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">Select cancellation reason</DialogDescription></DialogHeader>
                     <RadioGroup value={selectedReason} onValueChange={setSelectedReason} className="space-y-2 mb-4">
                         {cancelReasons.map((reason) => (
-                            <div key={reason} className={cn(
-                                "flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer",
-                                selectedReason === reason ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-50"
-                            )} onClick={() => setSelectedReason(reason)}>
-                                <div className="flex items-center gap-3">
-                                    <RadioGroupItem value={reason} id={reason} className="h-4 w-4" />
-                                    <Label htmlFor={reason} className="text-[11px] font-bold text-slate-700 cursor-pointer">{reason}</Label>
-                                </div>
+                            <div key={reason} className={cn("flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer", selectedReason === reason ? "bg-blue-50 border-blue-200" : "bg-slate-50 border-slate-50")} onClick={() => setSelectedReason(reason)}>
+                                <div className="flex items-center gap-3"><RadioGroupItem value={reason} id={reason} className="h-4 w-4" /><Label htmlFor={reason} className="text-[11px] font-bold text-slate-700 cursor-pointer">{reason}</Label></div>
                             </div>
                         ))}
                     </RadioGroup>
-
-                    {selectedReason === "Other" && (
-                        <div className="mb-4 animate-in slide-in-from-top-2">
-                            <Input 
-                                placeholder="Type reason..." 
-                                className="h-12 bg-slate-100 border-none rounded-xl text-xs font-bold px-4"
-                                value={customReason}
-                                onChange={(e) => setCustomReason(e.target.value)}
-                            />
-                        </div>
-                    )}
-
-                    <DialogFooter className="flex-row gap-3 mt-2">
-                        <Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase text-slate-400" onClick={() => { setIsCancelDialogOpen(false); }}>Close</Button>
-                        <Button 
-                            className="flex-[1.5] bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase" 
-                            disabled={isCancelling || !selectedReason} 
-                            onClick={handleCancelOrder}
-                        >
-                            {isCancelling ? "STOPPING..." : "Cancel Order"}
-                        </Button>
-                    </DialogFooter>
+                    {selectedReason === "Other" && <div className="mb-4 animate-in slide-in-from-top-2"><Input placeholder="Type reason..." className="h-12 bg-slate-100 border-none rounded-xl text-xs font-bold px-4" value={customReason} onChange={(e) => setCustomReason(e.target.value)} /></div>}
+                    <DialogFooter className="flex-row gap-3 mt-2"><Button variant="ghost" className="flex-1 rounded-xl text-[10px] font-black uppercase text-slate-400" onClick={() => { setIsCancelDialogOpen(false); }}>Close</Button><Button className="flex-[1.5] bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase" disabled={isCancelling || !selectedReason} onClick={handleCancelOrder}>{isCancelling ? "STOPPING..." : "Cancel Order"}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>
