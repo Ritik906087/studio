@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, Zap, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, Zap, ShieldCheck, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +25,12 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs, limit, serverTimestamp } from "firebase/firestore";
 import { Loader } from "@/components/ui/loader";
 import { Turnstile } from "./turnstile";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const defaultAvatarUrl = "https://firebasestorage.googleapis.com/v0/b/studio-7631087921-85112.firebasestorage.app/o/LG%20PAY%20AVATAR.png?alt=media&token=707ce79d-15fa-4e58-9d1d-a7d774cfe5ec";
 
@@ -36,6 +42,7 @@ interface RegisterFormProps {
 export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isVerificationOpen, setIsVerificationOpen] = useState(false);
   
   const { toast } = useToast();
   const { translations } = useLanguage();
@@ -95,12 +102,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
     return btoa(raw).replace(/[/+=]/g, '').slice(0, 32).toUpperCase();
   };
 
-  async function onRegisterSubmit(values: z.infer<typeof registerSchema>) {
-    if (!turnstileToken) {
-      toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification." });
-      return;
-    }
-
+  async function performRegistration(values: z.infer<typeof registerSchema>, token: string) {
     if (!auth || !firestore) return;
     setIsLoading(true);
 
@@ -108,12 +110,12 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
         const verifyRes = await fetch('/api/verify-turnstile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: turnstileToken }),
+          body: JSON.stringify({ token: token }),
         });
         const verifyData = await verifyRes.json();
         if (!verifyData.success) {
           onVerify(null);
-          throw new Error("Security verification expired. Please solve again.");
+          throw new Error("Security verification expired. Please try again.");
         }
 
         const fingerprint = generateHardwareFingerprint();
@@ -170,132 +172,169 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
     }
   }
 
+  const handlePreSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const isValid = await form.trigger();
+    if (!isValid) return;
+
+    // Open verification modal
+    setIsVerificationOpen(true);
+  };
+
+  const handleTurnstileVerify = (token: string) => {
+    onVerify(token);
+    // Automatically close and submit after a short delay for user feedback
+    setTimeout(() => {
+      setIsVerificationOpen(false);
+      performRegistration(form.getValues(), token);
+    }, 1000);
+  };
+
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onRegisterSubmit)} className="flex flex-col gap-6">
-        {/* INNER UI CARD (FIELDS ONLY) */}
-        <div className="bg-white rounded-[32px] p-5 shadow-sm ring-1 ring-slate-100 space-y-3">
-          <FormField
-            control={form.control}
-            name="phone"
-            render={({ field }) => (
-              <FormItem className="space-y-1">
-                <div className="relative flex items-center group">
-                  <div className="absolute left-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-slate-400 group-focus-within:text-primary transition-colors pr-2.5 border-r">
-                    <span className="font-bold">+91</span>
+    <>
+      <Form {...form}>
+        <form onSubmit={handlePreSubmit} className="flex flex-col gap-6">
+          <div className="bg-white rounded-[32px] p-5 shadow-sm ring-1 ring-slate-100 space-y-3">
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative flex items-center group">
+                    <div className="absolute left-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-slate-400 group-focus-within:text-primary transition-colors pr-2.5 border-r">
+                      <span className="font-bold">+91</span>
+                    </div>
+                    <FormControl>
+                      <Input type="tel" placeholder="Mobile Number" className="pl-14 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
+                    </FormControl>
                   </div>
-                  <FormControl>
-                    <Input type="tel" placeholder="Mobile Number" className="pl-14 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
-                  </FormControl>
-                </div>
-                <FormMessage className="text-[10px] pl-2" />
-              </FormItem>
-            )}
-          />
-          
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem className="space-y-1">
-                <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                    <LockKeyhole className="h-4 w-4" />
+                  <FormMessage className="text-[10px] pl-2" />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <LockKeyhole className="h-4 w-4" />
+                    </div>
+                    <FormControl>
+                      <Input type={showPassword ? "text" : "password"} placeholder="Create Password" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" {...field} />
+                    </FormControl>
+                    <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
-                  <FormControl>
-                    <Input type={showPassword ? "text" : "password"} placeholder="Create Password" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" {...field} />
-                  </FormControl>
-                  <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" onClick={() => setShowPassword(!showPassword)}>
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                <FormMessage className="text-[10px] pl-2" />
-              </FormItem>
-            )}
-          />
+                  <FormMessage className="text-[10px] pl-2" />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="confirmPassword"
-            render={({ field }) => (
-              <FormItem className="space-y-1">
-                <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                    <KeyRound className="h-4 w-4" />
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <KeyRound className="h-4 w-4" />
+                    </div>
+                    <FormControl>
+                      <Input type={showPassword ? "text" : "password"} placeholder="Confirm Password" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" {...field} />
+                    </FormControl>
                   </div>
-                  <FormControl>
-                    <Input type={showPassword ? "text" : "password"} placeholder="Confirm Password" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" {...field} />
-                  </FormControl>
-                </div>
-                <FormMessage className="text-[10px] pl-2" />
-              </FormItem>
-            )}
-          />
+                  <FormMessage className="text-[10px] pl-2" />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="invitationCode"
-            render={({ field }) => (
-              <FormItem className="space-y-1">
-                <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                    <Zap className="h-3.5 w-3.5" />
+            <FormField
+              control={form.control}
+              name="invitationCode"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <Zap className="h-3.5 w-3.5" />
+                    </div>
+                    <FormControl>
+                      <Input 
+                        placeholder="Invitation Code" 
+                        className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px] font-bold tracking-widest disabled:opacity-70 disabled:cursor-not-allowed" 
+                        {...field} 
+                        disabled={!!invitationCodeFromUrl}
+                      />
+                    </FormControl>
                   </div>
-                  <FormControl>
-                    <Input 
-                      placeholder="Invitation Code" 
-                      className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px] font-bold tracking-widest disabled:opacity-70 disabled:cursor-not-allowed" 
-                      {...field} 
-                      disabled={!!invitationCodeFromUrl}
-                    />
-                  </FormControl>
-                </div>
-                <FormMessage className="text-[10px] pl-2" />
-              </FormItem>
-            )}
-          />
+                  <FormMessage className="text-[10px] pl-2" />
+                </FormItem>
+              )}
+            />
 
-          <div className="flex items-center space-x-2 py-1">
-            <Checkbox id="agreement" onCheckedChange={(checked) => form.setValue("agreement", checked === true)} checked={form.watch("agreement")} />
-            <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium leading-none cursor-pointer">
-              I agree to the <Link href="/privacy" className="text-primary font-bold hover:underline">Privacy Policy</Link>
-            </label>
+            <div className="flex items-center space-x-2 py-1">
+              <Checkbox id="agreement" onCheckedChange={(checked) => form.setValue("agreement", checked === true)} checked={form.watch("agreement")} />
+              <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium leading-none cursor-pointer">
+                I agree to the <Link href="/privacy" className="text-primary font-bold hover:underline">Privacy Policy</Link>
+              </label>
+            </div>
           </div>
-        </div>
 
-        {/* OUTSIDE UI - CLOUDFLARE AND BUTTON */}
-        <div className="space-y-4 px-2">
-          {!turnstileToken ? (
-            <div className="animate-in fade-in duration-300">
-              <Turnstile 
-                onVerify={(token) => onVerify(token)} 
-                onExpire={() => onVerify(null)}
-                onError={() => onVerify(null)}
-              />
-            </div>
-          ) : (
-            <div className="flex justify-center animate-in zoom-in duration-300 py-1">
-              <div className="bg-teal-50 border border-teal-100 text-teal-600 px-5 py-2.5 rounded-2xl flex items-center gap-2 shadow-sm shadow-teal-500/5">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Identity Verified</span>
-              </div>
-            </div>
-          )}
+          <div className="px-2">
+            <Button 
+              type="submit" 
+              className="w-full btn-gradient rounded-[22px] h-14 text-sm font-black shadow-teal-500/20 uppercase tracking-widest" 
+              disabled={isLoading}
+            >
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader size="xs" className="h-4 w-4" />
+                    <span>SECURING...</span>
+                  </div>
+                ) : "REGISTER"}
+            </Button>
+          </div>
+        </form>
+      </Form>
 
-          <Button 
-            type="submit" 
-            className="w-full btn-gradient rounded-[22px] h-14 text-sm font-black shadow-teal-500/20 uppercase tracking-widest" 
-            disabled={isLoading || !turnstileToken}
-          >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader size="xs" className="h-4 w-4" />
-                  <span>SECURING...</span>
-                </div>
-              ) : "REGISTER"}
-          </Button>
-        </div>
-      </form>
-    </Form>
+      {/* CLOUDFLARE MODAL */}
+      <Dialog open={isVerificationOpen} onOpenChange={setIsVerificationOpen}>
+        <DialogContent className="max-w-[320px] rounded-[24px] p-6 border-none shadow-2xl bg-white overflow-hidden select-none">
+          <DialogHeader className="mb-4">
+             <DialogTitle className="text-center text-sm font-black uppercase text-slate-800 tracking-tight flex items-center justify-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-blue-500" />
+                Security Check
+             </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex flex-col items-center justify-center py-4 space-y-4">
+             {!turnstileToken ? (
+               <div className="animate-in fade-in zoom-in duration-300 w-full flex flex-col items-center">
+                  <Turnstile 
+                    onVerify={handleTurnstileVerify} 
+                    onExpire={() => onVerify(null)}
+                    onError={() => onVerify(null)}
+                  />
+               </div>
+             ) : (
+               <div className="flex flex-col items-center gap-2 text-teal-600 animate-in zoom-in duration-300">
+                  <div className="h-12 w-12 rounded-full bg-teal-50 flex items-center justify-center border border-teal-100">
+                    <ShieldCheck className="h-6 w-6" />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-widest">Verified Successfully</p>
+               </div>
+             )}
+          </div>
+
+          <div className="mt-4 pt-4 border-t flex items-center justify-center gap-2 opacity-40">
+             <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
+             <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Verifying Connection...</span>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

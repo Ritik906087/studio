@@ -13,8 +13,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Smartphone, LockKeyhole, Eye, EyeOff, CheckCircle2 } from "lucide-react";
-import { useState } from "react";
+import { Smartphone, LockKeyhole, Eye, EyeOff, ShieldCheck, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
 import Link from 'next/link';
 import { useLanguage } from "@/context/language-context";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +24,12 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { Loader } from "@/components/ui/loader";
 import { Turnstile } from "./turnstile";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const ADMIN_PHONES = ['9955557336', '9060873927'];
 
@@ -35,12 +41,14 @@ interface LoginFormProps {
 export function LoginForm({ turnstileToken, onVerify }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isVerificationOpen, setIsVerificationOpen] = useState(false);
   
   const { translations } = useLanguage();
   const { toast } = useToast();
   const router = useRouter();
   const auth = useAuth();
   const firestore = useFirestore();
+  const formRef = useRef<HTMLFormElement>(null);
 
   const formSchema = z.object({
     phone: z.string().length(10, { message: translations.phoneRequired }).regex(/^[6-9]\d{9}$/, { message: translations.phoneInvalid }),
@@ -52,17 +60,8 @@ export function LoginForm({ turnstileToken, onVerify }: LoginFormProps) {
     defaultValues: { phone: "", password: "" },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!turnstileToken) {
-      toast({ variant: "destructive", title: "Security Check", description: "Please complete human verification." });
-      return;
-    }
-
-    if (ADMIN_PHONES.includes(values.phone)) {
-      toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
-      return;
-    }
-    
+  // This is called AFTER Turnstile verification succeeds
+  async function performLogin(values: z.infer<typeof formSchema>, token: string) {
     if (!auth || !firestore) return;
     setIsLoading(true);
 
@@ -70,12 +69,13 @@ export function LoginForm({ turnstileToken, onVerify }: LoginFormProps) {
       const verifyRes = await fetch('/api/verify-turnstile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: turnstileToken }),
+        body: JSON.stringify({ token: token }),
       });
       const verifyData = await verifyRes.json();
+      
       if (!verifyData.success) {
         onVerify(null);
-        throw new Error("Security verification expired. Please solve again.");
+        throw new Error("Security verification expired. Please try again.");
       }
 
       const email = `91${values.phone}@lgpay.app`;
@@ -95,100 +95,143 @@ export function LoginForm({ turnstileToken, onVerify }: LoginFormProps) {
     }
   }
 
+  const handlePreSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const isValid = await form.trigger();
+    if (!isValid) return;
+
+    const values = form.getValues();
+    if (ADMIN_PHONES.includes(values.phone)) {
+      toast({ variant: "destructive", title: "Access Restricted", description: "Use admin gateway." });
+      return;
+    }
+
+    // Open verification modal
+    setIsVerificationOpen(true);
+  };
+
+  const handleTurnstileVerify = (token: string) => {
+    onVerify(token);
+    // Automatically close and submit
+    setTimeout(() => {
+      setIsVerificationOpen(false);
+      performLogin(form.getValues(), token);
+    }, 1000);
+  };
+
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
-        {/* INNER UI CARD (FIELDS ONLY) */}
-        <div className="bg-white/80 backdrop-blur-md rounded-[32px] p-6 shadow-xl shadow-blue-500/5 ring-1 ring-slate-100 space-y-4">
-          <FormField
-            control={form.control}
-            name="phone"
-            render={({ field }) => (
-              <FormItem className="space-y-1">
-                <div className="relative group">
-                   <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400 group-focus-within:text-primary transition-colors border-r pr-2.5">
-                    <Smartphone className="h-4 w-4" />
-                    <span className="font-bold text-xs">+91</span>
+    <>
+      <Form {...form}>
+        <form onSubmit={handlePreSubmit} className="flex flex-col gap-6">
+          <div className="bg-white/80 backdrop-blur-md rounded-[32px] p-6 shadow-xl shadow-blue-500/5 ring-1 ring-slate-100 space-y-4">
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400 group-focus-within:text-primary transition-colors border-r pr-2.5">
+                      <Smartphone className="h-4 w-4" />
+                      <span className="font-bold text-xs">+91</span>
+                    </div>
+                    <FormControl>
+                      <Input 
+                        type="tel" 
+                        placeholder={translations.phoneNumber} 
+                        className="pl-[74px] h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
+                        maxLength={10} 
+                        {...field} 
+                      />
+                    </FormControl>
                   </div>
-                  <FormControl>
-                    <Input 
-                      type="tel" 
-                      placeholder={translations.phoneNumber} 
-                      className="pl-[74px] h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
-                      maxLength={10} 
-                      {...field} 
-                    />
-                  </FormControl>
-                </div>
-                <FormMessage className="text-[10px] pl-2" />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem className="space-y-1">
-                <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                    <LockKeyhole className="h-4 w-4" />
+                  <FormMessage className="text-[10px] pl-2" />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <LockKeyhole className="h-4 w-4" />
+                    </div>
+                    <FormControl>
+                      <Input 
+                        type={showPassword ? "text" : "password"} 
+                        placeholder={translations.password} 
+                        className="px-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
+                        {...field} 
+                      />
+                    </FormControl>
+                    <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 active:text-primary" onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
-                  <FormControl>
-                    <Input 
-                      type={showPassword ? "text" : "password"} 
-                      placeholder={translations.password} 
-                      className="px-11 h-12 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" 
-                      {...field} 
-                    />
-                  </FormControl>
-                  <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 active:text-primary" onClick={() => setShowPassword(!showPassword)}>
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                <div className="flex justify-end pt-0.5">
-                  <Link href="/forgot-password" weights="bold" className="text-[10px] font-black text-teal-600 uppercase tracking-wider hover:opacity-70">
-                    {translations.forgotPassword}
-                  </Link>
-                </div>
-                <FormMessage className="text-[10px] pl-2" />
-              </FormItem>
-            )}
-          />
-        </div>
+                  <div className="flex justify-end pt-0.5">
+                    <Link href="/forgot-password" weights="bold" className="text-[10px] font-black text-teal-600 uppercase tracking-wider hover:opacity-70">
+                      {translations.forgotPassword}
+                    </Link>
+                  </div>
+                  <FormMessage className="text-[10px] pl-2" />
+                </FormItem>
+              )}
+            />
+          </div>
 
-        {/* OUTSIDE UI - CLOUDFLARE AND BUTTON */}
-        <div className="space-y-4 px-2">
-          {!turnstileToken ? (
-            <div className="animate-in fade-in duration-300">
-              <Turnstile 
-                onVerify={(token) => onVerify(token)} 
-                onExpire={() => onVerify(null)}
-                onError={() => onVerify(null)}
-              />
-            </div>
-          ) : (
-            <div className="flex justify-center animate-in zoom-in duration-300 py-1">
-              <div className="bg-teal-50 border border-teal-100 text-teal-600 px-5 py-2.5 rounded-2xl flex items-center gap-2 shadow-sm shadow-teal-500/5">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Identity Verified</span>
-              </div>
-            </div>
-          )}
+          <div className="px-2">
+            <Button 
+              type="submit" 
+              className="w-full btn-gradient rounded-[22px] h-14 text-sm font-black shadow-teal-500/20 uppercase tracking-widest" 
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader size="xs" className="h-4 w-4" />
+                  <span>{translations.loggingIn}</span>
+                </div>
+              ) : translations.login}
+            </Button>
+          </div>
+        </form>
+      </Form>
 
-          <Button 
-            type="submit" 
-            className="w-full btn-gradient rounded-[22px] h-14 text-sm font-black shadow-teal-500/20 uppercase tracking-widest" 
-            disabled={isLoading || !turnstileToken}
-          >
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <Loader size="xs" className="h-4 w-4" />
-                <span>{translations.loggingIn}</span>
-              </div>
-            ) : translations.login}
-          </Button>
-        </div>
-      </form>
-    </Form>
+      {/* CLOUDFLARE MODAL */}
+      <Dialog open={isVerificationOpen} onOpenChange={setIsVerificationOpen}>
+        <DialogContent className="max-w-[320px] rounded-[24px] p-6 border-none shadow-2xl bg-white overflow-hidden select-none">
+          <DialogHeader className="mb-4">
+             <DialogTitle className="text-center text-sm font-black uppercase text-slate-800 tracking-tight flex items-center justify-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-blue-500" />
+                Security Check
+             </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex flex-col items-center justify-center py-4 space-y-4">
+             {!turnstileToken ? (
+               <div className="animate-in fade-in zoom-in duration-300 w-full flex flex-col items-center">
+                  <Turnstile 
+                    onVerify={handleTurnstileVerify} 
+                    onExpire={() => onVerify(null)}
+                    onError={() => onVerify(null)}
+                  />
+               </div>
+             ) : (
+               <div className="flex flex-col items-center gap-2 text-teal-600 animate-in zoom-in duration-300">
+                  <div className="h-12 w-12 rounded-full bg-teal-50 flex items-center justify-center border border-teal-100">
+                    <ShieldCheck className="h-6 w-6" />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-widest">Verified Successfully</p>
+               </div>
+             )}
+          </div>
+
+          <div className="mt-4 pt-4 border-t flex items-center justify-center gap-2 opacity-40">
+             <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
+             <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Verifying Connection...</span>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
