@@ -158,8 +158,8 @@ export default function BuyPage() {
     try {
         const rawOrderId = generateRawOrderId();
         const displayOrderId = "#" + rawOrderId;
-        const bonusPercent = 5; // Reduced from 6
-        const flatBonus = 5;
+        const bonusPercent = 5; 
+        const flatBonus = 0; // Removed flat 5 bonus
         const totalAmount = amountInInr + (amountInInr * bonusPercent / 100) + flatBonus;
         const buyOrderRef = doc(firestore, 'users', user.uid, 'orders', rawOrderId);
 
@@ -357,7 +357,7 @@ export default function BuyPage() {
 
                 <div className="divide-y divide-slate-50 pb-24">
                     {filteredOptions.map((opt) => {
-                        const reward = (opt.amount * 0.05) + 5; // Updated to 5%
+                        const reward = (opt.amount * 0.05); // Updated to 5% only
                         const total = opt.amount + reward;
                         return (
                             <div key={opt.id} className="p-4 flex flex-col gap-3 bg-white active:bg-slate-50 transition-colors">
@@ -366,7 +366,7 @@ export default function BuyPage() {
                                         <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
                                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Hash: {opt.id}</span>
                                     </div>
-                                    <span className="text-[10px] text-blue-500 font-black uppercase tracking-tight bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">Bonus 5%+₹5</span>
+                                    <span className="text-[10px] text-blue-500 font-black uppercase tracking-tight bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">Bonus 5%</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">

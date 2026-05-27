@@ -61,7 +61,7 @@ const faqList = [
     icon: <Zap className="h-4 w-4 text-orange-500" />,
     steps: [
       'Newbie Reward: Complete all tasks (Join Telegram, Watch FAQ, etc.) to get a ₹300 bonus.',
-      'Trading Bonus: Get a 5.0% + ₹5 instant bonus on every buy order.',
+      'Trading Bonus: Get a 5.0% instant bonus on every buy order.',
       'Affiliate Bonus (L1): Earn 1% of the trade value whenever your direct invitee buys.',
       'Affiliate Bonus (L2): Earn 0.8% of the trade value from your level 2 network.',
       'Daily Tasks: Reach trading milestones every day to claim cash rewards in the "Rewards" section.'

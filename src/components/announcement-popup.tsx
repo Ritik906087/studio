@@ -92,7 +92,7 @@ export function AnnouncementPopup() {
           <div className="p-3 bg-slate-900 rounded-xl text-white">
              <div className="flex justify-between items-center border-b border-white/10 pb-1">
                 <span className="font-black uppercase text-[8px] text-blue-400">Buy Reward</span>
-                <span className="font-black text-blue-400">5% + ₹5</span>
+                <span className="font-black text-blue-400">5%</span>
              </div>
              <p className="font-bold text-[9px] text-slate-400 mt-1">Get bonus on every purchase injected instantly.</p>
           </div>
