@@ -24,6 +24,7 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, collection, query, where, getDocs, limit, serverTimestamp } from "firebase/firestore";
 import { Loader } from "@/components/ui/loader";
 import { Turnstile } from "./turnstile";
+import { sendOtpAction } from "@/app/actions/otp";
 import {
   Dialog,
   DialogContent,
@@ -40,8 +41,11 @@ interface RegisterFormProps {
 
 export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isOtpSending, setIsOtpSending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isVerificationOpen, setIsVerificationOpen] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [sentOtp, setSentOtp] = useState<string | null>(null);
   
   const { toast } = useToast();
   const { translations } = useLanguage();
@@ -55,6 +59,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
   const registerSchema = z
     .object({
       phone: z.string().length(10, { message: translations.phoneRequired }).regex(/^[6-9]\d{9}$/, { message: translations.phoneInvalid }),
+      otp: z.string().length(6, { message: "OTP must be 6 digits" }),
       password: z.string().min(6, { message: translations.passwordMin }),
       confirmPassword: z.string(),
       invitationCode: z.string().min(1, { message: translations.invitationCodeRequired }),
@@ -64,7 +69,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
 
   const form = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { phone: "", password: "", confirmPassword: "", invitationCode: invitationCodeFromUrl, agreement: false },
+    defaultValues: { phone: "", otp: "", password: "", confirmPassword: "", invitationCode: invitationCodeFromUrl, agreement: false },
   });
 
   useEffect(() => {
@@ -72,6 +77,38 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
       form.setValue("invitationCode", invitationCodeFromUrl);
     }
   }, [invitationCodeFromUrl, form]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(prev => prev - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  const handleGetOtp = async () => {
+    const phone = form.getValues("phone");
+    if (!phone || phone.length !== 10 || !/^[6-9]\d{9}$/.test(phone)) {
+      form.setError("phone", { message: translations.phoneInvalid });
+      return;
+    }
+
+    setIsOtpSending(true);
+    try {
+      const res = await sendOtpAction(phone);
+      if (res.success && res.otp) {
+        setSentOtp(res.otp);
+        setCountdown(60);
+        toast({ title: "OTP Sent", description: "Verification code sent to your mobile." });
+      } else {
+        throw new Error(res.error);
+      }
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "OTP Error", description: e.message });
+    } finally {
+      setIsOtpSending(false);
+    }
+  };
 
   const generateHardwareFingerprint = () => {
     let gpuInfo = "Unknown";
@@ -103,6 +140,13 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
 
   async function performRegistration(values: z.infer<typeof registerSchema>, token: string) {
     if (!auth || !firestore) return;
+
+    // Verify OTP
+    if (values.otp !== sentOtp) {
+      toast({ variant: "destructive", title: "Verification Failed", description: "The OTP you entered is incorrect." });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -122,7 +166,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
         const fingerprintSnap = await getDocs(fingerprintQuery);
         
         if (!fingerprintSnap.empty) {
-          throw new Error("Already account created by this device please login");
+          throw new Error("Account already exists on this device. Please login.");
         }
 
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
@@ -176,6 +220,11 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
     const isValid = await form.trigger();
     if (!isValid) return;
 
+    if (!sentOtp) {
+      toast({ variant: "destructive", title: "OTP Required", description: "Please get and verify OTP first." });
+      return;
+    }
+
     setIsVerificationOpen(true);
   };
 
@@ -202,7 +251,33 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
                       <span className="font-bold">+91</span>
                     </div>
                     <FormControl>
-                      <Input type="tel" placeholder="Mobile Number" className="pl-14 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
+                      <Input type="tel" placeholder="Mobile Number" className="pl-14 pr-24 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
+                    </FormControl>
+                    <Button 
+                      type="button" 
+                      onClick={handleGetOtp} 
+                      disabled={isOtpSending || countdown > 0} 
+                      className="absolute right-1.5 h-8 px-3 rounded-xl bg-primary text-[9px] font-black uppercase tracking-widest shadow-none"
+                    >
+                      {isOtpSending ? <Loader2 className="h-3 w-3 animate-spin" /> : (countdown > 0 ? `${countdown}s` : "Get OTP")}
+                    </Button>
+                  </div>
+                  <FormMessage className="text-[10px] pl-2" />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="otp"
+              render={({ field }) => (
+                <FormItem className="space-y-1">
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <Zap className="h-3.5 w-3.5" />
+                    </div>
+                    <FormControl>
+                      <Input placeholder="Enter 6-digit OTP" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={6} {...field} />
                     </FormControl>
                   </div>
                   <FormMessage className="text-[10px] pl-2" />
@@ -284,7 +359,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
             <Button 
               type="submit" 
               className="w-full btn-gradient rounded-[22px] h-14 text-sm font-black shadow-teal-500/20 uppercase tracking-widest" 
-              disabled={isLoading}
+              disabled={isLoading || !turnstileToken && !!sentOtp}
             >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
