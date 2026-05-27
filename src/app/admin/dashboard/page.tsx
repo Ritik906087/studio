@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -84,8 +83,6 @@ export default function AdminDashboardPage() {
             const snap = await getDocs(q);
             if (snap.empty) return;
 
-            console.log(`[Protocol Monitor] Scanning ${snap.size} active sessions...`);
-
             for (const orderDoc of snap.docs) {
                 const data = orderDoc.data();
                 const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : 0;
@@ -163,7 +160,7 @@ export default function AdminDashboardPage() {
         }
 
         cleanupExpiredOrders();
-        const cleanupInterval = setInterval(cleanupExpiredOrders, 30000); // Scan every 30s
+        const cleanupInterval = setInterval(cleanupExpiredOrders, 45000); 
         return () => clearInterval(cleanupInterval);
     }, [router, cleanupExpiredOrders]);
 
@@ -386,7 +383,6 @@ export default function AdminDashboardPage() {
                             status: 'partially_filled' 
                         });
 
-                        // Return balance to seller profile
                         const sellerRef = doc(firestore, 'users', sData.userId);
                         const sellerProfileSnap = await transaction.get(sellerRef);
                         if (sellerProfileSnap.exists()) {
@@ -414,7 +410,7 @@ export default function AdminDashboardPage() {
                 ...newPM,
                 createdAt: serverTimestamp()
             });
-            toast({ title: "Payment Node Injected" });
+            toast({ title: "Node Injected" });
             setIsAddPMOpen(false);
             setNewPM({ type: 'upi', upiId: '', upiHolderName: '', usdtWalletAddress: '', bankName: '', accountNumber: '', ifscCode: '', accountHolderName: '' });
         } catch (e) { toast({ variant: 'destructive', title: 'Injection Failed' }); }
@@ -492,13 +488,6 @@ export default function AdminDashboardPage() {
                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Pool</p>
                                     <div className="text-3xl font-black text-primary mt-2">₹{totalPool.toLocaleString()}</div>
                                 </Card>
-                            </div>
-                            <div className="bg-blue-50 border border-blue-100 rounded-[24px] p-4 flex items-center gap-3">
-                                <AlertTriangle className="h-5 w-5 text-blue-500" />
-                                <div className="flex-1">
-                                    <p className="text-[11px] font-black text-blue-800 uppercase tracking-tight">Active Protocol Monitoring</p>
-                                    <p className="text-[10px] text-blue-600 font-bold uppercase mt-0.5">System automatically cancels unpaid orders after 30 minutes to release liquidity.</p>
-                                </div>
                             </div>
                         </TabsContent>
 
@@ -588,7 +577,6 @@ export default function AdminDashboardPage() {
                                                                 <p className="text-[10px] font-mono font-black text-slate-600 uppercase tracking-tight">UTR: {order.utr}</p>
                                                                 <button onClick={() => handleCopy(order.utr)} className="text-slate-400 hover:text-blue-500 transition-colors"><Copy className="h-3 w-3" /></button>
                                                             </div>
-                                                            <span className="text-[8px] font-bold text-slate-400 uppercase">{order.submittedAt ? new Date(order.submittedAt.seconds * 1000).toLocaleTimeString() : '...'}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -633,7 +621,6 @@ export default function AdminDashboardPage() {
                                             </Badge>
                                         </div>
 
-                                        {/* P2P MATCH DETECTION */}
                                         {o.matchedBuyOrders && o.matchedBuyOrders.length > 0 && (
                                             <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-2xl">
                                                 <div className="flex items-center gap-2 mb-2">
@@ -646,7 +633,7 @@ export default function AdminDashboardPage() {
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-[8px] font-black text-slate-400">Buyer:</span>
                                                                 <span className="text-[10px] font-bold text-blue-900">{m.buyerNumericId || "UID_PENDING"}</span>
-                                                                <button onClick={() => handleCopy(m.buyerNumericId)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
+                                                                <button onClick={() => handleCopy(m.buyerNumericId)} className="text-slate-300 hover:text-blue-500 transition-colors"><Copy className="h-3 w-3" /></button>
                                                             </div>
                                                             <div className="flex items-center gap-3">
                                                                 <span className="text-[10px] font-black text-slate-800">₹{m.amount}</span>
@@ -671,10 +658,6 @@ export default function AdminDashboardPage() {
                                                     <button onClick={() => handleCopy(o.withdrawalMethod?.upiId || o.withdrawalMethod?.accountNumber)} className="text-slate-300 hover:text-blue-500"><Copy className="h-3 w-3" /></button>
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
-                                            <Button size="sm" variant="ghost" className="flex-1 rounded-xl font-bold uppercase text-[9px] text-slate-400">Archive</Button>
-                                            <Button size="sm" asChild className="flex-[2] btn-gradient rounded-xl font-black uppercase text-[9px] tracking-widest shadow-blue-500/20"><Link href={`/admin/users/${o.userId}`}>Audit User Node</Link></Button>
                                         </div>
                                     </Card>
                                 ))}
