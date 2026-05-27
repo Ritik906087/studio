@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, Zap, ShieldCheck, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Smartphone, LockKeyhole, KeyRound, Zap, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -110,38 +110,9 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
     }
   };
 
-  const generateHardwareFingerprint = () => {
-    let gpuInfo = "Unknown";
-    try {
-        const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-        if (gl) {
-            const debugInfo = (gl as any).getExtension('WEBGL_debug_renderer_info');
-            gpuInfo = debugInfo ? (gl as any).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : "Generic";
-        }
-    } catch (e) {}
-
-    const components = [
-        navigator.hardwareConcurrency || 0,
-        (navigator as any).deviceMemory || 0,
-        gpuInfo,
-        window.screen.width,
-        window.screen.height,
-        window.screen.colorDepth,
-        navigator.platform,
-        navigator.maxTouchPoints || 0,
-        new Date().getTimezoneOffset(),
-        navigator.language
-    ];
-
-    const raw = components.join('|');
-    return btoa(raw).replace(/[/+=]/g, '').slice(0, 32).toUpperCase();
-  };
-
   async function performRegistration(values: z.infer<typeof registerSchema>, token: string) {
     if (!auth || !firestore) return;
 
-    // Verify OTP
     if (values.otp !== sentOtp) {
       toast({ variant: "destructive", title: "Verification Failed", description: "The OTP you entered is incorrect." });
       return;
@@ -159,14 +130,6 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
         if (!verifyData.success) {
           onVerify(null);
           throw new Error("Security verification expired. Please try again.");
-        }
-
-        const fingerprint = generateHardwareFingerprint();
-        const fingerprintQuery = query(collection(firestore, 'users'), where('hardwareFingerprint', '==', fingerprint), limit(1));
-        const fingerprintSnap = await getDocs(fingerprintQuery);
-        
-        if (!fingerprintSnap.empty) {
-          throw new Error("Account already exists on this device. Please login.");
         }
 
         const phoneCheckQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', values.phone), limit(1));
@@ -200,7 +163,6 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
             paymentMethods: [],
             upiIds: [],
             claimedUserRewards: [],
-            hardwareFingerprint: fingerprint,
             sessionId: newSessionId,
             createdAt: serverTimestamp(),
         });
@@ -241,6 +203,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
       <Form {...form}>
         <form onSubmit={handlePreSubmit} className="flex flex-col gap-6">
           <div className="bg-white rounded-[32px] p-5 shadow-sm ring-1 ring-slate-100 space-y-3">
+            {/* 1. Mobile Number Field */}
             <FormField
               control={form.control}
               name="phone"
@@ -248,10 +211,11 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
                 <FormItem className="space-y-1">
                   <div className="relative flex items-center group">
                     <div className="absolute left-4 top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xs text-slate-400 group-focus-within:text-primary transition-colors pr-2.5 border-r">
+                      <Smartphone className="h-4 w-4" />
                       <span className="font-bold">+91</span>
                     </div>
                     <FormControl>
-                      <Input type="tel" placeholder="Mobile Number" className="pl-14 pr-24 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
+                      <Input type="tel" placeholder="Mobile Number" className="pl-20 pr-24 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" maxLength={10} {...field} />
                     </FormControl>
                     <Button 
                       type="button" 
@@ -267,6 +231,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
               )}
             />
 
+            {/* 2. OTP Field */}
             <FormField
               control={form.control}
               name="otp"
@@ -285,6 +250,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
               )}
             />
             
+            {/* 3. Create Password Field */}
             <FormField
               control={form.control}
               name="password"
@@ -306,6 +272,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
               )}
             />
 
+            {/* 4. Confirm Password Field */}
             <FormField
               control={form.control}
               name="confirmPassword"
@@ -316,7 +283,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
                       <KeyRound className="h-4 w-4" />
                     </div>
                     <FormControl>
-                      <Input type={showPassword ? "text" : "password"} placeholder="Confirm Password" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" {...field} />
+                      <Input type="password" placeholder="Confirm Password" className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px]" {...field} />
                     </FormControl>
                   </div>
                   <FormMessage className="text-[10px] pl-2" />
@@ -324,6 +291,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
               )}
             />
 
+            {/* 5. Invitation Code Field */}
             <FormField
               control={form.control}
               name="invitationCode"
@@ -336,7 +304,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
                     <FormControl>
                       <Input 
                         placeholder="Invitation Code" 
-                        className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px] font-bold tracking-widest disabled:opacity-70 disabled:cursor-not-allowed" 
+                        className="pl-11 h-11 bg-slate-50 border-none ring-1 ring-slate-200 focus-visible:ring-primary/40 rounded-2xl text-[13px] font-bold tracking-widest disabled:opacity-70" 
                         {...field} 
                         disabled={!!invitationCodeFromUrl}
                       />
@@ -347,6 +315,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
               )}
             />
 
+            {/* 6. Agreement Checkbox */}
             <div className="flex items-center space-x-2 py-1">
               <Checkbox id="agreement" onCheckedChange={(checked) => form.setValue("agreement", checked === true)} checked={form.watch("agreement")} />
               <label htmlFor="agreement" className="text-[10px] text-slate-500 font-medium leading-none cursor-pointer">
@@ -359,7 +328,7 @@ export function RegisterForm({ turnstileToken, onVerify }: RegisterFormProps) {
             <Button 
               type="submit" 
               className="w-full btn-gradient rounded-[22px] h-14 text-sm font-black shadow-teal-500/20 uppercase tracking-widest" 
-              disabled={isLoading || !turnstileToken && !!sentOtp}
+              disabled={isLoading || !sentOtp}
             >
                 {isLoading ? (
                   <div className="flex items-center gap-2">

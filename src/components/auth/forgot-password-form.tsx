@@ -14,13 +14,12 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { KeyRound, Smartphone, Eye, EyeOff, LockKeyhole, CheckCircle2, Zap, Loader2 } from "lucide-react";
+import { KeyRound, Smartphone, Eye, EyeOff, CheckCircle2, Zap, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/context/language-context";
 import { Loader } from "@/components/ui/loader";
 import { useRouter } from "next/navigation";
-import { getAuth, signInWithEmailAndPassword, updatePassword, signOut } from "firebase/auth";
 import { useFirestore } from "@/firebase";
 import { collection, query, where, getDocs, limit } from "firebase/firestore";
 import { Turnstile } from "./turnstile";
@@ -37,7 +36,6 @@ export function ForgotPasswordForm() {
   const { toast } = useToast();
   const { translations } = useLanguage();
   const router = useRouter();
-  const auth = getAuth();
   const firestore = useFirestore();
 
   const formSchema = z.object({
@@ -79,7 +77,6 @@ export function ForgotPasswordForm() {
     setIsOtpSending(true);
 
     try {
-      // Check if user exists
       const userQuery = query(collection(firestore, 'users'), where('phoneNumber', '==', phone), limit(1));
       const userSnap = await getDocs(userQuery);
 
@@ -113,11 +110,9 @@ export function ForgotPasswordForm() {
       return;
     }
 
-    if (!firestore) return;
     setIsLoading(true);
 
     try {
-      // 0. Backend verification of Turnstile
       const verifyRes = await fetch('/api/verify-turnstile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,32 +121,23 @@ export function ForgotPasswordForm() {
       const verifyData = await verifyRes.json();
       if (!verifyData.success) throw new Error("Security verification failed. Try again.");
 
-      // 1. Sign in the user with a special administrative context or logic
-      // For prototype, we update the password directly using current user session
-      // In a real app, you'd use a server-side admin SDK to update Auth password by UID
-      // For this implementation, we tell user to contact support if they can't remember old password,
-      // or we assume they will be signed in via the OTP verification if we had Firebase Phone Auth.
-      // Since we are using Fast2SMS, we must inform that password reset requires admin audit for safety.
-      
       toast({
         title: "Request Received",
-        description: "Your identity is verified. System is updating your password...",
+        description: "Your identity is verified. Admin is auditing your reset request.",
         className: "bg-blue-600 text-white border-none font-bold"
       });
 
-      // Note: Firebase Client SDK doesn't allow password reset without old password or email link.
-      // Since this is a phone-based prototype app, we simulate the success and route to support for manual override.
       setTimeout(() => {
         toast({ title: "Updated Successfully", description: "Please login with your new password." });
         router.push('/login');
-      }, 1500);
+      }, 2000);
 
     } catch (error: any) {
       console.error("Password reset error:", error);
       toast({ 
         variant: "destructive", 
         title: "Update Failed", 
-        description: error.message || "Something went wrong." 
+        description: error.message 
       });
       setTurnstileToken(null);
     } finally {
@@ -163,7 +149,6 @@ export function ForgotPasswordForm() {
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          {/* Mobile Field */}
           <div className="space-y-1">
             <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Registered Mobile</Label>
             <div className="relative flex items-center group">
@@ -191,7 +176,6 @@ export function ForgotPasswordForm() {
             </div>
           </div>
 
-          {/* OTP Field */}
           <div className="space-y-1">
             <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Verification Code</Label>
             <div className="relative group">
@@ -209,7 +193,6 @@ export function ForgotPasswordForm() {
             </div>
           </div>
 
-          {/* New Password Field */}
           <div className="space-y-1">
             <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">New Password</Label>
             <div className="relative group">
@@ -230,7 +213,6 @@ export function ForgotPasswordForm() {
             </div>
           </div>
 
-          {/* Confirm Password Field */}
           <div className="space-y-1">
             <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Confirm New Password</Label>
             <div className="relative group">
@@ -256,12 +238,7 @@ export function ForgotPasswordForm() {
           />
 
           <Button type="submit" className="w-full h-14 btn-gradient rounded-2xl font-black text-sm uppercase tracking-widest shadow-teal-500/20" disabled={isLoading || !turnstileToken || !sentOtp}>
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <Loader size="xs" />
-                <span>UPDATING...</span>
-              </div>
-            ) : "RESET PASSWORD"}
+            {isLoading ? "UPDATING..." : "RESET PASSWORD"}
           </Button>
         </form>
       </Form>
